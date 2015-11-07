@@ -1,0 +1,10 @@
+\timing on
+\set PROMPT1 '%m->%n@%/%# '
+\set PROMPT2 '[more] %R > '
+\pset null '[NULL]'
+\x auto
+\set COMP_KEYWORD_CASE upper
+\set HISTFILE ~/.psql_history- :DBNAME
+\set PSQL_EDITOR subl
+\set HISTCONTROL ignorespace
+\set HISTSIZE 20000

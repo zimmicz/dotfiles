@@ -1,0 +1,7 @@
+[user]
+	name = Michal Zimmermann
+	email = zimmicz@gmail.com
+[push]
+	default = matching
+[branch]
+	autosetuprebase = always
