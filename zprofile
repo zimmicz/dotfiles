@@ -85,5 +85,7 @@ export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64/jre
 export CATALINA_HOME=/opt/tomcat >> ~/.profile
 export CATALINA_BASE=/opt/tomcat >> ~/.profile
 
-rm -f $HOME/.anacron/anacron.log
-/usr/sbin/anacron -t /home/zimmi/.anacron/etc/anacrontab -S /home/zimmi/.anacron/spool &> /home/zimmi/.anacron/anacron.log
+if [[ -d $HOME/.anacron ]]; then
+    rm -f $HOME/.anacron/anacron.log
+    /usr/sbin/anacron -t /home/zimmi/.anacron/etc/anacrontab -S /home/zimmi/.anacron/spool &> /home/zimmi/.anacron/anacron.log
+fi
