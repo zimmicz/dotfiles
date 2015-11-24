@@ -4,7 +4,7 @@
 # create it and move files to that directory
 if [[ ! -d ~/dotfiles ]]; then
     mkdir ~/dotfiles
-    find ./ ! -name "*.sh" -exec cp {} ~/dotfiles \;
+    find ./ -maxdepth 1  \( ! -regex '.*/\..*' \) ! -name "*.sh" -exec cp {} ~/dotfiles \; # skip files starting with .
 fi
 
 # create symlinks to home folder
