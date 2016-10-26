@@ -81,26 +81,3 @@ TMPPREFIX="${TMPDIR%/}/zsh"
 export TERM=xterm-256color
 export EDITOR='subl -w'
 export GIT_EDITOR=subl
-export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64/jre
-export CATALINA_HOME=/opt/tomcat >> ~/.profile
-export CATALINA_BASE=/opt/tomcat >> ~/.profile
-
-if [[ -d $HOME/.anacron ]]; then
-    /usr/sbin/anacron -s -t ${HOME}/.anacron/etc/anacrontab -S ${HOME}/.anacron/spool
-else
-  mkdir $HOME/.anacron
-  cd $HOME/.anacron
-  mkdir etc spool
-  cd etc
-  touch anacrontab
-  cat anacrontab <<-EOF
-  # /etc/anacrontab: configuration file for anacron
-
-  # See anacron(8) and anacrontab(5) for details.
-
-  SHELL=/bin/bash
-  PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-
-  # period  delay  job-identifier  command
-  EOF
-fi
