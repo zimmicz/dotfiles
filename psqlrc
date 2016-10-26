@@ -1,4 +1,5 @@
 \timing on
+\set AUTOCOMMIT false
 \set PROMPT1 '%m->%n@%/%# '
 \set PROMPT2 '[more] %R > '
 \pset null '[NULL]'
