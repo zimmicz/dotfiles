@@ -5,3 +5,5 @@
 	default = matching
 [branch]
 	autosetuprebase = always
+[core]
+	compression = 0
