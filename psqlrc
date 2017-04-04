@@ -6,6 +6,6 @@
 \x auto
 \set COMP_KEYWORD_CASE upper
 \set HISTFILE ~/.psql_history- :DBNAME
-\set PSQL_EDITOR subl
+\set PSQL_EDITOR code
 \set HISTCONTROL ignorespace
 \set HISTSIZE 20000
