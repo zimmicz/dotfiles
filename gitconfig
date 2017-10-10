@@ -2,7 +2,7 @@
 	name = Michal Zimmermann
 	email = zimmicz@gmail.com
 [push]
-	default = matching
+	default = simple
 [branch]
 	autosetuprebase = always
 [core]

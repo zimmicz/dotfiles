@@ -17,8 +17,8 @@ fi
 # Editors
 #
 
-export EDITOR='code'
-export VISUAL='code'
+export EDITOR='subl'
+export VISUAL='subl'
 export PAGER='less'
 
 #
@@ -79,5 +79,5 @@ fi
 
 TMPPREFIX="${TMPDIR%/}/zsh"
 export TERM=xterm-256color
-export EDITOR='code'
-export GIT_EDITOR=code
+export EDITOR='subl'
+export GIT_EDITOR=subl
