@@ -17,6 +17,7 @@ fi
 # Editors
 #
 
+export PSQL_EDITOR='subl -w'
 export EDITOR='subl'
 export VISUAL='subl'
 export PAGER='less'

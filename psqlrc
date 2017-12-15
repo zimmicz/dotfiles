@@ -9,3 +9,7 @@
 \set PSQL_EDITOR vim
 \set HISTCONTROL ignorespace
 \set HISTSIZE 20000
+\pset linestyle unicode
+\pset border 2
+\set x '\\setenv PAGER less'
+\set xx '\\setenv PAGER \'pspg -bX --no-mouse --IGNORE-CASE --no-sound -F\''
