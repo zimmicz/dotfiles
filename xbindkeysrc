@@ -1,0 +1,5 @@
+"xdotool key ctrl+shift+m"
+b:10
+
+"xdotool key ctrl+shift+m"
+b:10 + Release 
