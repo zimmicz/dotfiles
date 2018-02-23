@@ -13,3 +13,12 @@
 \pset border 2
 \set x '\\setenv PAGER less'
 \set xx '\\setenv PAGER \'pspg -bX --no-mouse --IGNORE-CASE --no-sound -F\''
+\set b 'BEGIN;'
+\set r 'ROLLBACK;'
+\set c 'COMMIT;'
+
+-- get a comma-delimited list of column names, quoted as necessary, for the table named in :table
+-- usage:
+-- > \set table pg_catalog.pg_class \set colprefix r \\ :columns
+\set colprefix ''
+\set columns 'SELECT array_to_string(array(SELECT CASE WHEN :''colprefix'' <> '''' THEN :''colprefix'' || ''.'' ELSE '''' END || quote_ident(attname) FROM pg_attribute WHERE attrelid = :''table''::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum), '', '')';
