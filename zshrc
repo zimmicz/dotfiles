@@ -22,3 +22,18 @@ setopt PROMPT_SP
 export PROMPT_EOL_MARK=""
 
 pyenv() { source $HOME/.virtualenvs/$1/bin/activate }
+
+color-ssh() {
+    trap "$HOME/bin/colorterm.sh" INT EXIT
+    if [[ "$*" =~ "prod" ]]; then
+        $HOME/bin/colorterm.sh prod
+    elif [[ "$*" =~ "dev" ]]; then
+        $HOME/bin/colorterm.sh dev
+    else
+        $HOME/bin/colorterm.sh other
+    fi
+    ssh $*
+}
+
+compdef _ssh color-ssh=ssh
+alias ssh=color-ssh
