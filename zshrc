@@ -37,3 +37,5 @@ color-ssh() {
 
 compdef _ssh color-ssh=ssh
 alias ssh=color-ssh
+
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh

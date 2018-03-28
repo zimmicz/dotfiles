@@ -12,7 +12,16 @@ for f in $(find ~/dotfiles/* ! -name "*.sh"); do
     FILE=$(basename $f)
     echo installing $FILE...
     echo $FILE
-    ln -sf $f ~/.$FILE
+    
+    if [[ $FILE == "init.vim" ]]
+    then
+        echo "test"
+        mkdir ~/.config/nvim/
+        ln -sf $f ~/.config/nvim/$FILE
+    else
+        ln -sf $f ~/.$FILE
+    fi        
+
 done
 
 echo Done
