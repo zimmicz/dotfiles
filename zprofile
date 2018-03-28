@@ -83,4 +83,5 @@ export TERM=xterm-256color
 export EDITOR='subl'
 export GIT_EDITOR=subl
 
+export KEYTIMEOUT=1
 

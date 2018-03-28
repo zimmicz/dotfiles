@@ -71,4 +71,4 @@ endif
 " Theme
 syntax enable
 colorscheme nova
-
+set timeoutlen=1000 ttimeoutlen=0
