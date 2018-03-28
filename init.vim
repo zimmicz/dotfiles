@@ -72,3 +72,6 @@ endif
 syntax enable
 colorscheme nova
 set timeoutlen=1000 ttimeoutlen=0
+
+autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
+
