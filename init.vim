@@ -16,6 +16,7 @@ Plug 'danilo-augusto/vim-afterglow'
 Plug 'mhartington/oceanic-next'
 Plug 'lifepillar/vim-solarized8'
 Plug 'zanglg/nova.vim'
+Plug 'vim-scripts/dbext.vim'
 
 " Initialize plugin system
 call plug#end()
@@ -35,6 +36,7 @@ set title
 set background=dark
 set updatetime=100
 set splitright
+set clipboard+=unnamedplus
 
 map ; :Files<CR>
 map <C-o> :NERDTreeToggle<CR>
@@ -79,4 +81,7 @@ colorscheme nova
 set timeoutlen=1000 ttimeoutlen=0
 
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
+
+let g:dbext_default_profile_cm_datasources='type=PGSQL:user=u_mzimmer1:host=cm-datasources.in.clevermaps.cz:dbname=cm_main'
+let g:dbext_default_profile='cm_datasources'
 
