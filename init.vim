@@ -20,6 +20,7 @@ Plug 'vim-scripts/dbext.vim'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 Plug 'tpope/vim-fugitive'
+Plug 'jdkanani/vim-material-theme'
 
 " Initialize plugin system
 call plug#end()
@@ -73,7 +74,7 @@ endif
 
 " Theme
 syntax enable
-colorscheme nova
+colorscheme material-theme
 set timeoutlen=1000 ttimeoutlen=0
 
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
