@@ -21,6 +21,7 @@ Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 Plug 'tpope/vim-fugitive'
 Plug 'jdkanani/vim-material-theme'
+Plug 'kshenoy/vim-signature'
 
 " Initialize plugin system
 call plug#end()
