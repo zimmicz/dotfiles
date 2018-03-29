@@ -22,6 +22,7 @@ Plug 'vim-airline/vim-airline-themes'
 Plug 'tpope/vim-fugitive'
 Plug 'jdkanani/vim-material-theme'
 Plug 'kshenoy/vim-signature'
+Plug 'jiangmiao/auto-pairs'
 
 " Initialize plugin system
 call plug#end()
