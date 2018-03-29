@@ -17,6 +17,9 @@ Plug 'mhartington/oceanic-next'
 Plug 'lifepillar/vim-solarized8'
 Plug 'zanglg/nova.vim'
 Plug 'vim-scripts/dbext.vim'
+Plug 'vim-airline/vim-airline'
+Plug 'vim-airline/vim-airline-themes'
+Plug 'tpope/vim-fugitive'
 
 " Initialize plugin system
 call plug#end()
@@ -40,13 +43,6 @@ set clipboard+=unnamedplus
 
 map ; :Files<CR>
 map <C-o> :NERDTreeToggle<CR>
-
-let g:lightline = {
-  \     'active': {
-  \         'left': [['mode', 'paste' ], ['readonly', 'filename', 'modified']],
-  \         'right': [['lineinfo'], ['percent'], ['fileformat', 'fileencoding']]
-  \     }
-  \ }
 
 " " Copy to clipboard
 vnoremap  <leader>y  "+y
@@ -84,4 +80,5 @@ autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isT
 
 let g:dbext_default_profile_cm_datasources='type=PGSQL:user=u_mzimmer1:host=cm-datasources.in.clevermaps.cz:dbname=cm_main'
 let g:dbext_default_profile='cm_datasources'
+let g:airline_theme='solarized'
 
