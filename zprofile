@@ -17,9 +17,9 @@ fi
 # Editors
 #
 
-export PSQL_EDITOR='subl -w'
-export EDITOR='subl'
-export VISUAL='subl'
+export PSQL_EDITOR='nvim'
+export EDITOR='nvim'
+export VISUAL='nvim'
 export PAGER='less'
 
 #
@@ -80,8 +80,12 @@ fi
 
 TMPPREFIX="${TMPDIR%/}/zsh"
 export TERM=xterm-256color
-export EDITOR='subl'
-export GIT_EDITOR=subl
+export EDITOR='nvim'
+export GIT_EDITOR=nvim
 
 export KEYTIMEOUT=1
+
+if type nvim > /dev/null 2>&1; then
+  alias vim='nvim'
+fi
 

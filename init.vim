@@ -23,6 +23,7 @@ Plug 'tpope/vim-fugitive'
 Plug 'jdkanani/vim-material-theme'
 Plug 'kshenoy/vim-signature'
 Plug 'jiangmiao/auto-pairs'
+Plug 'rhysd/clever-f.vim'
 
 " Initialize plugin system
 call plug#end()
