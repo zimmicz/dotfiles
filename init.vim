@@ -46,6 +46,7 @@ set splitright
 set clipboard+=unnamedplus
 set nobackup
 set noswapfile
+set mouse=a
 
 map ; :Files<CR>
 map <C-o> :NERDTreeToggle<CR>
