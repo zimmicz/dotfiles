@@ -24,6 +24,8 @@ Plug 'jdkanani/vim-material-theme'
 Plug 'kshenoy/vim-signature'
 Plug 'jiangmiao/auto-pairs'
 Plug 'rhysd/clever-f.vim'
+Plug 'gabrielelana/vim-markdown'
+Plug 'lifepillar/pgsql.vim'
 
 " Initialize plugin system
 call plug#end()
@@ -49,7 +51,8 @@ set noswapfile
 set mouse=a
 
 map ; :Files<CR>
-map <C-o> :NERDTreeToggle<CR>
+map <C-k><C-b> :NERDTreeToggle<CR>
+imap jj <Esc>
 
 " " Copy to clipboard
 vnoremap  <leader>y  "+y
@@ -78,6 +81,12 @@ if (has("termguicolors"))
  set termguicolors
 endif
 
+if &term =~ '256color'
+  " disable Background Color Erase (BCE) so that color schemes
+  " render properly when inside 256-color tmux and GNU screen.
+  set t_ut=
+endif
+
 " Theme
 syntax enable
 colorscheme OceanicNext
@@ -91,4 +100,21 @@ let g:airline_theme='oceanicnext'
 
 " " Auto trim whitespace
 autocmd BufWritePre * :%s/\s\+$//e
+
+nmap j gj
+nmap k gk
+
+cnoremap <C-a>  <Home>
+cnoremap <C-b>  <Left>
+cnoremap <C-f>  <Right>
+cnoremap <C-d>  <Delete>
+cnoremap <M-b>  <S-Left>
+cnoremap <M-f>  <S-Right>
+cnoremap <M-d>  <S-right><Delete>
+cnoremap <Esc>b <S-Left>
+cnoremap <Esc>f <S-Right>
+cnoremap <Esc>d <S-right><Delete>
+cnoremap <C-g>  <C-c>
+
+let g:sql_type_default = 'pgsql'
 

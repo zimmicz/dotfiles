@@ -79,7 +79,7 @@ if [ -d "$HOME/bin" ] ; then
 fi
 
 TMPPREFIX="${TMPDIR%/}/zsh"
-export TERM=xterm-256color
+export TERM=screen-256color
 export EDITOR='nvim'
 export GIT_EDITOR=nvim
 
