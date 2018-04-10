@@ -26,6 +26,8 @@ Plug 'jiangmiao/auto-pairs'
 Plug 'rhysd/clever-f.vim'
 Plug 'gabrielelana/vim-markdown'
 Plug 'lifepillar/pgsql.vim'
+Plug 'easymotion/vim-easymotion'
+Plug 'junegunn/goyo.vim'
 
 " Initialize plugin system
 call plug#end()
@@ -96,7 +98,8 @@ autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isT
 
 let g:dbext_default_profile_cm_datasources='type=PGSQL:user=u_mzimmer1:host=cm-datasources.in.clevermaps.cz:dbname=cm_main'
 let g:dbext_default_profile='cm_datasources'
-let g:airline_theme='oceanicnext'
+let g:airline_theme='deus'
+let g:airline_powerline_fonts = 1
 
 " " Auto trim whitespace
 autocmd BufWritePre * :%s/\s\+$//e
