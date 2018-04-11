@@ -28,6 +28,7 @@ Plug 'gabrielelana/vim-markdown'
 Plug 'lifepillar/pgsql.vim'
 Plug 'easymotion/vim-easymotion'
 Plug 'junegunn/goyo.vim'
+Plug 'ElmCast/elm-vim'
 
 " Initialize plugin system
 call plug#end()
