@@ -29,6 +29,8 @@ Plug 'lifepillar/pgsql.vim'
 Plug 'easymotion/vim-easymotion'
 Plug 'junegunn/goyo.vim'
 Plug 'ElmCast/elm-vim'
+Plug 'pangloss/vim-javascript'
+Plug 'othree/javascript-libraries-syntax.vim'
 
 " Initialize plugin system
 call plug#end()
@@ -121,4 +123,6 @@ cnoremap <Esc>d <S-right><Delete>
 cnoremap <C-g>  <C-c>
 
 let g:sql_type_default = 'pgsql'
+
+autocmd BufReadPre *.js let b:javascript_lib_use_angularjs = 1
 
