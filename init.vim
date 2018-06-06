@@ -31,6 +31,7 @@ Plug 'junegunn/goyo.vim'
 Plug 'ElmCast/elm-vim'
 Plug 'pangloss/vim-javascript'
 Plug 'othree/javascript-libraries-syntax.vim'
+Plug 'burnettk/vim-angular'
 
 " Initialize plugin system
 call plug#end()
@@ -38,6 +39,8 @@ call plug#end()
 let mapleader = "\<Space>"
 syntax on
 set expandtab
+set splitbelow
+set splitright
 set autoindent
 set smarttab
 set tabstop=4
@@ -55,7 +58,7 @@ set nobackup
 set noswapfile
 set mouse=a
 
-map ; :Files<CR>
+map <leader>; :Files<CR>
 map <C-k><C-b> :NERDTreeToggle<CR>
 imap jj <Esc>
 
@@ -125,4 +128,21 @@ cnoremap <C-g>  <C-c>
 let g:sql_type_default = 'pgsql'
 
 autocmd BufReadPre *.js let b:javascript_lib_use_angularjs = 1
+
+" Use ; for commands.
+nnoremap ; :
+" Use Q to execute default register.
+nnoremap Q @q
+
+" Go to tab by number
+noremap <leader>1 1gt
+noremap <leader>2 2gt
+noremap <leader>3 3gt
+noremap <leader>4 4gt
+noremap <leader>5 5gt
+noremap <leader>6 6gt
+noremap <leader>7 7gt
+noremap <leader>8 8gt
+noremap <leader>9 9gt
+noremap <leader>0 :tablast<cr>
 
