@@ -32,6 +32,8 @@ Plug 'ElmCast/elm-vim'
 Plug 'pangloss/vim-javascript'
 Plug 'othree/javascript-libraries-syntax.vim'
 Plug 'burnettk/vim-angular'
+Plug 'vim-scripts/DeleteTrailingWhitespace'
+Plug 'vim-scripts/ShowTrailingWhitespace'
 
 " Initialize plugin system
 call plug#end()
@@ -107,9 +109,6 @@ let g:dbext_default_profile='cm_datasources'
 let g:airline_theme='deus'
 let g:airline_powerline_fonts = 1
 
-" " Auto trim whitespace
-autocmd BufWritePre * :%s/\s\+$//e
-
 nmap j gj
 nmap k gk
 
@@ -145,4 +144,7 @@ noremap <leader>7 7gt
 noremap <leader>8 8gt
 noremap <leader>9 9gt
 noremap <leader>0 :tablast<cr>
+
+let g:DeleteTrailingWhitespace = 1
+let g:DeleteTrailingWhitespace_Action = 'delete'
 
