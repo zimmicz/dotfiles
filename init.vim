@@ -35,6 +35,7 @@ Plug 'burnettk/vim-angular'
 Plug 'vim-scripts/DeleteTrailingWhitespace'
 Plug 'vim-scripts/ShowTrailingWhitespace'
 Plug 'w0rp/ale'
+Plug 'tpope/vim-obsession'
 
 " Initialize plugin system
 call plug#end()
@@ -150,4 +151,7 @@ let g:DeleteTrailingWhitespace = 1
 let g:DeleteTrailingWhitespace_Action = 'delete'
 
 let g:airline#extensions#ale#enabled = 1
+
+" vv to generate new vertical split
+nnoremap <silent> vv <C-w>v
 
