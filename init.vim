@@ -3,12 +3,10 @@
 " - Avoid using standard Vim directory names like 'plugin'
 call plug#begin('~/.vim/plugged')
 
-" Shorthand notation; fetches https://github.com/junegunn/vim-easy-align
 Plug 'airblade/vim-gitgutter'
 Plug 'https://github.com/itchyny/lightline.vim'
 Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
 Plug 'junegunn/fzf.vim'
-Plug 'scrooloose/nerdtree'
 Plug 'tpope/vim-surround'
 Plug 'https://github.com/vim-scripts/sql.vim--Stinson'
 Plug 'terryma/vim-multiple-cursors'
@@ -36,7 +34,6 @@ Plug 'vim-scripts/DeleteTrailingWhitespace'
 Plug 'vim-scripts/ShowTrailingWhitespace'
 Plug 'w0rp/ale'
 Plug 'tpope/vim-obsession'
-Plug 'ryanoasis/vim-devicons'
 Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 Plug 'tpope/vim-unimpaired'
 
@@ -63,12 +60,17 @@ set splitright
 set clipboard+=unnamedplus
 set nobackup
 set noswapfile
-set mouse=a
 
 map <leader>; :Files<CR>
-"map <C-k><C-b> :NERDTreeToggle<CR>
-map <C-k><C-b> :Explore<CR>
+map <leader>e :Explore<CR>
 imap jj <Esc>
+nmap j gj
+nmap k gk
+
+" Use ; for commands.
+nnoremap ; :
+" Use Q to execute default register.
+nnoremap Q @q
 
 " " Copy to clipboard
 vnoremap  <leader>y  "+y
@@ -108,15 +110,8 @@ syntax enable
 colorscheme OceanicNext
 set timeoutlen=1000 ttimeoutlen=0
 
-autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
-
-let g:dbext_default_profile_cm_datasources='type=PGSQL:user=u_mzimmer1:host=cm-datasources.in.clevermaps.cz:dbname=cm_main'
-let g:dbext_default_profile='cm_datasources'
 let g:airline_theme='deus'
 let g:airline_powerline_fonts = 1
-
-nmap j gj
-nmap k gk
 
 cnoremap <C-a>  <Home>
 cnoremap <C-b>  <Left>
@@ -130,14 +125,7 @@ cnoremap <Esc>f <S-Right>
 cnoremap <Esc>d <S-right><Delete>
 cnoremap <C-g>  <C-c>
 
-let g:sql_type_default = 'pgsql'
-
 autocmd BufReadPre *.js let b:javascript_lib_use_angularjs = 1
-
-" Use ; for commands.
-nnoremap ; :
-" Use Q to execute default register.
-nnoremap Q @q
 
 " Go to tab by number
 noremap <leader>1 1gt
@@ -161,13 +149,6 @@ nnoremap <silent> vv <C-w>v
 
 " sudo write
 ca w!! w !sudo tee >/dev/null "%"
-
-let g:NERDTreeSyntaxDisableDefaultExtensions = 1
-let g:NERDTreeDisableExactMatchHighlight = 1
-let g:NERDTreeDisablePatternMatchHighlight = 1
-let g:NERDTreeSyntaxEnabledExtensions = ['js', 'java', 'sql', 'css', 'html', 'json', 'md', 'less', 'png', 'gif']
-
-let g:NERDTreeHighlightCursorline = 0
 
 " netrw settings
 let g:netrw_liststyle = 3
