@@ -36,6 +36,7 @@ Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-obsession'
 Plug 'tpope/vim-unimpaired'
 Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
+Plug 'kaicataldo/material.vim'
 
 " Initialize plugin system
 call plug#end()
@@ -107,12 +108,11 @@ endif
 
 " Theme
 syntax enable
-colorscheme OceanicNext
+colorscheme material
 set timeoutlen=1000 ttimeoutlen=0
 
-let g:airline_theme='deus'
 let g:airline_powerline_fonts = 1
-
+let g:airline_theme = 'material'
 cnoremap <C-a>  <Home>
 cnoremap <C-b>  <Left>
 cnoremap <C-f>  <Right>
