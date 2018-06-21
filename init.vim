@@ -65,7 +65,8 @@ set noswapfile
 set mouse=a
 
 map <leader>; :Files<CR>
-map <C-k><C-b> :NERDTreeToggle<CR>
+"map <C-k><C-b> :NERDTreeToggle<CR>
+map <C-k><C-b> :Explore<CR>
 imap jj <Esc>
 
 " " Copy to clipboard
@@ -166,4 +167,12 @@ let g:NERDTreeDisablePatternMatchHighlight = 1
 let g:NERDTreeSyntaxEnabledExtensions = ['js', 'java', 'sql', 'css', 'html', 'json', 'md', 'less', 'png', 'gif']
 
 let g:NERDTreeHighlightCursorline = 0
+
+" netrw settings
+let g:netrw_liststyle = 3
+let g:netrw_browse_split = 4
+let g:netrw_altv = 1
+let g:netrw_winsize = 25
+let g:netrw_banner = 0
+let g:netrw_list_hide = &wildignore
 
