@@ -36,6 +36,8 @@ Plug 'vim-scripts/DeleteTrailingWhitespace'
 Plug 'vim-scripts/ShowTrailingWhitespace'
 Plug 'w0rp/ale'
 Plug 'tpope/vim-obsession'
+Plug 'ryanoasis/vim-devicons'
+Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 
 " Initialize plugin system
 call plug#end()
@@ -154,4 +156,14 @@ let g:airline#extensions#ale#enabled = 1
 
 " vv to generate new vertical split
 nnoremap <silent> vv <C-w>v
+
+" sudo write
+ca w!! w !sudo tee >/dev/null "%"
+
+let g:NERDTreeSyntaxDisableDefaultExtensions = 1
+let g:NERDTreeDisableExactMatchHighlight = 1
+let g:NERDTreeDisablePatternMatchHighlight = 1
+let g:NERDTreeSyntaxEnabledExtensions = ['js', 'java', 'sql', 'css', 'html', 'json', 'md', 'less', 'png', 'gif']
+
+let g:NERDTreeHighlightCursorline = 0
 
