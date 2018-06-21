@@ -17,7 +17,6 @@ Plug 'zanglg/nova.vim'
 Plug 'vim-scripts/dbext.vim'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
-Plug 'tpope/vim-fugitive'
 Plug 'jdkanani/vim-material-theme'
 Plug 'kshenoy/vim-signature'
 Plug 'jiangmiao/auto-pairs'
@@ -33,9 +32,10 @@ Plug 'burnettk/vim-angular'
 Plug 'vim-scripts/DeleteTrailingWhitespace'
 Plug 'vim-scripts/ShowTrailingWhitespace'
 Plug 'w0rp/ale'
+Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-obsession'
-Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 Plug 'tpope/vim-unimpaired'
+Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 
 " Initialize plugin system
 call plug#end()
@@ -62,7 +62,7 @@ set nobackup
 set noswapfile
 
 map <leader>; :Files<CR>
-map <leader>e :Explore<CR>
+map <leader>e :Vexplore<CR>
 imap jj <Esc>
 nmap j gj
 nmap k gk
@@ -157,4 +157,6 @@ let g:netrw_altv = 1
 let g:netrw_winsize = 25
 let g:netrw_banner = 0
 let g:netrw_list_hide = &wildignore
+
+set autochdir
 
