@@ -38,6 +38,7 @@ Plug 'w0rp/ale'
 Plug 'tpope/vim-obsession'
 Plug 'ryanoasis/vim-devicons'
 Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
+Plug 'tpope/vim-unimpaired'
 
 " Initialize plugin system
 call plug#end()
