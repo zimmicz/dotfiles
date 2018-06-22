@@ -38,6 +38,7 @@ Plug 'tpope/vim-unimpaired'
 Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 Plug 'kaicataldo/material.vim'
 Plug 'scrooloose/nerdtree'
+Plug 'editorconfig/editorconfig-vim'
 
 " Initialize plugin system
 call plug#end()
