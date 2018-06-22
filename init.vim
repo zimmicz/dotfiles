@@ -151,14 +151,6 @@ nnoremap <silent> vv <C-w>v
 " sudo write
 ca w!! w !sudo tee >/dev/null "%"
 
-" netrw settings
-let g:netrw_liststyle = 3
-let g:netrw_browse_split = 4
-let g:netrw_altv = 1
-let g:netrw_winsize = 25
-let g:netrw_banner = 0
-let g:netrw_list_hide = &wildignore
-
 " close NERDTree if it is the only window left open
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
 
