@@ -37,6 +37,7 @@ Plug 'tpope/vim-obsession'
 Plug 'tpope/vim-unimpaired'
 Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 Plug 'kaicataldo/material.vim'
+Plug 'scrooloose/nerdtree'
 
 " Initialize plugin system
 call plug#end()
@@ -63,7 +64,7 @@ set nobackup
 set noswapfile
 
 map <leader>; :Files<CR>
-map <leader>e :Vexplore<CR>
+map <leader>e :NERDTreeToggle<CR>
 imap jj <Esc>
 nmap j gj
 nmap k gk
@@ -158,5 +159,6 @@ let g:netrw_winsize = 25
 let g:netrw_banner = 0
 let g:netrw_list_hide = &wildignore
 
-set autochdir
+" close NERDTree if it is the only window left open
+autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
 
