@@ -15,6 +15,7 @@ fi
 alias ...="cd ../.."
 alias untar='tar -xvzf'
 alias ntar='tar -cf'
+alias mc='. /usr/share/mc/bin/mc-wrapper.sh'
 LS_COLORS='no=0:ex=1;41;97:fi=1;42;97:di=1;40;97:ln=04;36:pi=40;33:so=01;35:bd=40;33;01:'
 export LS_COLORS
 setopt PROMPT_CR
