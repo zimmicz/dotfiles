@@ -39,6 +39,8 @@ Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 Plug 'kaicataldo/material.vim'
 Plug 'scrooloose/nerdtree'
 Plug 'editorconfig/editorconfig-vim'
+Plug 'Valloric/YouCompleteMe'
+Plug 'bdauria/angular-cli.vim'
 
 " Initialize plugin system
 call plug#end()
@@ -64,7 +66,7 @@ set clipboard+=unnamedplus
 set nobackup
 set noswapfile
 
-map <leader>; :Files<CR>
+map <leader>; :GFiles<CR>
 map <leader>e :NERDTreeToggle<CR>
 imap jj <Esc>
 nmap j gj
