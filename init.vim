@@ -39,8 +39,10 @@ Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 Plug 'kaicataldo/material.vim'
 Plug 'scrooloose/nerdtree'
 Plug 'editorconfig/editorconfig-vim'
-Plug 'Valloric/YouCompleteMe'
 Plug 'bdauria/angular-cli.vim'
+Plug 'heavenshell/vim-jsdoc'
+" https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
+Plug 'Valloric/YouCompleteMe', { 'do': './install.py --tern-completer' }
 
 " Initialize plugin system
 call plug#end()
@@ -142,6 +144,7 @@ noremap <leader>7 7gt
 noremap <leader>8 8gt
 noremap <leader>9 9gt
 noremap <leader>0 :tablast<cr>
+noremap <leader><leader>p :tabprevious<cr>
 
 let g:DeleteTrailingWhitespace = 1
 let g:DeleteTrailingWhitespace_Action = 'delete'
@@ -156,4 +159,13 @@ ca w!! w !sudo tee >/dev/null "%"
 
 " close NERDTree if it is the only window left open
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
+autocmd FileType javascript setlocal omnifunc=javascriptcomplete#CompleteJS
+
+" Start autocompletion after 4 chars
+let g:ycm_min_num_of_chars_for_completion = 4
+let g:ycm_min_num_identifier_candidate_chars = 4
+let g:ycm_enable_diagnostic_highlighting = 0
+" Don't show YCM's preview window [ I find it really annoying ]
+set completeopt-=preview
+let g:ycm_add_preview_to_completeopt = 0
 
