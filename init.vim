@@ -41,8 +41,13 @@ Plug 'scrooloose/nerdtree'
 Plug 'editorconfig/editorconfig-vim'
 Plug 'bdauria/angular-cli.vim'
 Plug 'heavenshell/vim-jsdoc'
+Plug 'alexandre/toggle_width.vim'
+Plug 'Yggdroot/indentLine'
 " https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
 Plug 'Valloric/YouCompleteMe', { 'do': './install.py --tern-completer' }
+Plug 'prettier/vim-prettier', {
+    \ 'do': 'npm install',
+    \ 'for': ['javascript', 'typescript', 'css', 'less', 'scss'] }
 
 " Initialize plugin system
 call plug#end()
@@ -168,4 +173,8 @@ let g:ycm_enable_diagnostic_highlighting = 0
 " Don't show YCM's preview window [ I find it really annoying ]
 set completeopt-=preview
 let g:ycm_add_preview_to_completeopt = 0
+
+let g:ale_linters = {
+\   'javascript': ['eslint'],
+\}
 
