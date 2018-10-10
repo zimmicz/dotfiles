@@ -8,13 +8,6 @@ Plug 'https://github.com/itchyny/lightline.vim'
 Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
 Plug 'junegunn/fzf.vim'
 Plug 'tpope/vim-surround'
-Plug 'https://github.com/vim-scripts/sql.vim--Stinson'
-Plug 'terryma/vim-multiple-cursors'
-Plug 'danilo-augusto/vim-afterglow'
-Plug 'mhartington/oceanic-next'
-Plug 'lifepillar/vim-solarized8'
-Plug 'zanglg/nova.vim'
-Plug 'vim-scripts/dbext.vim'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 Plug 'jdkanani/vim-material-theme'
@@ -22,10 +15,7 @@ Plug 'kshenoy/vim-signature'
 Plug 'jiangmiao/auto-pairs'
 Plug 'rhysd/clever-f.vim'
 Plug 'gabrielelana/vim-markdown'
-Plug 'lifepillar/pgsql.vim'
 Plug 'easymotion/vim-easymotion'
-Plug 'junegunn/goyo.vim'
-Plug 'ElmCast/elm-vim'
 Plug 'pangloss/vim-javascript'
 Plug 'othree/javascript-libraries-syntax.vim'
 Plug 'burnettk/vim-angular'
@@ -43,6 +33,9 @@ Plug 'bdauria/angular-cli.vim'
 Plug 'heavenshell/vim-jsdoc'
 Plug 'alexandre/toggle_width.vim'
 Plug 'Yggdroot/indentLine'
+Plug 'posva/vim-vue'
+Plug 'rakr/vim-one'
+Plug 'leafgarland/typescript-vim'
 " https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
 Plug 'Valloric/YouCompleteMe', { 'do': './install.py --tern-completer' }
 Plug 'prettier/vim-prettier', {
@@ -64,14 +57,16 @@ set shiftwidth=4
 set softtabstop=4
 set number
 set laststatus=2
-set cursorline
+set cursorline!
+set lazyredraw
 set title
 set background=dark
-set updatetime=100
+set updatetime=750
 set splitright
 set clipboard+=unnamedplus
 set nobackup
 set noswapfile
+set smartcase
 
 map <leader>; :GFiles<CR>
 map <leader>e :NERDTreeToggle<CR>
@@ -119,11 +114,14 @@ endif
 
 " Theme
 syntax enable
-colorscheme material
+" colorscheme material
+colorscheme one
+set background=dark
 set timeoutlen=1000 ttimeoutlen=0
 
 let g:airline_powerline_fonts = 1
-let g:airline_theme = 'material'
+" let g:airline_theme = 'material'
+let g:airline_theme='one'
 cnoremap <C-a>  <Home>
 cnoremap <C-b>  <Left>
 cnoremap <C-f>  <Right>
@@ -178,3 +176,11 @@ let g:ale_linters = {
 \   'javascript': ['eslint'],
 \}
 
+let g:ale_cache_executable_check_failures = 1
+
+autocmd BufRead,BufNewFile *.vue setlocal filetype=vue.html.javascript.css
+
+" Try to fix syntax highlighting
+autocmd FileType vue syntax sync fromstart
+noremap <F12> <Esc>:syntax sync fromstart<CR>
+inoremap <F12> <C-o>:syntax sync fromstart<CR>
