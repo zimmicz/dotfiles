@@ -36,6 +36,7 @@ Plug 'Yggdroot/indentLine'
 Plug 'posva/vim-vue'
 Plug 'rakr/vim-one'
 Plug 'leafgarland/typescript-vim'
+Plug 'nvie/vim-flake8'
 " https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
 Plug 'Valloric/YouCompleteMe', { 'do': './install.py --tern-completer' }
 Plug 'prettier/vim-prettier', {
@@ -46,6 +47,7 @@ Plug 'prettier/vim-prettier', {
 call plug#end()
 
 let mapleader = "\<Space>"
+let python_highlight_all=1
 syntax on
 set expandtab
 set splitbelow
@@ -67,6 +69,8 @@ set clipboard+=unnamedplus
 set nobackup
 set noswapfile
 set smartcase
+set foldmethod=indent
+set foldlevel=99
 
 map <leader>; :GFiles<CR>
 map <leader>e :NERDTreeToggle<CR>
@@ -184,3 +188,7 @@ autocmd BufRead,BufNewFile *.vue setlocal filetype=vue.html.javascript.css
 autocmd FileType vue syntax sync fromstart
 noremap <F12> <Esc>:syntax sync fromstart<CR>
 inoremap <F12> <C-o>:syntax sync fromstart<CR>
+
+" Enable folding with the spacebar
+nnoremap <Tab> za
+
