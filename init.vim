@@ -193,4 +193,6 @@ inoremap <F12> <C-o>:syntax sync fromstart<CR>
 nnoremap <Tab> za
 " Clear highlights with Ctrl+Shift+L
 nnoremap <silent> <C-Space> :nohlsearch<CR>
+" Buffer switch
+nnoremap <F5> :ls<CR>:b<Space>
 
