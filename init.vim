@@ -37,6 +37,7 @@ Plug 'posva/vim-vue'
 Plug 'rakr/vim-one'
 Plug 'leafgarland/typescript-vim'
 Plug 'nvie/vim-flake8'
+Plug 'majutsushi/tagbar'
 " https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
 Plug 'Valloric/YouCompleteMe', { 'do': './install.py --tern-completer' }
 Plug 'prettier/vim-prettier', {
@@ -189,10 +190,18 @@ autocmd FileType vue syntax sync fromstart
 noremap <F12> <Esc>:syntax sync fromstart<CR>
 inoremap <F12> <C-o>:syntax sync fromstart<CR>
 
-" Enable folding with the spacebar
+" Enable folding with the <Tab>
 nnoremap <Tab> za
 " Clear highlights with Ctrl+Shift+L
 nnoremap <silent> <C-Space> :nohlsearch<CR>
 " Buffer switch
-nnoremap <F5> :ls<CR>:b<Space>
+nnoremap <silent> sql :set syntax=sql<CR>
+
+" TagBar
+nmap <F8> :TagbarToggle<CR>
+
+" Buffers
+nnoremap <leader>b :ls<CR>:b<Space>
+" History
+nnoremap <silent> <leader>/ :History<CR>
 
