@@ -194,3 +194,5 @@ nnoremap <Tab> za
 " Clear highlights with Ctrl+Shift+L
 nnoremap <silent> <C-Space> :nohlsearch<CR>
 
+let NERDTreeIgnore = ['\.js.map$', '__pycache__', '\.pyc$']
+
