@@ -250,3 +250,5 @@ cnoreabbrev Ack Ack!
 " Search the word under the cursor
 nmap <leader>f   :Ack "\b<cword>\b" <CR>
 
+let NERDTreeIgnore = ['\.js.map$', '__pycache__', '\.pyc$']
+
