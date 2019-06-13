@@ -38,6 +38,8 @@ Plug 'rakr/vim-one'
 Plug 'leafgarland/typescript-vim'
 Plug 'nvie/vim-flake8'
 Plug 'majutsushi/tagbar'
+Plug 'mileszs/ack.vim'
+Plug 'tpope/vim-eunuch'
 " https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
 Plug 'Valloric/YouCompleteMe', { 'do': './install.py --tern-completer' }
 Plug 'prettier/vim-prettier', {
@@ -49,48 +51,87 @@ call plug#end()
 
 let mapleader = "\<Space>"
 let python_highlight_all=1
+
+" ----------------
+" OPTIONS
+" ----------------
 syntax on
-set expandtab
-set splitbelow
-set splitright
 set autoindent
-set smarttab
-set tabstop=4
-set shiftwidth=4
-set softtabstop=4
-set number
-set laststatus=2
-set cursorline!
-set lazyredraw
-set title
+set autoread
 set background=dark
-set updatetime=750
-set splitright
+set cindent
+set cinkeys-=0#
+set cino=
 set clipboard+=unnamedplus
+set commentstring=\ \ #%s   " When folds are created, add them to this
+set copyindent
+set cursorline!
+set expandtab
+set foldlevel=99
+set foldmethod=indent
+set hlsearch
+set ignorecase
+set incsearch
+set laststatus=2
+set lazyredraw
 set nobackup
 set noswapfile
+set relativenumber
+set shiftround
+set shiftwidth=4
 set smartcase
-set foldmethod=indent
-set foldlevel=99
+set smarttab
+set softtabstop=4
+set splitbelow
+set splitright
+set tabstop=4
+set title
+set updatetime=750
+set formatoptions=tcqn1     " t - autowrap normal text
+                            " c - autowrap comments
+                            " q - gq formats comments
+                            " n - autowrap lists
+                            " 1 - break _before_ single-letter words
+                            " 2 - use indenting from 2nd line of para
+set hidden
+set list                    " Show whitespace as special chars - see listchars
+set listchars=tab:»\ ,extends:›,precedes:‹,nbsp:·,trail:· " Unicode characters for various things
+set shortmess+=A
 
-map <leader>; :GFiles<CR>
+" Marks should go to the column, not just the line. Why isn't this the default?
+nnoremap ' `
+
+" Show git files
+map <leader>; :GFiles --exclude-standard --others --cached<CR>
+
+" Toggle nerd tree
 map <leader>e :NERDTreeToggle<CR>
+
+" Escape insert mode with double j
 imap jj <Esc>
+
+" Turn off linewise keys. Normally, the `j' and `k' keys move the cursor down one entire line. with
+" line wrapping on, this can cause the cursor to actually skip a few lines on the screen because
+" it's moving from line N to line N+1 in the file. I want this to act more visually -- I want `down'
+" to mean the next line on the screen
 nmap j gj
 nmap k gk
+
+" Open the last edited file.
+nmap <C-e> :e#<CR>
 
 " Use ; for commands.
 nnoremap ; :
 " Use Q to execute default register.
 nnoremap Q @q
 
-" " Copy to clipboard
+" Copy to clipboard
 vnoremap  <leader>y  "+y
 nnoremap  <leader>Y  "+yg_
 nnoremap  <leader>y  "+y
 nnoremap  <leader>yy  "+yy
 
-" " Paste from clipboard
+" Paste from clipboard
 nnoremap <leader>p "+p
 nnoremap <leader>P "+P
 vnoremap <leader>p "+p
@@ -194,7 +235,6 @@ inoremap <F12> <C-o>:syntax sync fromstart<CR>
 nnoremap <Tab> za
 " Clear highlights with Ctrl+Shift+L
 nnoremap <silent> <C-Space> :nohlsearch<CR>
-" Buffer switch
 nnoremap <silent> sql :set syntax=sql<CR>
 
 " TagBar
@@ -204,4 +244,9 @@ nmap <F8> :TagbarToggle<CR>
 nnoremap <leader>b :ls<CR>:b<Space>
 " History
 nnoremap <silent> <leader>/ :History<CR>
+
+" Reverse the functionality of Ack and Ack! (do not jump to the first result)
+cnoreabbrev Ack Ack!
+" Search the word under the cursor
+nmap <leader>f   :Ack "\b<cword>\b" <CR>
 
