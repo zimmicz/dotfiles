@@ -26,6 +26,7 @@ pyenv() { source $HOME/.virtualenvs/$1/bin/activate }
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 export PATH=~/.local/bin:$PATH
+export PATH="$HOME/.yarn/bin:$PATH"
 
 unalias cdg 2> /dev/null
 cdg() {

@@ -16,8 +16,6 @@ Plug 'jiangmiao/auto-pairs'
 Plug 'rhysd/clever-f.vim'
 Plug 'gabrielelana/vim-markdown'
 Plug 'easymotion/vim-easymotion'
-Plug 'pangloss/vim-javascript'
-Plug 'othree/javascript-libraries-syntax.vim'
 Plug 'burnettk/vim-angular'
 Plug 'vim-scripts/DeleteTrailingWhitespace'
 Plug 'vim-scripts/ShowTrailingWhitespace'
@@ -40,11 +38,12 @@ Plug 'nvie/vim-flake8'
 Plug 'majutsushi/tagbar'
 Plug 'mileszs/ack.vim'
 Plug 'tpope/vim-eunuch'
+Plug 'tpope/vim-commentary'
+Plug 'pangloss/vim-javascript'
+Plug 'posva/vim-vue'
+Plug 'runoshun/tscompletejob'
 " https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
 Plug 'Valloric/YouCompleteMe', { 'do': './install.py --tern-completer' }
-Plug 'prettier/vim-prettier', {
-    \ 'do': 'npm install',
-    \ 'for': ['javascript', 'typescript', 'css', 'less', 'scss'] }
 
 " Initialize plugin system
 call plug#end()
@@ -251,4 +250,6 @@ cnoreabbrev Ack Ack!
 nmap <leader>f   :Ack "\b<cword>\b" <CR>
 
 let NERDTreeIgnore = ['\.js.map$', '__pycache__', '\.pyc$']
+
+autocmd VimEnter * if globpath('.,..','node_modules/@angular') != '' | call angular_cli#init() | endif
 
