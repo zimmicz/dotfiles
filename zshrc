@@ -27,6 +27,8 @@ pyenv() { source $HOME/.virtualenvs/$1/bin/activate }
 
 export PATH=~/.local/bin:$PATH
 export PATH="$HOME/.yarn/bin:$PATH"
+export PATH="$HOME/.npm/bin:$PATH"
+export NODE_PATH="/usr/lib/node_modules/"
 
 unalias cdg 2> /dev/null
 cdg() {

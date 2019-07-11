@@ -19,7 +19,6 @@ Plug 'easymotion/vim-easymotion'
 Plug 'burnettk/vim-angular'
 Plug 'vim-scripts/DeleteTrailingWhitespace'
 Plug 'vim-scripts/ShowTrailingWhitespace'
-Plug 'w0rp/ale'
 Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-obsession'
 Plug 'tpope/vim-unimpaired'
@@ -41,9 +40,11 @@ Plug 'tpope/vim-eunuch'
 Plug 'tpope/vim-commentary'
 Plug 'pangloss/vim-javascript'
 Plug 'posva/vim-vue'
-Plug 'runoshun/tscompletejob'
+"Plug 'runoshun/tscompletejob'
 " https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
-Plug 'Valloric/YouCompleteMe', { 'do': './install.py --tern-completer' }
+"Plug 'Valloric/YouCompleteMe', { 'do': './install.py --ts-completer' }
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
+let g:coc_global_extensions = ['coc-json', 'coc-tsserver', 'coc-emmet', 'coc-eslint']
 
 " Initialize plugin system
 call plug#end()
@@ -197,8 +198,6 @@ noremap <leader><leader>p :tabprevious<cr>
 let g:DeleteTrailingWhitespace = 1
 let g:DeleteTrailingWhitespace_Action = 'delete'
 
-let g:airline#extensions#ale#enabled = 1
-
 " vv to generate new vertical split
 nnoremap <silent> vv <C-w>v
 
@@ -216,12 +215,6 @@ let g:ycm_enable_diagnostic_highlighting = 0
 " Don't show YCM's preview window [ I find it really annoying ]
 set completeopt-=preview
 let g:ycm_add_preview_to_completeopt = 0
-
-let g:ale_linters = {
-\   'javascript': ['eslint'],
-\}
-
-let g:ale_cache_executable_check_failures = 1
 
 autocmd BufRead,BufNewFile *.vue setlocal filetype=vue.html.javascript.css
 
@@ -243,7 +236,6 @@ nmap <F8> :TagbarToggle<CR>
 nnoremap <leader>b :ls<CR>:b<Space>
 " History
 nnoremap <silent> <leader>/ :History<CR>
-
 " Reverse the functionality of Ack and Ack! (do not jump to the first result)
 cnoreabbrev Ack Ack!
 " Search the word under the cursor
@@ -253,3 +245,33 @@ let NERDTreeIgnore = ['\.js.map$', '__pycache__', '\.pyc$']
 
 autocmd VimEnter * if globpath('.,..','node_modules/@angular') != '' | call angular_cli#init() | endif
 
+" symap gf mapping
+set inex=substitute(v:fname,'app','app/js/angular','')
+set suffixesadd=.js,.ts,.scss
+
+let g:tagbar_type_typescript = {
+    \ 'ctagstype': 'typescript',
+    \ 'kinds': [
+      \ 'c:class',
+      \ 'n:namespace',
+      \ 'f:function',
+      \ 'G:generator',
+      \ 'v:variable',
+      \ 'm:method',
+      \ 'p:property',
+      \ 'i:interface',
+      \ 'g:enum',
+      \ 't:type',
+      \ 'a:alias',
+    \ ],
+    \'sro': '.',
+      \ 'kind2scope' : {
+      \ 'c' : 'class',
+      \ 'n' : 'namespace',
+      \ 'i' : 'interface',
+      \ 'f' : 'function',
+      \ 'G' : 'generator',
+      \ 'm' : 'method',
+      \ 'p' : 'property',
+      \},
+  \ }
