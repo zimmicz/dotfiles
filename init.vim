@@ -40,6 +40,7 @@ Plug 'tpope/vim-eunuch'
 Plug 'tpope/vim-commentary'
 Plug 'pangloss/vim-javascript'
 Plug 'posva/vim-vue'
+Plug 'mattn/emmet-vim'
 "Plug 'runoshun/tscompletejob'
 " https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
 "Plug 'Valloric/YouCompleteMe', { 'do': './install.py --ts-completer' }
@@ -166,7 +167,7 @@ set background=dark
 set timeoutlen=1000 ttimeoutlen=0
 
 let g:airline_powerline_fonts = 1
-" let g:airline_theme = 'material'
+let g:airline#extensions#branch#displayed_head_limit = 40
 let g:airline_theme='one'
 cnoremap <C-a>  <Home>
 cnoremap <C-b>  <Left>
@@ -225,10 +226,10 @@ inoremap <F12> <C-o>:syntax sync fromstart<CR>
 
 " Enable folding with the <Tab>
 nnoremap <Tab> za
-" Clear highlights with Ctrl+Shift+L
+" Clear highlights with Ctrl+L
 nnoremap <silent> <C-Space> :nohlsearch<CR>
+" set sql highlighting
 nnoremap <silent> sql :set syntax=sql<CR>
-
 " TagBar
 nmap <F8> :TagbarToggle<CR>
 
@@ -275,3 +276,7 @@ let g:tagbar_type_typescript = {
       \ 'p' : 'property',
       \},
   \ }
+
+" jump to newer location
+:unmap <C-i>
+
