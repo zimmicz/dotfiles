@@ -41,9 +41,6 @@ Plug 'tpope/vim-commentary'
 Plug 'pangloss/vim-javascript'
 Plug 'posva/vim-vue'
 Plug 'mattn/emmet-vim'
-"Plug 'runoshun/tscompletejob'
-" https://medium.com/@rahul11061995/autocomplete-in-vim-for-js-developer-698c6275e341
-"Plug 'Valloric/YouCompleteMe', { 'do': './install.py --ts-completer' }
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 let g:coc_global_extensions = ['coc-json', 'coc-tsserver', 'coc-emmet', 'coc-eslint']
 
@@ -280,3 +277,5 @@ let g:tagbar_type_typescript = {
 " jump to newer location
 :unmap <C-i>
 
+" copy filename to clipboard
+nnoremap <silent> cpfn :let @+=@%<CR>
