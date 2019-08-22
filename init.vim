@@ -8,8 +8,7 @@ Plug 'https://github.com/itchyny/lightline.vim'
 Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
 Plug 'junegunn/fzf.vim'
 Plug 'tpope/vim-surround'
-Plug 'vim-airline/vim-airline'
-Plug 'vim-airline/vim-airline-themes'
+Plug 'itchyny/lightline.vim'
 Plug 'jdkanani/vim-material-theme'
 Plug 'kshenoy/vim-signature'
 Plug 'jiangmiao/auto-pairs'
@@ -163,9 +162,27 @@ colorscheme one
 set background=dark
 set timeoutlen=1000 ttimeoutlen=0
 
-let g:airline_powerline_fonts = 1
-let g:airline#extensions#branch#displayed_head_limit = 40
-let g:airline_theme='one'
+let g:lightline = {
+  \   'colorscheme': 'one',
+  \   'active': {
+  \     'left':[ [ 'mode', 'paste' ],
+  \              [ 'gitbranch', 'readonly', 'filename', 'modified' ]
+  \     ]
+  \   },
+	\   'component': {
+	\     'lineinfo': ' %3l:%-2v',
+	\   },
+  \   'component_function': {
+  \     'gitbranch': 'fugitive#head',
+  \   }
+  \ }
+let g:lightline.separator = {
+	\   'left': '', 'right': ''
+  \}
+let g:lightline.subseparator = {
+	\   'left': '', 'right': ''
+  \}
+
 cnoremap <C-a>  <Home>
 cnoremap <C-b>  <Left>
 cnoremap <C-f>  <Right>
