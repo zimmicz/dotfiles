@@ -182,6 +182,9 @@ let g:lightline.separator = {
 let g:lightline.subseparator = {
 	\   'left': '', 'right': ''
   \}
+let g:lightline.tabline_separator = {
+	\   'left': '', 'right': ''
+  \}
 
 cnoremap <C-a>  <Home>
 cnoremap <C-b>  <Left>
