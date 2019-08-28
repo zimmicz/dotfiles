@@ -299,3 +299,4 @@ let g:tagbar_type_typescript = {
 
 " copy filename to clipboard
 nnoremap <silent> cpfn :let @+=@%<CR>
+nnoremap <silent> cpcfn :let @+=expand('%:p')<CR>
