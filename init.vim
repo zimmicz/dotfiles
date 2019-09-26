@@ -10,6 +10,7 @@ Plug 'junegunn/fzf.vim'
 Plug 'tpope/vim-surround'
 Plug 'itchyny/lightline.vim'
 Plug 'jdkanani/vim-material-theme'
+Plug 'drewtempelmeyer/palenight.vim'
 Plug 'kshenoy/vim-signature'
 Plug 'jiangmiao/auto-pairs'
 Plug 'rhysd/clever-f.vim'
@@ -41,7 +42,7 @@ Plug 'pangloss/vim-javascript'
 Plug 'posva/vim-vue'
 Plug 'mattn/emmet-vim'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
-let g:coc_global_extensions = ['coc-json', 'coc-tsserver', 'coc-emmet', 'coc-eslint']
+let g:coc_global_extensions = ['coc-json', 'coc-tsserver', 'coc-emmet', 'coc-tslint-plugin', 'coc-angular']
 
 " Initialize plugin system
 call plug#end()
@@ -158,12 +159,12 @@ endif
 " Theme
 syntax enable
 " colorscheme material
-colorscheme one
+colorscheme palenight
 set background=dark
 set timeoutlen=1000 ttimeoutlen=0
 
 let g:lightline = {
-  \   'colorscheme': 'one',
+  \   'colorscheme': 'palenight',
   \   'active': {
   \     'left':[ [ 'mode', 'paste' ],
   \              [ 'gitbranch', 'readonly', 'filename', 'modified' ]
