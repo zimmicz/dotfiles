@@ -12,6 +12,7 @@ fi
 
 # Customize to your needs...
 
+alias g="git "
 alias ...="cd ../.."
 alias untar='tar -xvzf'
 alias ntar='tar -cf'
@@ -20,8 +21,6 @@ export LS_COLORS
 setopt PROMPT_CR
 setopt PROMPT_SP
 export PROMPT_EOL_MARK=""
-
-pyenv() { source $HOME/.virtualenvs/$1/bin/activate }
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
@@ -38,13 +37,4 @@ cdg() {
    fi
 }
 
-unalias grmb 2> /dev/null
-grmb() {
-    if [[ -z $1 ]]
-    then
-        echo "Provide branch name used for rebase."
-    else
-        git rebase -i $(git merge-base HEAD $1)
-    fi
-}
-
+unalias sl 2> /dev/null

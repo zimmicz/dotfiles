@@ -1,16 +1,44 @@
 [user]
-	name = Michal Zimmermann
-	email = zimmicz@gmail.com
+    name = Michal Zimmermann
+    email = zimmicz@gmail.com
 [push]
-	default = current
+    default = current
 [branch]
-	autosetuprebase = always
+    autosetuprebase = always
 [core]
-	compression = 0
+    compression = 0
 [merge]
     tool = vimdiff
     conflictstyle = diff3
 [mergetool]
     prompt = false
     keepBackup = false
-
+[alias]
+    a  = add
+    A = add .
+    amend = commit --amend -m
+    bd = branch -d
+    bD = branch -D
+    brd = branch -d
+    brD = branch -D
+    cm = commit -m
+    co = checkout
+    cob = checkout -b
+    dw = diff --ignore-all-space
+    dc = diff --cached
+    i = init
+    la = "!git config -l | grep alias | cut -c 7-"
+    sa = stash apply
+    sl = "!git stash list --relative-date | head -n 10"
+    sp = stash pop
+    ss = stash push
+    st = status
+    hist = log --pretty=format:\"%h %ad | %s%d [%an]\" --graph --date=short
+    po = push origin
+    plo = pull origin
+    rename = branch -m
+    rb =  rebase
+    rbi = rebase --interactive
+    rbI = !sh -c \"git rebase -i `git merge-base $1 HEAD`\" -
+    wip = "!git diff > $(git rev-parse HEAD)_WIP.patch"
+    unstage = reset HEAD

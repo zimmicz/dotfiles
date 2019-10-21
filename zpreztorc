@@ -45,7 +45,8 @@ zstyle ':prezto:module:editor' key-bindings 'emacs'
 
 # Auto convert .... to ../..
 zstyle ':prezto:module:editor' dot-expansion 'yes'
-
+zstyle ':prezto:module:git:alias' skip 'yes'
+zstyle ':prezto:module:utility' correct 'no'
 #
 # Git
 #
