@@ -15,12 +15,10 @@
     keepBackup = false
 [alias]
     a  = add
-    A = add .
+    aa = add .
     amend = commit --amend -m
     bd = branch -d
-    bD = branch -D
-    brd = branch -d
-    brD = branch -D
+    bdf = branch -D
     cm = commit -m
     co = checkout
     cob = checkout -b
@@ -39,6 +37,6 @@
     rename = branch -m
     rb =  rebase
     rbi = rebase --interactive
-    rbI = !sh -c \"git rebase -i `git merge-base $1 HEAD`\" -
+    rbi-mergebase = !sh -c \"git rebase -i `git merge-base $1 HEAD`\" -
     wip = "!git diff > $(git rev-parse HEAD)_WIP.patch"
     unstage = reset HEAD
