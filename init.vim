@@ -170,21 +170,21 @@ let g:lightline = {
   \              [ 'gitbranch', 'readonly', 'filename', 'modified' ]
   \     ]
   \   },
-	\   'component': {
-	\     'lineinfo': ' %3l:%-2v',
-	\   },
+    \   'component': {
+    \     'lineinfo': ' %3l:%-2v',
+    \   },
   \   'component_function': {
   \     'gitbranch': 'fugitive#head',
   \   }
   \ }
 let g:lightline.separator = {
-	\   'left': '', 'right': ''
+    \   'left': '', 'right': ''
   \}
 let g:lightline.subseparator = {
-	\   'left': '', 'right': ''
+    \   'left': '', 'right': ''
   \}
 let g:lightline.tabline_separator = {
-	\   'left': '', 'right': ''
+    \   'left': '', 'right': ''
   \}
 
 cnoremap <C-a>  <Home>
@@ -301,3 +301,8 @@ let g:tagbar_type_typescript = {
 " copy filename to clipboard
 nnoremap <silent> cpfn :let @+=@%<CR>
 nnoremap <silent> cpcfn :let @+=expand('%:p')<CR>
+
+" MAJA angular specific
+" replace app/js/angular with @app
+" remove .ts extension
+:command NgImport :%s/app\/js\/angular/@app/ | :%s/\.ts//
