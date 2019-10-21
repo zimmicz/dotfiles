@@ -24,6 +24,7 @@
     cob = checkout -b
     dw = diff --ignore-all-space
     dc = diff --cached
+    gh-pages = subtree split --prefix site -b gh-pages && checkout gh-pages && checkout master -- CNAME && commit --amend --no-edit && push origin :gh-pages && push origin && checkout master && branch -D gh-pages
     i = init
     la = "!git config -l | grep alias | cut -c 7-"
     sa = stash apply
