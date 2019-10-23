@@ -16,8 +16,10 @@
 [alias]
     a  = add
     aa = add .
-    amend = commit --amend -m
+    amend = commit --amend --no-edit
     bd = branch -d
+    bl = branch --list
+    bla = branch --list --all
     bdf = branch -D
     cm = commit -m
     co = checkout
