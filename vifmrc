@@ -1,2 +1,3 @@
 " Use ; for commands.
 nnoremap ; :
+filetype * xdg-open
