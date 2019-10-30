@@ -263,6 +263,7 @@ nmap <leader>f   :Ack "\b<cword>\b" <CR>
 let NERDTreeIgnore = ['\.js.map$', '__pycache__', '\.pyc$']
 
 autocmd VimEnter * if globpath('.,..','node_modules/@angular') != '' | call angular_cli#init() | endif
+autocmd FocusGained,BufEnter * :silent! !
 
 " symap gf mapping
 set inex=substitute(v:fname,'app','app/js/angular','')
@@ -305,4 +306,4 @@ nnoremap <silent> cpcfn :let @+=expand('%:p')<CR>
 " MAJA angular specific
 " replace app/js/angular with @app
 " remove .ts extension
-:command NgImport :%s/app\/js\/angular/@app/ | :%s/\.ts//
+:command NgImport :s/app\/js\/angular/@app/ | :s/\.ts//
