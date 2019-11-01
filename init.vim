@@ -303,7 +303,13 @@ let g:tagbar_type_typescript = {
 nnoremap <silent> cpfn :let @+=@%<CR>
 nnoremap <silent> cpcfn :let @+=expand('%:p')<CR>
 
-" MAJA angular specific
-" replace app/js/angular with @app
-" remove .ts extension
+" MAJA angular specific replace app/js/angular with @app remove .ts extension
 :command NgImport :s/app\/js\/angular/@app/ | :s/\.ts//
+
+" Group of commands to easily toggle angular component files
+" open angular template file
+nnoremap <silent> gah :e %:p:r.html<CR>
+" open angular style file
+nnoremap <silent> gas :e %:p:r.scss<CR>
+" open angular typescript file
+nnoremap <silent> gat :e %:p:r.ts<CR>
