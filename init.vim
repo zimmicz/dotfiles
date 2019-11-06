@@ -4,9 +4,8 @@
 call plug#begin('~/.vim/plugged')
 
 Plug 'airblade/vim-gitgutter'
-Plug 'https://github.com/itchyny/lightline.vim'
+Plug 'itchyny/lightline.vim'
 Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
-Plug 'junegunn/fzf.vim'
 Plug 'tpope/vim-surround'
 Plug 'itchyny/lightline.vim'
 Plug 'jdkanani/vim-material-theme'
@@ -29,7 +28,6 @@ Plug 'bdauria/angular-cli.vim'
 Plug 'heavenshell/vim-jsdoc'
 Plug 'alexandre/toggle_width.vim'
 Plug 'Yggdroot/indentLine'
-Plug 'posva/vim-vue'
 Plug 'rakr/vim-one'
 Plug 'leafgarland/typescript-vim'
 Plug 'nvie/vim-flake8'
