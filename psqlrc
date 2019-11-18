@@ -4,7 +4,7 @@
 \set PROMPT1 '%m->%n@%/%# '
 \set PROMPT2 '[more] %R > '
 \pset null '[NULL]'
-\x auto
+-- \x auto
 \set COMP_KEYWORD_CASE upper
 \set HISTFILE ~/.psql_history- :DBNAME
 \set PSQL_EDITOR vim
@@ -12,8 +12,9 @@
 \set HISTSIZE 20000
 \pset linestyle unicode
 \pset border 2
+\setenv PAGER 'pspg -bX --no-mouse --IGNORE-CASE --no-sound -F'
 \set x '\\setenv PAGER less'
-\set xx '\\setenv PAGER \'pspg -bX --no-mouse --IGNORE-CASE --no-sound -F\''
+\set xx '\\setenv PAGER \'pspg -bX --no-mouse --IGNORE-CASE --no-sound\''
 \set b 'BEGIN;'
 \set r 'ROLLBACK;'
 \set c 'COMMIT;'
