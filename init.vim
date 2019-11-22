@@ -93,6 +93,7 @@ set hidden
 set list                    " Show whitespace as special chars - see listchars
 set listchars=tab:»\ ,extends:›,precedes:‹,nbsp:·,trail:· " Unicode characters for various things
 set shortmess+=A
+set completeopt-=preview
 
 " Marks should go to the column, not just the line. Why isn't this the default?
 nnoremap ' `
@@ -124,14 +125,11 @@ nnoremap Q @q
 " Copy to clipboard
 vnoremap  <leader>y  "+y
 nnoremap  <leader>Y  "+yg_
-nnoremap  <leader>y  "+y
 nnoremap  <leader>yy  "+yy
 
 " Paste from clipboard
 nnoremap <leader>p "+p
 nnoremap <leader>P "+P
-vnoremap <leader>p "+p
-vnoremap <leader>P "+P
 
 " " Move between splits
 nnoremap <C-J> <C-W><C-J>
@@ -156,7 +154,6 @@ endif
 
 " Theme
 syntax enable
-" colorscheme material
 colorscheme palenight
 set background=dark
 set timeoutlen=1000 ttimeoutlen=0
@@ -224,16 +221,9 @@ ca w!! w !sudo tee >/dev/null "%"
 " close NERDTree if it is the only window left open
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
 autocmd FileType javascript setlocal omnifunc=javascriptcomplete#CompleteJS
-
-" Start autocompletion after 4 chars
-let g:ycm_min_num_of_chars_for_completion = 4
-let g:ycm_min_num_identifier_candidate_chars = 4
-let g:ycm_enable_diagnostic_highlighting = 0
-" Don't show YCM's preview window [ I find it really annoying ]
-set completeopt-=preview
-let g:ycm_add_preview_to_completeopt = 0
-
 autocmd BufRead,BufNewFile *.vue setlocal filetype=vue.html.javascript.css
+autocmd VimEnter * if globpath('.,..','node_modules/@angular') != '' | call angular_cli#init() | endif
+autocmd FocusGained,BufEnter * :silent! !
 
 " Try to fix syntax highlighting
 autocmd FileType vue syntax sync fromstart
@@ -259,9 +249,6 @@ cnoreabbrev Ack Ack!
 nmap <leader>f   :Ack "\b<cword>\b" <CR>
 
 let NERDTreeIgnore = ['\.js.map$', '__pycache__', '\.pyc$']
-
-autocmd VimEnter * if globpath('.,..','node_modules/@angular') != '' | call angular_cli#init() | endif
-autocmd FocusGained,BufEnter * :silent! !
 
 " symap gf mapping
 set inex=substitute(v:fname,'app','app/js/angular','')
