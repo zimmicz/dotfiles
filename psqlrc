@@ -24,3 +24,6 @@
 -- > \set table pg_catalog.pg_class \set colprefix r \\ :columns
 \set colprefix ''
 \set columns 'SELECT array_to_string(array(SELECT CASE WHEN :''colprefix'' <> '''' THEN :''colprefix'' || ''.'' ELSE '''' END || quote_ident(attname) FROM pg_attribute WHERE attrelid = :''table''::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum), '', '')';
+
+\set stats 'SELECT pid, query, wait_event FROM pg_stat_activity';
+

@@ -8,7 +8,7 @@ if [[ ! -d ~/dotfiles ]]; then
 fi
 
 # create symlinks to home folder
-for f in $(find ~/dotfiles/* ! -name "*.sh"); do
+for f in $(find ~/dotfiles/* -type f ! -name "*.sh"); do
     FILE=$(basename $f)
     echo installing $FILE...
     echo $FILE
@@ -26,6 +26,20 @@ for f in $(find ~/dotfiles/* ! -name "*.sh"); do
         ln -sf $f ~/.$FILE
     fi
 
+done
+
+for d in $(find ~/dotfiles/* -type d)
+do
+    BASE_DIR=~/.$(basename $d)
+    echo $BASE_DIR
+    mkdir $BASE_DIR
+
+    for f in $(find ${d}/* -type f)
+    do
+        FILE=$(basename $f)
+        echo $FILE
+        ln -sf $d/$FILE ~/.$(basename $d)/$FILE
+    done
 done
 
 echo Done

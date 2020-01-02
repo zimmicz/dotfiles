@@ -81,7 +81,6 @@ set softtabstop=4
 set splitbelow
 set splitright
 set tabstop=4
-set title
 set updatetime=750
 set formatoptions=tcqn1     " t - autowrap normal text
                             " c - autowrap comments

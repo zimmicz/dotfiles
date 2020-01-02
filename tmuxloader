@@ -1,0 +1,35 @@
+#!/bin/bash
+
+if [[ -z $1 ]]
+then
+    echo "No SESSION_NAME name provided"
+    exit 1
+fi
+
+TMUXLOADER_SESSION_NAME_DIR=~/dotfiles/tmuxloader-sessions
+SESSION_NAME=$1
+
+TMUX_OLD=$TMUX
+TMUX=
+
+EXISTING_SESSION_NAME=$(tmux list-sessions | grep ${SESSION_NAME} | wc -l)
+
+if [[ ${EXISTING_SESSION_NAME} -gt 0 ]]
+then
+    if [[ -f "${TMUXLOADER_SESSION_NAME_DIR}/$1" ]]
+    then
+        tmux attach-session -t ${SESSION_NAME}
+    fi
+else
+    . "${TMUXLOADER_SESSION_NAME_DIR}/$1"
+fi
+
+if [[ "$TMUX_OLD" = "" ]]
+then
+    tmux attach-session -t $SESSION_NAME
+else
+    tmux switch-client -t $SESSION_NAME
+fi
+
+TMUX=$TMUX_OLD
+

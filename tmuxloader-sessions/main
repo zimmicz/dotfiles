@@ -1,0 +1,3 @@
+SESSION=main
+
+tmux new-session -d -s $SESSION
