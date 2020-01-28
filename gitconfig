@@ -29,6 +29,7 @@
     dw = diff --ignore-all-space
     dc = diff --cached
     f = fetch
+    find = "!git log --color -p -S "
     i = init
     la = "!git config -l | grep alias | cut -c 7-"
     sa = stash apply
