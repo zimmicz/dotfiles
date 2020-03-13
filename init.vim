@@ -1,51 +1,85 @@
-" Specify a directory for plugins
-" - For Neovim: ~/.local/share/nvim/plugged
-" - Avoid using standard Vim directory names like 'plugin'
+" coc-vetur needs https://www.npmjs.com/package/vue-language-server
+" see https://github.com/neoclide/coc-vetur/issues/28 when coc-vetur not working
 call plug#begin('~/.vim/plugged')
-
-Plug 'leafgarland/typescript-vim'
-Plug 'airblade/vim-gitgutter'
-Plug 'itchyny/lightline.vim'
 Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
 Plug 'junegunn/fzf.vim',
-Plug 'tpope/vim-surround'
-Plug 'drewtempelmeyer/palenight.vim'
-Plug 'kshenoy/vim-signature'
-Plug 'jiangmiao/auto-pairs'
+Plug 'editorconfig/editorconfig-vim'
 Plug 'rhysd/clever-f.vim'
+Plug 'mileszs/ack.vim'
 Plug 'easymotion/vim-easymotion'
-Plug 'burnettk/vim-angular'
+Plug 'airblade/vim-gitgutter'
+Plug 'itchyny/lightline.vim'
+Plug 'drewtempelmeyer/palenight.vim'
 Plug 'vim-scripts/DeleteTrailingWhitespace'
 Plug 'vim-scripts/ShowTrailingWhitespace'
 Plug 'tpope/vim-fugitive'
-Plug 'tpope/vim-obsession'
 Plug 'tpope/vim-unimpaired'
 Plug 'scrooloose/nerdtree'
-Plug 'editorconfig/editorconfig-vim'
+Plug 'Xuyuanp/nerdtree-git-plugin'
+Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
+Plug 'preservim/nerdcommenter'
 Plug 'bdauria/angular-cli.vim'
-Plug 'heavenshell/vim-jsdoc'
 Plug 'alexandre/toggle_width.vim'
 Plug 'Yggdroot/indentLine'
-Plug 'nvie/vim-flake8'
-Plug 'majutsushi/tagbar'
-Plug 'mileszs/ack.vim'
-Plug 'tpope/vim-commentary'
-Plug 'pangloss/vim-javascript'
-Plug 'posva/vim-vue'
-Plug 'mattn/emmet-vim'
+Plug 'sheerun/vim-polyglot'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
-let g:coc_global_extensions = ['coc-json', 'coc-tsserver', 'coc-emmet', 'coc-tslint-plugin', 'coc-angular']
-
-" Initialize plugin system
+let g:coc_global_extensions = [
+    \ 'coc-json',
+    \ 'coc-pairs',
+    \ 'coc-snippets',
+    \ 'coc-tsserver',
+    \ 'coc-emmet',
+    \ 'coc-tslint-plugin',
+    \ 'coc-angular',
+    \ 'coc-vetur'
+    \ ]
 call plug#end()
 
 let mapleader = "\<Space>"
-let python_highlight_all=1
 
-" ----------------
-" OPTIONS
-" ----------------
+" Escape insert mode with double j
+imap jj <Esc>
+
+" Use ; for commands.
+nnoremap ; :
+" Use Q to execute default register.
+nnoremap Q @q
+
+" Copy to clipboard
+vnoremap  <leader>y  "+y
+nnoremap  <leader>Y  "+yg_
+nnoremap  <leader>yy  "+yy
+
+" Paste from clipboard
+nnoremap <leader>p "+p
+nnoremap <leader>P "+P
+
+" " Move between splits
+nnoremap <C-J> <C-W><C-J>
+nnoremap <C-K> <C-W><C-K>
+nnoremap <C-L> <C-W><C-L>
+nnoremap <C-H> <C-W><C-H>
+
+noremap <Up> <nop>
+noremap <Down> <nop>
+noremap <Left> <nop>
+noremap <Right> <nop>
+
+if (has("termguicolors"))
+ set termguicolors
+endif
+
+if &term =~ '256color'
+  " disable Background Color Erase (BCE) so that color schemes
+  " render properly when inside 256-color tmux and GNU screen.
+  set t_ut=
+endif
+
+" Theme
 syntax on
+colorscheme palenight
+set background=dark
+set timeoutlen=1000 ttimeoutlen=0
 set autoindent
 set autoread
 set background=dark
@@ -85,20 +119,6 @@ set formatoptions=tcqn1     " t - autowrap normal text
 set hidden
 set list                    " Show whitespace as special chars - see listchars
 set listchars=tab:»\ ,extends:›,precedes:‹,nbsp:·,trail:· " Unicode characters for various things
-set shortmess+=A
-set completeopt-=preview
-
-" Marks should go to the column, not just the line. Why isn't this the default?
-nnoremap ' `
-
-" Show git files
-map <leader>; :GFiles --exclude-standard --others --cached<CR>
-
-" Toggle nerd tree
-map <leader>e :NERDTreeToggle<CR>
-
-" Escape insert mode with double j
-imap jj <Esc>
 
 " Turn off linewise keys. Normally, the `j' and `k' keys move the cursor down one entire line. with
 " line wrapping on, this can cause the cursor to actually skip a few lines on the screen because
@@ -107,87 +127,15 @@ imap jj <Esc>
 nmap j gj
 nmap k gk
 
-" Open the last edited file.
-nmap <C-e> :e#<CR>
+" Toggle nerd tree
+map <leader>e :NERDTreeToggle<CR>
+nmap <leader>n :NERDTreeFind<CR>
 
-" Use ; for commands.
-nnoremap ; :
-" Use Q to execute default register.
-nnoremap Q @q
+" Marks should go to the column, not just the line. Why isn't this the default?
+nnoremap ' `
 
-" Copy to clipboard
-vnoremap  <leader>y  "+y
-nnoremap  <leader>Y  "+yg_
-nnoremap  <leader>yy  "+yy
-
-" Paste from clipboard
-nnoremap <leader>p "+p
-nnoremap <leader>P "+P
-
-" " Move between splits
-nnoremap <C-J> <C-W><C-J>
-nnoremap <C-K> <C-W><C-K>
-nnoremap <C-L> <C-W><C-L>
-nnoremap <C-H> <C-W><C-H>
-
-noremap <Up> <nop>
-noremap <Down> <nop>
-noremap <Left> <nop>
-noremap <Right> <nop>
-
-if (has("termguicolors"))
- set termguicolors
-endif
-
-if &term =~ '256color'
-  " disable Background Color Erase (BCE) so that color schemes
-  " render properly when inside 256-color tmux and GNU screen.
-  set t_ut=
-endif
-
-" Theme
-syntax enable
-colorscheme palenight
-set background=dark
-set timeoutlen=1000 ttimeoutlen=0
-
-let g:lightline = {
-  \   'colorscheme': 'palenight',
-  \   'active': {
-  \     'left':[ [ 'mode', 'paste' ],
-  \              [ 'gitbranch', 'readonly', 'filename', 'modified' ]
-  \     ]
-  \   },
-    \   'component': {
-    \     'lineinfo': ' %3l:%-2v',
-    \   },
-  \   'component_function': {
-  \     'gitbranch': 'fugitive#head',
-  \   }
-  \ }
-let g:lightline.separator = {
-    \   'left': '', 'right': ''
-  \}
-let g:lightline.subseparator = {
-    \   'left': '', 'right': ''
-  \}
-let g:lightline.tabline_separator = {
-    \   'left': '', 'right': ''
-  \}
-
-cnoremap <C-a>  <Home>
-cnoremap <C-b>  <Left>
-cnoremap <C-f>  <Right>
-cnoremap <C-d>  <Delete>
-cnoremap <M-b>  <S-Left>
-cnoremap <M-f>  <S-Right>
-cnoremap <M-d>  <S-right><Delete>
-cnoremap <Esc>b <S-Left>
-cnoremap <Esc>f <S-Right>
-cnoremap <Esc>d <S-right><Delete>
-cnoremap <C-g>  <C-c>
-
-autocmd BufReadPre *.js let b:javascript_lib_use_angularjs = 1
+" Show git files
+map <leader>; :GFiles --exclude-standard --others --cached<CR>
 
 " Go to tab by number
 noremap <leader>1 1gt
@@ -208,23 +156,18 @@ let g:DeleteTrailingWhitespace_Action = 'delete'
 " vv to generate new vertical split
 nnoremap <silent> vv <C-w>v
 
-" sudo write
-ca w!! w !sudo tee >/dev/null "%"
-
 " close NERDTree if it is the only window left open
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
-autocmd FileType javascript setlocal omnifunc=javascriptcomplete#CompleteJS
-autocmd BufRead,BufNewFile *.vue setlocal filetype=vue.html.javascript.css
 autocmd VimEnter * if globpath('.,..','node_modules/@angular') != '' | call angular_cli#init() | endif
 autocmd FocusGained,BufEnter * :silent! !
 
 " Try to fix syntax highlighting
-autocmd FileType vue syntax sync fromstart
+"autocmd FileType vue syntax sync fromstart
 noremap <F12> <Esc>:syntax sync fromstart<CR>
 inoremap <F12> <C-o>:syntax sync fromstart<CR>
 
 " Enable folding with the <Tab>
-nnoremap <Tab> za
+" nnoremap <Tab> za
 " Clear highlights with Ctrl+L
 nnoremap <silent> <C-Space> :nohlsearch<CR>
 " set sql highlighting
@@ -241,7 +184,19 @@ cnoreabbrev Ack Ack!
 " Search the word under the cursor
 nmap <leader>f   :Ack "\b<cword>\b" <CR>
 
-let NERDTreeIgnore = ['\.js.map$', '__pycache__', '\.pyc$']
+let NERDTreeIgnore = ['\.js.map$', '__pycache__', '\.pyc$', 'node_modules', 'offline']
+let g:NERDTreeIndicatorMapCustom = {
+    \ "Modified"  : "✹",
+    \ "Staged"    : "✚",
+    \ "Untracked" : "✭",
+    \ "Renamed"   : "➜",
+    \ "Unmerged"  : "═",
+    \ "Deleted"   : "✖",
+    \ "Dirty"     : "✗",
+    \ "Clean"     : "✔︎",
+    \ 'Ignored'   : '☒',
+    \ "Unknown"   : "?"
+    \ }
 
 " symap gf mapping
 set inex=substitute(v:fname,'app','app/js/angular','')
@@ -289,21 +244,20 @@ nnoremap <silent> gas :e %:p:r.scss<CR>
 " open angular typescript file
 nnoremap <silent> gat :e %:p:r.ts<CR>
 
-" Some servers have issues with backup files, see #649
-set nobackup
-set nowritebackup
 
-" You will have bad experience for diagnostic messages when it's default 4000.
+
+
+
+
+
+
+" coc settings
 set updatetime=300
-
-" don't give |ins-completion-menu| messages.
-set shortmess+=c
-
-" always show signcolumns
 set signcolumn=yes
-
+set shortmess+=c
 " Use tab for trigger completion with characters ahead and navigate.
-" Use command ':verbose imap <tab>' to make sure tab is not mapped by other plugin.
+" NOTE: Use command ':verbose imap <tab>' to make sure tab is not mapped by
+" other plugin before putting this into your config.
 inoremap <silent><expr> <TAB>
       \ pumvisible() ? "\<C-n>" :
       \ <SID>check_back_space() ? "\<TAB>" :
@@ -316,25 +270,28 @@ function! s:check_back_space() abort
 endfunction
 
 " Use <c-space> to trigger completion.
-inoremap <silent><expr> <C-space> coc#refresh()
+inoremap <silent><expr> <c-space> coc#refresh()
 
-" Use <cr> to confirm completion, `<C-g>u` means break undo chain at current position.
-" Coc only does snippet and additional edit on confirm.
-inoremap <expr> <cr> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
-" Or use `complete_info` if your vim support it, like:
-" inoremap <expr> <cr> complete_info()["selected"] != "-1" ? "\<C-y>" : "\<C-g>u\<CR>"
+" Use <cr> to confirm completion, `<C-g>u` means break undo chain at current
+" position. Coc only does snippet and additional edit on confirm.
+if has('patch8.1.1068')
+  " Use `complete_info` if your (Neo)Vim version supports it.
+  inoremap <expr> <cr> complete_info()["selected"] != "-1" ? "\<C-y>" : "\<C-g>u\<CR>"
+else
+  imap <expr> <cr> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
+endif
 
 " Use `[g` and `]g` to navigate diagnostics
 nmap <silent> [g <Plug>(coc-diagnostic-prev)
 nmap <silent> ]g <Plug>(coc-diagnostic-next)
 
-" Remap keys for gotos
+" GoTo code navigation.
 nmap <silent> gd <Plug>(coc-definition)
 nmap <silent> gy <Plug>(coc-type-definition)
 nmap <silent> gi <Plug>(coc-implementation)
 nmap <silent> gr <Plug>(coc-references)
 
-" Use K to show documentation in preview window
+" Use K to show documentation in preview window.
 nnoremap <silent> K :call <SID>show_documentation()<CR>
 
 function! s:show_documentation()
@@ -345,45 +302,117 @@ function! s:show_documentation()
   endif
 endfunction
 
-" Highlight symbol under cursor on CursorHold
+" Highlight the symbol and its references when holding the cursor.
 autocmd CursorHold * silent call CocActionAsync('highlight')
 
-" Remap for rename current word
+" Symbol renaming.
 nmap <leader>rn <Plug>(coc-rename)
 
 augroup mygroup
   autocmd!
   " Setup formatexpr specified filetype(s).
   autocmd FileType typescript,json setl formatexpr=CocAction('formatSelected')
-  " Update signature help on jump placeholder
+  " Update signature help on jump placeholder.
   autocmd User CocJumpPlaceholder call CocActionAsync('showSignatureHelp')
 augroup end
 
-" Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
+" Applying codeAction to the selected region.
+" Example: `<leader>aap` for current paragraph
 xmap <leader>a  <Plug>(coc-codeaction-selected)
 nmap <leader>a  <Plug>(coc-codeaction-selected)
 
-" Remap for do codeAction of current line
+" Remap keys for applying codeAction to the current line.
 nmap <leader>ac  <Plug>(coc-codeaction)
-" Fix autofix problem of current line
+" Apply AutoFix to problem on the current line.
 nmap <leader>qf  <Plug>(coc-fix-current)
 
-" Use <TAB> for select selections ranges, needs server support, like: coc-tsserver, coc-python
+" Introduce function text object
+" NOTE: Requires 'textDocument.documentSymbol' support from the language server.
+xmap if <Plug>(coc-funcobj-i)
+xmap af <Plug>(coc-funcobj-a)
+omap if <Plug>(coc-funcobj-i)
+omap af <Plug>(coc-funcobj-a)
+
+" Use <TAB> for selections ranges.
+" NOTE: Requires 'textDocument/selectionRange' support from the language server.
+" coc-tsserver, coc-python are the examples of servers that support it.
 nmap <silent> <TAB> <Plug>(coc-range-select)
 xmap <silent> <TAB> <Plug>(coc-range-select)
 
-" Use `:Format` to format current buffer
+" Add `:Format` command to format current buffer.
 command! -nargs=0 Format :call CocAction('format')
 
-" Use `:Fold` to fold current buffer
+" Add `:Fold` command to fold current buffer.
 command! -nargs=? Fold :call     CocAction('fold', <f-args>)
 
-" use `:OR` for organize import of current buffer
+" Add `:OR` command for organize imports of the current buffer.
 command! -nargs=0 OR   :call     CocAction('runCommand', 'editor.action.organizeImport')
 
-" Add status line support, for integration with other plugin, checkout `:h coc-status`
+" Add (Neo)Vim's native statusline support.
+" NOTE: Please see `:h coc-status` for integrations with external plugins that
+" provide custom statusline: lightline.vim, vim-airline.
 set statusline^=%{coc#status()}%{get(b:,'coc_current_function','')}
+
+" Mappings using CoCList:
+" Show all diagnostics.
+nnoremap <silent> <space>a  :<C-u>CocList diagnostics<cr>
+" Manage extensions.
+nnoremap <silent> <space>x :<C-u>CocList extensions<cr>
+" Show commands.
+nnoremap <silent> <space>c  :<C-u>CocList commands<cr>
+" Find symbol of current document.
+nnoremap <silent> <space>o  :<C-u>CocList outline<cr>
+" Search workspace symbols.
+nnoremap <silent> <space>s  :<C-u>CocList -I symbols<cr>
+" Do default action for next item.
+nnoremap <silent> <space>j  :<C-u>CocNext<CR>
+" Do default action for previous item.
+nnoremap <silent> <space>k  :<C-u>CocPrev<CR>
+" Resume latest coc list.
+nnoremap <silent> <space>p  :<C-u>CocListResume<CR>
 
 " jump to newer location
 :unmap <C-i>
 
+" close buffer without closing the window
+command! Bd bp|bd #
+
+let g:lightline = {
+  \   'colorscheme': 'palenight',
+  \   'active': {
+  \     'left':[ [ 'mode', 'paste' ],
+  \              [ 'gitbranch', 'readonly', 'filename', 'modified' ]
+  \     ]
+  \   },
+    \   'component': {
+    \     'lineinfo': ' %3l:%-2v',
+    \   },
+  \   'component_function': {
+  \     'gitbranch': 'fugitive#head',
+  \   }
+  \ }
+let g:lightline.separator = {
+    \   'left': '', 'right': ''
+  \}
+let g:lightline.subseparator = {
+    \   'left': '', 'right': ''
+  \}
+let g:lightline.tabline_separator = {
+    \   'left': '', 'right': ''
+  \}
+
+let g:LanguageClient_serverCommands = {
+    \ 'vue': ['vls']
+    \ }
+let g:vue_disable_pre_processors=1
+autocmd FileType vue syntax sync fromstart
+autocmd BufRead,BufNewFile *.vue setlocal filetype=vue
+
+let NERDTreeHighlightCursorline = 0
+let g:NERDTreeFileExtensionHighlightFullName = 1
+let g:NERDTreeExactMatchHighlightFullName = 1
+let g:NERDTreePatternMatchHighlightFullName = 1
+
+filetype plugin on
+nmap gc <plug>NERDCommenterToggle
+vmap gc <plug>NERDCommenterToggle

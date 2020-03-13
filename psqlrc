@@ -6,9 +6,9 @@
 \pset null '[NULL]'
 -- \x auto
 \set COMP_KEYWORD_CASE upper
-\set HISTFILE ~/.psql_history- :DBNAME
+\set HISTFILE ~/.psql_history- :DBHOST - :DBNAME
 \set PSQL_EDITOR vim
-\set HISTCONTROL ignorespace
+\set HISTCONTROL ignoreboth
 \set HISTSIZE 20000
 \pset linestyle unicode
 \pset border 2

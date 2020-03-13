@@ -12,5 +12,5 @@ tmux resize-pane -R 50
 
 tmux select-pane -t 1
 tmux send-keys "cd ~/documents/gmt-symap-frontend" C-m
-tmux send-keys "vim -S Session.vim" C-m
+tmux send-keys "vim" C-m
 
