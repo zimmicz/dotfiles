@@ -18,22 +18,29 @@ Plug 'scrooloose/nerdtree'
 Plug 'Xuyuanp/nerdtree-git-plugin'
 Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 Plug 'preservim/nerdcommenter'
-Plug 'bdauria/angular-cli.vim'
 Plug 'alexandre/toggle_width.vim'
 Plug 'Yggdroot/indentLine'
 Plug 'sheerun/vim-polyglot'
+Plug 'SirVer/ultisnips'
+Plug 'mhinz/vim-startify'
+Plug 'SirVer/ultisnips'
+Plug 'mlaursen/vim-react-snippets'
+Plug 'posva/vim-vue'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 let g:coc_global_extensions = [
+    \ 'coc-emmet',
+    \ 'coc-eslint',
     \ 'coc-json',
     \ 'coc-pairs',
     \ 'coc-snippets',
     \ 'coc-tsserver',
-    \ 'coc-emmet',
-    \ 'coc-tslint-plugin',
-    \ 'coc-angular',
     \ 'coc-vetur'
     \ ]
 call plug#end()
+
+" sudo apt install python3-setuptools python3-pip
+" pip3 install --user wheel neovim
+let g:python3_host_prog = '/usr/bin/python3'
 
 let mapleader = "\<Space>"
 
@@ -158,7 +165,6 @@ nnoremap <silent> vv <C-w>v
 
 " close NERDTree if it is the only window left open
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
-autocmd VimEnter * if globpath('.,..','node_modules/@angular') != '' | call angular_cli#init() | endif
 autocmd FocusGained,BufEnter * :silent! !
 
 " Try to fix syntax highlighting
@@ -175,6 +181,11 @@ nnoremap <silent> sql :set syntax=sql<CR>
 " TagBar
 nmap <F8> :TagbarToggle<CR>
 
+
+" Command history
+nnoremap q: :History:<CR>
+" Search history
+nnoremap q/ :History/<CR>
 " Buffers
 nnoremap <leader>b :Buffers<CR>
 " History
@@ -197,10 +208,6 @@ let g:NERDTreeIndicatorMapCustom = {
     \ 'Ignored'   : '☒',
     \ "Unknown"   : "?"
     \ }
-
-" symap gf mapping
-set inex=substitute(v:fname,'app','app/js/angular','')
-set suffixesadd=.js,.ts,.scss
 
 let g:tagbar_type_typescript = {
     \ 'ctagstype': 'typescript',
@@ -232,9 +239,6 @@ let g:tagbar_type_typescript = {
 " copy filename to clipboard
 nnoremap <silent> cpfn :let @+=@%<CR>
 nnoremap <silent> cpcfn :let @+=expand('%:p')<CR>
-
-" MAJA angular specific replace app/js/angular with @app remove .ts extension
-:command NgImport :s/app\/js\/angular/@app/ | :s/\.ts//
 
 " Group of commands to easily toggle angular component files
 " open angular template file
@@ -401,12 +405,9 @@ let g:lightline.tabline_separator = {
     \   'left': '', 'right': ''
   \}
 
-let g:LanguageClient_serverCommands = {
-    \ 'vue': ['vls']
-    \ }
 let g:vue_disable_pre_processors=1
 autocmd FileType vue syntax sync fromstart
-autocmd BufRead,BufNewFile *.vue setlocal filetype=vue
+autocmd BufReadPost,BufNewFile *.vue setlocal filetype=vue
 
 let NERDTreeHighlightCursorline = 0
 let g:NERDTreeFileExtensionHighlightFullName = 1
@@ -416,3 +417,4 @@ let g:NERDTreePatternMatchHighlightFullName = 1
 filetype plugin on
 nmap gc <plug>NERDCommenterToggle
 vmap gc <plug>NERDCommenterToggle
+

@@ -1,0 +1,16 @@
+#!/bin/bash
+
+SESSION=cartostory
+
+tmux new-session -d -s $SESSION
+
+# run backend
+tmux split-window -h
+tmux send-keys "cd ~/dev/cartostory-frontend" C-m
+tmux send-keys "yarn serve" C-m
+tmux resize-pane -R 40
+
+tmux select-pane -t 1
+tmux send-keys "cd ~/dev/cartostory-frontend" C-m
+tmux send-keys "vim" C-m
+
