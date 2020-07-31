@@ -1,0 +1,19 @@
+#!/bin/bash
+
+SESSION=livesport
+
+tmux new-session -d -s $SESSION
+
+tmux split-window -d
+
+tmux select-pane -t 1
+tmux send-keys "cd ~/work/smart-tv" C-m
+tmux send-keys "vim" C-m
+
+# run backend
+tmux select-pane -t 2
+tmux send-keys "tmux resize-pane -t 2 -y 10" C-m
+tmux send-keys "cd ~/work/smart-tv" C-m
+tmux send-keys "npm start" C-m
+
+tmux select-pane -t 1

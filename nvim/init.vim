@@ -16,7 +16,7 @@ Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-unimpaired'
 Plug 'scrooloose/nerdtree'
 Plug 'Xuyuanp/nerdtree-git-plugin'
-Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
+"Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 Plug 'preservim/nerdcommenter'
 Plug 'alexandre/toggle_width.vim'
 Plug 'Yggdroot/indentLine'
@@ -26,6 +26,7 @@ Plug 'mhinz/vim-startify'
 Plug 'SirVer/ultisnips'
 Plug 'mlaursen/vim-react-snippets'
 Plug 'posva/vim-vue'
+Plug 'adelarsq/vim-matchit'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 let g:coc_global_extensions = [
     \ 'coc-emmet',
@@ -385,7 +386,7 @@ let g:lightline = {
   \   'colorscheme': 'palenight',
   \   'active': {
   \     'left':[ [ 'mode', 'paste' ],
-  \              [ 'gitbranch', 'readonly', 'filename', 'modified' ]
+  \              [ 'gitbranch', 'readonly', 'absolutepath', 'modified' ]
   \     ]
   \   },
     \   'component': {

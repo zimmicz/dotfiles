@@ -45,4 +45,8 @@
     rbi = rebase --interactive
     rbi-mergebase = !sh -c \"git rebase -i `git merge-base $1 HEAD`\" -
     wip = "!git diff > $(git rev-parse HEAD)_WIP.patch"
+    undo = reset "HEAD^1"
     unstage = reset HEAD
+    untracked = ls-files --others --exclude-standard
+[init]
+    templatedir = ~/.git-templates

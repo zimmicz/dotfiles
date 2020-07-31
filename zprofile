@@ -78,10 +78,14 @@ if [ -d "$HOME/bin" ] ; then
     PATH="$HOME/bin:$PATH"
 fi
 
+PATH=$PATH:/usr/local/go/bin
+
 TMPPREFIX="${TMPDIR%/}/zsh"
 export TERM=screen-256color
 export EDITOR='nvim'
 export GIT_EDITOR=nvim
+export GONOSUMDB=lstv.io/*
+export GOPROXY="http://goproxy.stg.lstv.io"
 
 export KEYTIMEOUT=1
 
