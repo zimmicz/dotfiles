@@ -14,6 +14,8 @@ ln -sf ${DOTFILES_DIR}/i3blocks/config ${CONFIG_DIR}/i3blocks/config
 ln -sf ${DOTFILES_DIR}/nvim/init.vim ${CONFIG_DIR}/nvim/init.vim
 ln -sf ${DOTFILES_DIR}/vifm/vifmrc ${CONFIG_DIR}/vifm/vifmrc
 
+ln -sf ${DOTFILES_DIR}/user-dirs.dirs ${CONFIG_DIR}/user-dirs.dirs
+
 ln -sf ${DOTFILES_DIR}/ackrc ~/.ackrc
 ln -sf ${DOTFILES_DIR}/dir_bookmarks ~/.dir_bookmarks
 ln -sf ${DOTFILES_DIR}/gitconfig ~/.gitconfig
