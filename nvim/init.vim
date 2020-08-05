@@ -96,7 +96,7 @@ set background=dark
 set cindent
 set cinkeys-=0#
 set cino=
-set clipboard+=unnamedplus
+set clipboard+=unnamedplus " sudo apt install xclip
 set commentstring=\ \ #%s   " When folds are created, add them to this
 set copyindent
 set cursorline!
@@ -244,21 +244,6 @@ let g:tagbar_type_typescript = {
 " copy filename to clipboard
 nnoremap <silent> cpfn :let @+=@%<CR>
 nnoremap <silent> cpcfn :let @+=expand('%:p')<CR>
-
-" Group of commands to easily toggle angular component files
-" open angular template file
-nnoremap <silent> gah :e %:p:r.html<CR>
-" open angular style file
-nnoremap <silent> gas :e %:p:r.scss<CR>
-" open angular typescript file
-nnoremap <silent> gat :e %:p:r.ts<CR>
-
-
-
-
-
-
-
 
 " coc settings
 set updatetime=300
