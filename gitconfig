@@ -8,11 +8,13 @@
 [core]
     compression = 0
 [merge]
-    tool = vimdiff
+    tool = vim
     conflictstyle = diff3
 [mergetool]
     prompt = false
     keepBackup = false
+[mergetool "vim"]
+  cmd = nvim -f -c \"Gdiffsplit!\" \"$MERGED\"
 [alias]
     a  = add
     aa = add .
