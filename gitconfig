@@ -14,7 +14,7 @@
     prompt = false
     keepBackup = false
 [mergetool "vim"]
-  cmd = nvim -f -c \"Gdiffsplit!\" \"$MERGED\"
+  cmd = nvim -f -c \"Gvdiffsplit!\" \"$MERGED\"
 [alias]
     a  = add
     aa = add .
