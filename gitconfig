@@ -29,8 +29,8 @@
     cob = checkout -b
     cof = !sh -c \"git for-each-ref --format='%(refname:short)' refs/heads | fzf | xargs git checkout\"
     comp = !sh -c \"git diff HEAD $1 -- $2\"
-    dw = diff --ignore-all-space
-    dc = diff --cached
+    dw = diff --word-diff --ignore-all-space
+    dc = diff --word-diff --cached
     f = fetch
     find = "!git log --color -p -S "
     i = init
