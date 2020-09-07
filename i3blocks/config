@@ -53,6 +53,11 @@ instance=swap
 separator=false
 interval=30
 
+[battery]
+command=~/.config/i3blocks/battery
+interval=30
+label=BAT
+
 # Date Time
 #
 [time]

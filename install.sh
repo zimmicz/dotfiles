@@ -12,6 +12,7 @@ mkdir ~/.tmuxloader-sessions > /dev/null 2>&1
 
 ln -sf ${DOTFILES_DIR}/i3/config ${CONFIG_DIR}/i3/config
 ln -sf ${DOTFILES_DIR}/i3blocks/config ${CONFIG_DIR}/i3blocks/config
+ln -sf ${DOTFILES_DIR}/i3blocks/battery ${CONFIG_DIR}/i3blocks/battery
 ln -sf ${DOTFILES_DIR}/nvim/init.vim ${CONFIG_DIR}/nvim/init.vim
 ln -sf ${DOTFILES_DIR}/vifm/vifmrc ${CONFIG_DIR}/vifm/vifmrc
 ln -sf ${DOTFILES_DIR}/dunst/dunstrc ${CONFIG_DIR}/dunst/dunstrc
