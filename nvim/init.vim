@@ -200,7 +200,7 @@ nmap <leader>f   :Ack "\b<cword>\b" <CR>
 nnoremap <leader>g :G<CR>
 
 let NERDTreeIgnore = ['\.js.map$', '__pycache__', '\.pyc$', 'node_modules', 'offline']
-let g:NERDTreeIndicatorMapCustom = {
+let g:NERDTreeGitStatusIndicatorMapCustom = {
     \ "Modified"  : "✹",
     \ "Staged"    : "✚",
     \ "Untracked" : "✭",
