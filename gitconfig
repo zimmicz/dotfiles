@@ -47,6 +47,7 @@
     rb =  rebase
     rbi = rebase --interactive
     rbi-mergebase = !sh -c \"git rebase -i `git merge-base $1 HEAD`\" -
+    review = !sh -c \"git fetch && git checkout origin/$1\"
     wip = "!git diff > $(git rev-parse HEAD)_WIP.patch"
     undo = reset "HEAD^1"
     unstage = reset HEAD
