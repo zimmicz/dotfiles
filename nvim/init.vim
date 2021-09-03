@@ -28,7 +28,7 @@ Plug 'mlaursen/vim-react-snippets'
 Plug 'posva/vim-vue'
 Plug 'adelarsq/vim-matchit'
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
-Plug 'ms-jpq/chadtree', {'branch': 'chad', 'do': 'python3 -m chadtree deps'}
+Plug 'antoinemadec/coc-fzf', {'branch': 'release'}
 Plug 'ryanoasis/vim-devicons'
 
 let g:coc_global_extensions = [
@@ -139,8 +139,7 @@ nmap j gj
 nmap k gk
 
 " Toggle nerd tree
-"map <leader>e :NERDTreeToggle<CR>
-map <leader>e :CHADopen<CR>
+map <leader>e :NERDTreeToggle<CR>
 nmap <leader>n :NERDTreeFind<CR>
 
 " Marks should go to the column, not just the line. Why isn't this the default?
@@ -414,7 +413,3 @@ nmap gc <plug>NERDCommenterToggle
 vmap gc <plug>NERDCommenterToggle
 
 autocmd FileType markdown let g:indentLine_enabled=0
-
-let g:chadtree_settings = {
-    \ 'theme.text_colour_set': 'nerdtree_syntax_dark',
-    \ }
