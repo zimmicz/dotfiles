@@ -1,13 +1,13 @@
 #!/bin/bash
 
-SESSION=lstv-admin
+SESSION=common-admin
 
 tmux new-session -d -s $SESSION
 
 tmux split-window -d
 
 tmux select-pane -t 1
-tmux send-keys "cd ~/work/lstv-admin/frontend" C-m
+tmux send-keys "cd ~/work/common/admin/frontend" C-m
 tmux send-keys "vim" C-m
 
 # run backend
@@ -17,9 +17,9 @@ tmux send-keys "tmux resize-pane -t 2 -y 10" C-m
 tmux split-window -h
 
 tmux select-pane -t 3
-tmux send-keys "cd ~/work/lstv-admin" C-m
+tmux send-keys "cd ~/work/common/admin" C-m
 tmux send-keys "make run-backend" C-m
 
 tmux select-pane -t 2
-tmux send-keys "cd ~/work/lstv-admin" C-m
+tmux send-keys "cd ~/work/common/admin" C-m
 tmux send-keys "make run-frontend" C-m

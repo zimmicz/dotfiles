@@ -341,6 +341,9 @@ command! -nargs=? Fold :call     CocAction('fold', <f-args>)
 " Add `:OR` command for organize imports of the current buffer.
 command! -nargs=0 OR   :call     CocAction('runCommand', 'editor.action.organizeImport')
 
+" Prettier
+command! -nargs=0 Prettier :call CocAction('runCommand', 'prettier.formatFile')
+
 " Add (Neo)Vim's native statusline support.
 " NOTE: Please see `:h coc-status` for integrations with external plugins that
 " provide custom statusline: lightline.vim, vim-airline.
@@ -407,3 +410,4 @@ filetype plugin on
 nmap gc <plug>NERDCommenterToggle
 vmap gc <plug>NERDCommenterToggle
 
+autocmd FileType markdown let g:indentLine_enabled=0
