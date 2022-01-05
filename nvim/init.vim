@@ -32,6 +32,7 @@ Plug 'antoinemadec/coc-fzf', {'branch': 'release'}
 Plug 'ryanoasis/vim-devicons'
 Plug 'styled-components/vim-styled-components', { 'branch': 'main' }
 Plug 'kshenoy/vim-signature'
+Plug 'github/copilot.vim'
 let g:coc_global_extensions = [
     \ 'coc-emmet',
     \ 'coc-eslint',
@@ -132,6 +133,7 @@ set formatoptions=tcqn1     " t - autowrap normal text
 set hidden
 set list                    " Show whitespace as special chars - see listchars
 set listchars=tab:»\ ,extends:›,precedes:‹,nbsp:·,trail:· " Unicode characters for various things
+set numberwidth=1
 
 " Turn off linewise keys. Normally, the `j' and `k' keys move the cursor down one entire line. with
 " line wrapping on, this can cause the cursor to actually skip a few lines on the screen because

@@ -64,3 +64,5 @@
     untracked = ls-files --others --exclude-standard
 [init]
     templatedir = ~/.git-templates
+[cola]
+	spellcheck = false
