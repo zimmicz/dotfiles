@@ -1,0 +1,70 @@
+#!/bin/bash
+
+SESSION=level
+WORK_DIR=~/work/level.works
+FRONTEND=${WORK_DIR}/Levelworks.OGP
+BACKEND=${WORK_DIR}/Levelworks.Backend
+APP=${WORK_DIR}/Levelworks.App
+EMULATOR_BIN=/home/zimmi/Android/Sdk/tools/emulator
+EMULATOR_AVD=Pixel_5_API_31
+SDK_DIR=/home/zimmi/Android/Sdk
+
+tmux new-session -d -s $SESSION
+
+tmux split-window -d
+tmux rename-window frontend
+
+# open frontend code
+tmux select-pane -t 1
+tmux send-keys "cd ${FRONTEND}" C-m
+tmux send-keys "vim" C-m
+
+# run frontend
+tmux select-pane -t 2
+tmux send-keys "tmux resize-pane -t 2 -y 10" C-m
+tmux send-keys "cd ${FRONTEND}/webapp" C-m
+tmux send-keys "npm start" C-m
+
+tmux select-pane -t 1
+
+tmux new-window -n backend -c "${BACKEND}"
+
+tmux split-window -d
+
+# open backend code
+tmux select-pane -t 1
+tmux send-keys "cd ${BACKEND}" C-m
+tmux send-keys "vim" C-m
+
+# run backend
+tmux select-pane -t 2
+tmux send-keys "tmux resize-pane -t 2 -y 10" C-m
+tmux send-keys "cd ${BACKEND}/server" C-m
+tmux send-keys "npm start" C-m
+
+# APP
+
+tmux new-window -n app -c "${APP}"
+tmux split-window -d
+tmux split-window -dh
+tmux select-pane -t 3
+tmux split-window -dh
+
+# open app code
+tmux select-pane -t 1
+tmux send-keys "cd ${APP}" C-m
+tmux send-keys "vim" C-m
+
+# run android studio
+tmux select-pane -t 2
+tmux send-keys "ANDROID_SDK_ROOT=${SDK_DIR} ${EMULATOR_BIN} -avd ${EMULATOR_AVD}" C-m
+
+# run android
+tmux select-pane -t 3
+tmux send-keys "cd ${APP}" C-m
+tmux send-keys "ANDROID_SDK_ROOT=${SDK_DIR} npm run android" C-m
+
+# run start:adb
+tmux select-pane -t 4
+tmux send-keys "cd ${APP}" C-m
+tmux send-keys "sleep 10 && ANDROID_SDK_ROOT=${SDK_DIR} npm run start:adb" C-m

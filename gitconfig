@@ -66,3 +66,7 @@
     templatedir = ~/.git-templates
 [cola]
 	spellcheck = false
+[status]
+    submodulesummary = 1
+[submodule]
+    recurse = true

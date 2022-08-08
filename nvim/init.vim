@@ -38,6 +38,7 @@ let g:coc_global_extensions = [
     \ 'coc-eslint',
     \ 'coc-json',
     \ 'coc-pairs',
+    \ 'coc-prettier',
     \ 'coc-snippets',
     \ 'coc-stylelintplus',
     \ 'coc-tsserver',
@@ -348,7 +349,7 @@ command! -nargs=? Fold :call     CocAction('fold', <f-args>)
 command! -nargs=0 OR   :call     CocAction('runCommand', 'editor.action.organizeImport')
 
 " Prettier
-command! -nargs=0 Prettier :call CocAction('runCommand', 'prettier.formatFile')
+command! -nargs=0 Prettier :CocCommand prettier.forceFormatDocument
 
 " Add (Neo)Vim's native statusline support.
 " NOTE: Please see `:h coc-status` for integrations with external plugins that
