@@ -68,5 +68,5 @@
 	spellcheck = false
 [status]
     submodulesummary = 1
-[submodule]
-    recurse = true
+;[submodule]
+;    recurse = true
