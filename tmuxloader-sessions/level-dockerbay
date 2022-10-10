@@ -1,0 +1,24 @@
+#!/bin/bash
+
+SESSION=level-dockerbay
+WORK_DIR=~/work/level.works
+DOCKERBAY=${WORK_DIR}/dockerbay
+FRONTEND=${DOCKERBAY}/context/web/webapp
+BACKEND=${DOCKERBAY}/context/backend/server
+
+tmux new-session -d -s $SESSION
+
+tmux rename-window frontend
+
+# open frontend code
+tmux send-keys "cd ${FRONTEND}" C-m
+tmux send-keys "vim" C-m
+
+tmux new-window -n backend -c "${BACKEND}"
+
+# open backend code
+tmux send-keys "cd ${BACKEND}" C-m
+tmux send-keys "vim" C-m
+
+tmux new-window -n dockerbay -c "${DOCKERBAY}"
+tmux send-keys "vim src/env/local-test.ts" C-m
