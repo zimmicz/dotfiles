@@ -16,7 +16,6 @@ Plug 'tpope/vim-fugitive'
 Plug 'tpope/vim-unimpaired'
 Plug 'scrooloose/nerdtree'
 Plug 'Xuyuanp/nerdtree-git-plugin'
-"Plug 'tiagofumo/vim-nerdtree-syntax-highlight'
 Plug 'peitalin/vim-jsx-typescript'
 Plug 'preservim/nerdcommenter'
 Plug 'alexandre/toggle_width.vim'
@@ -32,7 +31,6 @@ Plug 'antoinemadec/coc-fzf', {'branch': 'release'}
 Plug 'ryanoasis/vim-devicons'
 Plug 'styled-components/vim-styled-components', { 'branch': 'main' }
 Plug 'kshenoy/vim-signature'
-Plug 'github/copilot.vim'
 let g:coc_global_extensions = [
     \ 'coc-emmet',
     \ 'coc-eslint',
@@ -185,10 +183,6 @@ inoremap <F12> <C-o>:syntax sync fromstart<CR>
 " nnoremap <Tab> za
 " Clear highlights with Ctrl+L
 nnoremap <silent> <C-Space> :nohlsearch<CR>
-" set sql highlighting
-nnoremap <silent> sql :set syntax=sql<CR>
-" TagBar
-nmap <F8> :TagbarToggle<CR>
 
 
 " Command history
@@ -375,7 +369,7 @@ nnoremap <silent> <space>k  :<C-u>CocPrev<CR>
 nnoremap <silent> <space>p  :<C-u>CocListResume<CR>
 
 " jump to newer location
-:unmap <C-i>
+" :unmap <C-i>
 
 " close buffer without closing the window
 command! Bd bp|bd #
