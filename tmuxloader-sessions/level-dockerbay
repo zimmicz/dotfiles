@@ -6,7 +6,7 @@ DOCKERBAY=${WORK_DIR}/dockerbay
 FRONTEND=${DOCKERBAY}/context/web/webapp
 BACKEND=${DOCKERBAY}/context/backend/server
 
-tmux new-session -d -s $SESSION
+tmux new-session -c ${DOCKERBAY} -d -s $SESSION
 
 tmux rename-window frontend
 
@@ -22,3 +22,9 @@ tmux send-keys "vim" C-m
 
 tmux new-window -n dockerbay -c "${DOCKERBAY}"
 tmux send-keys "vim src/env/local-test.ts" C-m
+
+tmux split-window -d
+tmux select-pane -t 2
+tmux send-keys "cd ${DOCKERBAY}" C-m
+tmux send-keys "xdg-open https://levelworks.awsapps.com/start#/ &" C-m
+tmux send-keys "npm run init:dotenv && npm run start"
