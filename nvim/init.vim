@@ -31,6 +31,7 @@ Plug 'antoinemadec/coc-fzf', {'branch': 'release'}
 Plug 'ryanoasis/vim-devicons'
 Plug 'styled-components/vim-styled-components', { 'branch': 'main' }
 Plug 'kshenoy/vim-signature'
+Plug 'samoshkin/vim-mergetool'
 let g:coc_global_extensions = [
     \ 'coc-emmet',
     \ 'coc-eslint',

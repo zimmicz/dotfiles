@@ -36,12 +36,9 @@ bindsym $mod+t exec i3-sensible-terminal
 bindsym $mod+Shift+q kill
 bindsym Mod1+F4 kill
 
-# start dmenu (a program launcher)
-bindsym $mod+space exec --no-startup-id i3-dmenu-desktop
-# There also is the (new) i3-dmenu-desktop which only displays applications
-# shipping a .desktop file. It is a wrapper around dmenu, so you need that
-# installed.
-# bindsym $mod+d exec --no-startup-id i3-dmenu-desktop
+# start rofi (a program launcher)
+bindsym $mod+space exec --no-startup-id rofi -show combi -run-command "i3-msg exec '{cmd}'" -show-icons
+bindsym $mod+b exec --no-startup-id rofi-bluetootj
 
 # change focus
 bindsym $mod+h focus left
@@ -191,3 +188,5 @@ bindsym XF86AudioPlay exec playerctl play
 bindsym XF86AudioPause exec playerctl pause
 bindsym XF86AudioNext exec playerctl next
 bindsym XF86AudioPrev exec playerctl previous
+
+focus_on_window_activation none
