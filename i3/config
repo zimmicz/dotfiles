@@ -37,8 +37,8 @@ bindsym $mod+Shift+q kill
 bindsym Mod1+F4 kill
 
 # start rofi (a program launcher)
-bindsym $mod+space exec --no-startup-id rofi -show combi -run-command "i3-msg exec '{cmd}'" -show-icons
-bindsym $mod+b exec --no-startup-id rofi-bluetootj
+bindsym $mod+space exec --no-startup-id rofi -show drun -run-command "i3-msg exec '{cmd}'" -show-icons
+bindsym $mod+b exec --no-startup-id rofi-bluetooth
 
 # change focus
 bindsym $mod+h focus left
@@ -171,10 +171,10 @@ bindsym $mod+Ctrl+l exec "i3lock"
 # Floating windows
 for_window [class="Enpass"] floating enable resize set 640 480
 for_window [class="copyq"] floating enable resize set 640 480
+for_window [title="^Android Emulator*"] floating enable
 
 # Startup applications
 exec --no-startup-id copyq
-exec --no-startup-id "/opt/enpass/Enpass"
 exec --no-startup-id nm-applet
 exec --no-startup-id redshift-gtk
 
@@ -190,3 +190,5 @@ bindsym XF86AudioNext exec playerctl next
 bindsym XF86AudioPrev exec playerctl previous
 
 focus_on_window_activation none
+
+assign [class="DBeaver"] 4
