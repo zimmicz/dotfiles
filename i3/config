@@ -113,7 +113,7 @@ bindsym $mod+Shift+e exec "i3-nagbar -t warning -m 'You pressed the exit shortcu
 set $mode_system System (l) lock, (e) logout, (s) suspend, (h) hibernate, (r) reboot, (Ctrl+s) shutdown
 
 mode "$mode_system" {
-    bindsym l exec --no-startup-id i3lock, mode "default"
+    bindsym l exec --no-startup-id ~/bin/lock.sh, mode "default"
     bindsym e exec --no-startup-id i3-msg exit, mode "default"
     bindsym s exec --no-startup-id i3lock && systemctl suspend, mode "default"
     bindsym h exec --no-startup-id i3lock && systemctl hibernate, mode "default"
@@ -176,7 +176,7 @@ for_window [title="^Android Emulator*"] floating enable
 # Startup applications
 exec --no-startup-id copyq
 exec --no-startup-id nm-applet
-exec --no-startup-id redshift-gtk
+exec --no-startup-id redshift
 
 # Pulse Audio controls
 bindsym XF86AudioRaiseVolume exec --no-startup-id pactl -- set-sink-volume 0 +5% #increase sound volume

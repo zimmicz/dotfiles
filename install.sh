@@ -30,6 +30,7 @@ ln -sf ${DOTFILES_DIR}/yabar/yabar.conf ${CONFIG_DIR}/yabar/yabar.conf
 ln -sf ${DOTFILES_DIR}/ackrc ~/.ackrc
 ln -sf ${DOTFILES_DIR}/dir_bookmarks ~/.dir_bookmarks
 ln -sf ${DOTFILES_DIR}/gitconfig ~/.gitconfig
+ln -sf ${DOTFILES_DIR}/gitignore ~/.gitignore
 ln -sf ${DOTFILES_DIR}/psqlrc ~/.psqlrc
 ln -sf ${DOTFILES_DIR}/tmux.conf ~/.tmux.conf
 ln -sf ${DOTFILES_DIR}/tmuxloader ~/.tmuxloader

@@ -85,7 +85,6 @@ export TERM=screen-256color
 export EDITOR='nvim'
 export GIT_EDITOR=nvim
 export GONOSUMDB=lstv.io/*
-export GOPROXY="http://goproxy.stg.lstv.io"
 
 export KEYTIMEOUT=1
 

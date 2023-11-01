@@ -1,4 +1,5 @@
 [core]
+    excludesfile = ~/.gitignore
     pager = delta
 [delta]
     plus-style = "syntax #012800"
@@ -13,6 +14,7 @@
     email = zimmicz@gmail.com
 [push]
     default = current
+    autoSetupRemote = true
 [branch]
     autosetuprebase = always
 [core]
@@ -30,41 +32,40 @@
     aa = add .
     amend = commit --amend --no-edit
     bd = branch -d
+    bdf = branch -D
     bl = branch --list
     bla = branch --list --all
-    bdf = branch -D
     cleanup = "!git branch --merged | grep  -v '\\*\\|master\\|develop' | xargs -n 1 git branch -d"
     cm = commit -m
     co = checkout
     cob = checkout -b
     cof = !sh -c \"git for-each-ref --format='%(refname:short)' refs/heads | fzf | xargs git checkout\"
     comp = !sh -c \"git diff HEAD $1 -- $2\"
-    dw = diff --word-diff --ignore-all-space
     dc = diff --word-diff --cached
+    dw = diff --word-diff --ignore-all-space
     f = fetch
     find = "!git log --color -p -S "
     fixup = "!git log -n 50 --pretty=format:'%h %s' --no-merges | fzf | cut -c -7 | xargs -o git commit --fixup"
+    hist = log --pretty=format:\"%h %ad | %s%d [%an]\" --graph --date=short
     i = init
     la = "!git config -l | grep alias | cut -c 7-"
-    sa = stash apply
-    sl = "!git stash list --relative-date | head -n 10"
-    sp = stash pop
-    ss = stash push
-    st = status
-    hist = log --pretty=format:\"%h %ad | %s%d [%an]\" --graph --date=short
-    po = push origin
     plo = pull origin
-    rename = branch -m
+    po = push origin
     rb =  rebase
     rbi = rebase --interactive
     rbi-mergebase = !sh -c \"git rebase -i `git merge-base $1 HEAD`\" -
+    rename = branch -m
     review = !sh -c \"git fetch && git checkout origin/$1\"
-    wip = "!git diff > $(git rev-parse HEAD)_WIP.patch"
-    undo = reset "HEAD^1"
+    save = !git add -A && git commit -m \"SAVEPOINT\"
+    st = status
+    undo = !git reset HEAD^ --mixed
     unstage = reset HEAD
     untracked = ls-files --others --exclude-standard
+    wip = !git add -u && git commit -m \"WIP\"
+    wipe = !git add -A && git commit -qm \"WIPE SAVEPOINT\" && git reset HEAD~1 --hard
 [init]
     templatedir = ~/.git-templates
+    defaultBranch = main
 [cola]
 	spellcheck = false
 [rebase]
