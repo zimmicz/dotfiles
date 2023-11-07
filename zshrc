@@ -13,6 +13,7 @@ fi
 # Customize to your needs...
 
 alias g="git "
+alias nvm="fnm"
 alias ...="cd ../.."
 alias untar='tar -xvzf'
 alias ntar='tar -cf'
@@ -46,3 +47,7 @@ unalias sl 2> /dev/null
 # fzf
 source /usr/share/doc/fzf/examples/key-bindings.zsh
 source /usr/share/doc/fzf/examples/completion.zsh
+
+# fnm
+export PATH="/home/zimmi/.local/share/fnm:$PATH"
+eval "`fnm env`"
