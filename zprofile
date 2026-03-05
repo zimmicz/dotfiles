@@ -17,9 +17,9 @@ fi
 # Editors
 #
 
-export PSQL_EDITOR='nvim'
-export EDITOR='nvim'
-export VISUAL='nvim'
+export PSQL_EDITOR='vim'
+export EDITOR='vim'
+export VISUAL='vim'
 export PAGER='less'
 
 #
@@ -82,9 +82,7 @@ PATH=$PATH:/usr/local/go/bin
 
 TMPPREFIX="${TMPDIR%/}/zsh"
 export TERM=screen-256color
-export EDITOR='nvim'
-export GIT_EDITOR=nvim
-export GONOSUMDB=lstv.io/*
+export EDITOR='vim'
 
 export KEYTIMEOUT=1
 
@@ -92,3 +90,4 @@ if type nvim > /dev/null 2>&1; then
   alias vim='nvim'
 fi
 
+export ENABLE_EXPERIMENTAL_MCP_CLI=true

@@ -1,12 +1,23 @@
 [core]
     excludesfile = ~/.gitignore
     pager = delta
+    editor = /opt/nvim/bin/nvim
 [delta]
     plus-style = "syntax #012800"
     minus-style = "syntax #340001"
     syntax-theme = Monokai Extended
     navigate = true
     side-by-side = true
+[diff]
+    colorMoved = true
+    external = difft
+    tool = difftastic
+[difftool]
+    prompt = false
+[difftool "difftastic"]
+    cmd = difft "$LOCAL" "$REMOTE"
+[fetch]
+    prune = true
 [interactive]
     diffFilter = delta --color-only
 [user]
@@ -27,6 +38,8 @@
     keepBackup = false
 [mergetool "vim"]
   cmd = nvim -f -c \"Gvdiffsplit!\" \"$MERGED\"
+[pager]
+    difftool = true
 [alias]
     a  = add
     aa = add .
@@ -74,3 +87,5 @@
     submodulesummary = 1
 ;[submodule]
 ;    recurse = true
+[includeIf "gitdir:/home/zimmi/work/cleverfarm/"]
+	path = /home/zimmi/.gitconfig-cleverfarm

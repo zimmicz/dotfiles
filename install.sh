@@ -3,6 +3,8 @@
 CONFIG_DIR="/home/zimmi/.config"
 DOTFILES_DIR="/home/zimmi/dotfiles"
 
+mkdir ~/.claude > /dev/null 2>&1
+mkdir ~/.claude/commands > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/i3 > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/i3blocks > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/nvim > /dev/null 2>&1
@@ -13,9 +15,18 @@ mkdir ${CONFIG_DIR}/sxhkd > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/yabar > /dev/null 2>&1
 mkdir ~/.tmuxloader-sessions > /dev/null 2>&1
 
+
+ln -sf ${DOTFILES_DIR}/claude/CLAUDE.md ~/.claude/CLAUDE.md
+ln -sf ${DOTFILES_DIR}/claude/settings.json ~/.claude/settings.json
+ln -sf ${DOTFILES_DIR}/claude/simple-statusline.sh ~/.claude/simple-statusline.sh
+ln -sf ${DOTFILES_DIR}/claude/commands/cf-work.md ~/.claude/commands/cf-work.md
+ln -sf ${DOTFILES_DIR}/claude/commands/cf-worktree.md ~/.claude/commands/cf-worktree.md
+ln -sf ${DOTFILES_DIR}/claude/commands/cf-mr.md ~/.claude/commands/cf-mr.md
+ln -sf ${DOTFILES_DIR}/claude/commands/cf-tickets.md ~/.claude/commands/cf-tickets.md
 ln -sf ${DOTFILES_DIR}/i3/config ${CONFIG_DIR}/i3/config
 ln -sf ${DOTFILES_DIR}/i3blocks/config ${CONFIG_DIR}/i3blocks/config
 ln -sf ${DOTFILES_DIR}/i3blocks/battery ${CONFIG_DIR}/i3blocks/battery
+ln -sf ${DOTFILES_DIR}/i3blocks/keyboard-layout ${CONFIG_DIR}/i3blocks/keyboard-layout
 ln -sf ${DOTFILES_DIR}/vifm/vifmrc ${CONFIG_DIR}/vifm/vifmrc
 ln -sf ${DOTFILES_DIR}/dunst/dunstrc ${CONFIG_DIR}/dunst/dunstrc
 
@@ -44,9 +55,9 @@ ln -sf ${DOTFILES_DIR}/zshenv ~/.zshenv
 ln -sf ${DOTFILES_DIR}/zshrc ~/.zshrc
 
 ln -sf ${DOTFILES_DIR}/tmuxloader-sessions/cartostory ~/.tmuxloader-sessions/cartostory
-ln -sf ${DOTFILES_DIR}/tmuxloader-sessions/livesport ~/.tmuxloader-sessions/livesport
-ln -sf ${DOTFILES_DIR}/tmuxloader-sessions/lstv-admin ~/.tmuxloader-sessions/lstv-admin
 ln -sf ${DOTFILES_DIR}/tmuxloader-sessions/main ~/.tmuxloader-sessions/main
 
+ln -sf ${DOTFILES_DIR}/npmrc ~/.npmrc
 
-
+ln -sf ${DOTFILES_DIR}/nvim/init.lua ~/.config/nvim/init.lua
+ln -sf ${DOTFILES_DIR}/nvim/lua ${CONFIG_DIR}/nvim/lua

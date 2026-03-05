@@ -1,0 +1,22 @@
+#!/bin/bash
+
+SESSION=cf-can-frontend
+WORKDIR=~/work/cleverfarm/repos/can-frontend
+
+tmux new-session -d -s $SESSION
+
+# run backend
+tmux split-window -v
+tmux select-pane -t 1
+tmux send-keys "cd ${WORKDIR}" C-m
+tmux send-keys "nvim" C-m
+
+tmux select-pane -t 2
+tmux send-keys "cd ${WORKDIR}" C-m
+tmux send-keys "npm run dev" C-m
+
+tmux split-window -h
+tmux send-keys "cd ${WORKDIR}" C-m
+tmux send-keys "lg" C-m
+
+tmux select-pane -t 1
