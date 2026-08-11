@@ -247,11 +247,11 @@ print(f'{model}|{transcript}|{cwd}')
 calculate_context() {
     # Determine usable context limit
     if [[ "$model_name" == *"[1m]"* ]]; then
-        context_limit=800000
+        context_limit=1000000
     elif [[ "$model_name" == *"Sonnet"* ]]; then
-        context_limit=200000
+        context_limit=1000000
     else
-        context_limit=200000
+        context_limit=1000000
     fi
 
     if [[ -n "$transcript_path" && -f "$transcript_path" ]]; then

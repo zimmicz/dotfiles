@@ -537,6 +537,12 @@ keymap.set("n", "<leader>fb", "<cmd>Pick buffers<cr>")                -- list op
 keymap.set("n", "<leader>ch", "<cmd>Pick history scope='cmd'<cr>")    -- list current changes per file with diff preview ["gs" for git status]
 keymap.set("n", "<leader>sh", "<cmd>Pick history scope='search'<cr>") -- list current changes per file with diff preview ["gs" for git status]
 keymap.set("n", "<leader>tr", "<cmd>Pick resume<cr>")                 -- resume last picker
+keymap.set('n', '<leader>yr', function()
+  yank.yank_path(yank.get_buffer_cwd_relative(), 'relative')
+end, { desc = '[Y]ank [R]elative file path' })
+keymap.set('n', '<leader>ya', function()
+  yank.yank_path(yank.get_buffer_absolute(), 'absolute')
+end, { desc = '[Y]ank [A]bsolute file path' })
 keymap.set('v', '<leader>yr', function()
   yank.yank_visual_with_path(yank.get_buffer_cwd_relative(), 'relative')
 end, { desc = '[Y]ank selection with [R]elative path' })

@@ -91,3 +91,5 @@ if type nvim > /dev/null 2>&1; then
 fi
 
 export ENABLE_EXPERIMENTAL_MCP_CLI=true
+[ -f "$HOME/.zprofile.local" ] && source "$HOME/.zprofile.local"
+

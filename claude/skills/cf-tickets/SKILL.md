@@ -1,3 +1,10 @@
+---
+name: cf-tickets
+description: |
+  Show active sprint tickets. Use when user says "my tickets",
+  "sprint", "what's open", "cf-tickets", or "backlog".
+---
+
 # Show my active sprint tickets
 
 ## Steps

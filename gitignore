@@ -1,3 +1,5 @@
 .vscode
-.aider*
-.aider/**
+.worktrees
+.serena
+
+**/.claude/settings.local.json

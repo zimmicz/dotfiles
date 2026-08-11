@@ -89,3 +89,6 @@
 ;    recurse = true
 [includeIf "gitdir:/home/zimmi/work/cleverfarm/"]
 	path = /home/zimmi/.gitconfig-cleverfarm
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential

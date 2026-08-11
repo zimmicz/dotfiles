@@ -14,13 +14,17 @@ fi
 
 # Customize to your needs...
 
-source ~/.zsh-nvm/zsh-nvm.plugin.zsh
 
-alias xclaude="claude --dangerously-skip-permissions"
+alias c="command claude --enable-auto-mode"
+alias xclaude="command claude --dangerously-skip-permissions"
 alias dclaude='docker run --rm -it --cap-add NET_ADMIN --cap-add NET_RAW --user $(id -u):$(id -g) -v ~/.claude:/home/node/.claude -v ~/.claude.json:/home/node/.claude.json -v /home/zimmi/dotfiles:/home/zimmi/dotfiles -v $PWD:/workspace -w /workspace claude-code claude --dangerously-skip-permissions'
+alias claude='echo "Use c instead" && false'
 alias tf="terraform "
 alias lg="lazygit"
 alias g="git "
+alias nr="command npm run"
+alias pnr="command pnpm run"
+npm() { if [[ "$1" == "run" ]]; then echo "Use nr instead" && return 1; fi; command npm "$@"; }
 alias nvm="fnm"
 alias ...="cd ../.."
 alias untar='tar -xvzf'
@@ -39,7 +43,7 @@ export PROMPT_EOL_MARK=""
 export PATH=~/.local/bin:$PATH
 export PATH="$HOME/.yarn/bin:$PATH"
 export PATH="$HOME/.npm/bin:$PATH"
-export PATH=$PATH:/usr/local/go/bin
+export PATH=$PATH:$(go env GOPATH)/bin
 export NODE_PATH="/usr/lib/node_modules/"
 
 reclaude() {
@@ -78,13 +82,36 @@ source /usr/share/doc/fzf/examples/completion.zsh
 
 # fnm
 export PATH="/home/zimmi/.local/share/fnm:$PATH"
-eval "`fnm env`"
+eval "`fnm env --use-on-cd`"
 . "/home/zimmi/.deno/env"
 
 # Added by flyctl installer
 export FLYCTL_INSTALL="/home/zimmi/.fly"
 export PATH="$FLYCTL_INSTALL/bin:$PATH"
 
+if [[ -n "$TMUX" ]]; then
+  precmd_tmux_title() {
+    local toplevel
+    toplevel=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [[ "$toplevel" == */.worktrees/* ]]; then
+      tmux rename-window "$(basename "$toplevel")"
+    fi
+  }
+  precmd_functions+=(precmd_tmux_title)
+fi
+
 #THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
 export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
+# lean-ctx shell hook — begin
+if [ -f "/home/zimmi/.config/lean-ctx/shell-hook.zsh" ]; then
+. "/home/zimmi/.config/lean-ctx/shell-hook.zsh"
+fi
+# lean-ctx shell hook — end
+
+# >>> lean-ctx agent aliases >>>
+alias claude='LEAN_CTX_AGENT=1 BASH_ENV="$HOME/.bashenv" claude'
+alias codebuddy='LEAN_CTX_AGENT=1 BASH_ENV="$HOME/.bashenv" codebuddy'
+alias codex='LEAN_CTX_AGENT=1 BASH_ENV="$HOME/.bashenv" codex'
+alias gemini='LEAN_CTX_AGENT=1 BASH_ENV="$HOME/.bashenv" gemini'
+# <<< lean-ctx agent aliases <<<

@@ -17,22 +17,75 @@
       "Read",
       "Search",
       "mcp__atlassian__*",
-      "mcp__Gitlab__*"
+      "mcp__Gitlab__*",
+      "mcp__task-workflow__get_jira_ticket",
+      "mcp__task-workflow__start_work_on_ticket",
+      "mcp__task-workflow__create_mr_from_jira",
+      "mcp__task-workflow__create_branch_from_jira",
+      "mcp__figma__get_design_context",
+      "mcp__figma__get_screenshot",
+      "mcp__atlassian__getAccessibleAtlassianResources",
+      "mcp__atlassian__getConfluencePage",
+      "mcp__atlassian__updateConfluencePage",
+      "mcp__atlassian__atlassianUserInfo",
+      "mcp__atlassian__searchJiraIssuesUsingJql",
+      "mcp__atlassian__getJiraIssue",
+      "mcp__atlassian__getTransitionsForJiraIssue",
+      "mcp__atlassian__transitionJiraIssue",
+      "mcp__atlassian__addCommentToJiraIssue",
+      "mcp__GitLab__search",
+      "mcp__GitLab__get_merge_request",
+      "mcp__GitLab__create_merge_request",
+      "Bash(glab *)",
+      "Bash(claude mcp:*)",
+      "Bash(git add app/precision-farming/routes/services/hooks/useSeason.ts app/precision-farming/routes/services/PrecisionServicesV2.tsx && git commit -m \"$\\(cat <<'EOF'\nfix: [CFD-9928] prevent season redirect while loading\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(python3 -c \"import urllib.parse; print\\(urllib.parse.quote\\('cleverfarm/cleverfarm/cf-farm-frontend', safe=''\\)\\)\")",
+      "Bash(curl --silent --header \"PRIVATE-TOKEN: $GITLAB_TOKEN\" \\\\\n  \"https://gitlab.com/api/v4/projects/cleverfarm%2Fcleverfarm%2Fcf-farm-frontend\" | python3 -c \"import sys,json; print\\(json.load\\(sys.stdin\\)['id']\\)\")",
+      "Bash(env | grep -i gitlab)",
+      "Bash(glab api --method PUT \"projects/cleverfarm%2Fcleverfarm%2Fcf-farm-frontend/merge_requests/3250\" -f \"reviewer_ids[]=3757192\" -f \"reviewer_ids[]=11273826\" 2>&1 | python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Reviewers:', [r['username'] for r in d.get\\('reviewers',[]\\)]\\)\")",
+      "Bash(glab api --method PUT \"projects/cleverfarm%2Fcleverfarm%2Fcf-farm-frontend/merge_requests/3250\" -f \"reviewer_ids[]=3757192\" -f \"reviewer_ids[]=11273826\" 2>&1 | tail -1 | python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Reviewers:', [r['username'] for r in d.get\\('reviewers',[]\\)]\\)\")",
+      "mcp__atlassian__editJiraIssue",
+      "Bash(git worktree add .worktrees/CFD-9933-e2e-test-fixes origin/develop -b CFD-9933-e2e-test-fixes)",
+      "Bash(cd .worktrees/CFD-9933-e2e-test-fixes && git stash pop \"stash@{0}\")",
+      "Bash(cd .worktrees/CFD-9933-e2e-test-fixes && git add app/precision-farming/routes/prescription-maps/create/components/ParcelDetail.tsx cucumber.cjs tests/playwright/features/precision-farming/parcel/nitrogen-tab.feature tests/playwright/features/precision-farming/prescription-maps/create.feature tests/playwright/pages/precision-farming/PrescriptionMapsCreatePage.ts tests/playwright/steps/precision-farming/prescription-maps.steps.ts)",
+      "Bash(git add app/precision-farming/routes/prescription-maps/create/components/ParcelDetail.tsx cucumber.cjs tests/playwright/features/precision-farming/parcel/nitrogen-tab.feature tests/playwright/features/precision-farming/prescription-maps/create.feature tests/playwright/pages/precision-farming/PrescriptionMapsCreatePage.ts tests/playwright/steps/precision-farming/prescription-maps.steps.ts)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\ntest: [CFD-9933] fix e2e prescription maps and nitrogen tab tests\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit --no-verify -m \"$\\(cat <<'EOF'\ntest: [CFD-9933] fix e2e prescription maps and nitrogen tab tests\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push -u origin CFD-9933-e2e-test-fixes)",
+      "Bash(git push --no-verify -u origin CFD-9933-e2e-test-fixes)",
+      "Bash(glab mr create --source-branch CFD-9933-e2e-test-fixes --target-branch develop --title \"test: [CFD-9933] fix e2e prescription maps and nitrogen tab tests\" --description \"$\\(cat <<'EOF'\n## Summary\n\n- Replace monolithic `fillTheForm\\(\\)` with granular step definitions \\(select operation, material, product, fill doses, submit\\)\n- Fix nitrogen tab test: remove stale date assertion, update total count\n- Add `name` attribute to dose input for reliable test targeting\n- Update dose value step locator to use `name` selector\n\n## Test plan\n\n- [ ] Run prescription maps create E2E scenarios\n- [ ] Run nitrogen tab E2E scenario\n- [ ] Verify no regressions in other precision farming tests\nEOF\n\\)\" --reviewer vaclav.skorpil,jaroslav.tesarik,barbora.kovarova --no-editor)",
+      "Bash(git fetch origin production)",
+      "Bash(git merge --no-ff origin/production -m \"chore: sync production to staging\")",
+      "Bash(git add app/precision-farming/routes/parcel-detail/nitrogen/components/NuptTable.tsx && git commit --no-edit)",
+      "Bash(git fetch origin develop)",
+      "Bash(git worktree add .worktrees/CFD-9896-areas-v2-cache-invalidation origin/develop -b CFD-9896-areas-v2-cache-invalidation)",
+      "Bash(find /home/zimmi/work/cleverfarm/repos/cf-farm-frontend/.worktrees/CFD-9784-eph-decimal-places-dose/app/evidence/actions/ActionEph -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) | xargs ls -lh)",
+      "mcp__plugin_slack_slack__slack_read_thread",
+      "WebFetch(domain:grafana.dev.cleverfarm.internal)",
+      "mcp__plugin_slack_slack__slack_read_channel",
+      "mcp__plugin_slack_slack__slack_search_public",
+      "mcp__lean-ctx__ctx_read",
+      "mcp__lean-ctx__ctx_search",
+      "mcp__lean-ctx__ctx_tree",
+      "mcp__lean-ctx__ctx_overview",
+      "mcp__lean-ctx__ctx_plan",
+      "mcp__lean-ctx__ctx_metrics",
+      "mcp__lean-ctx__ctx_compress",
+      "mcp__lean-ctx__ctx_session",
+      "mcp__lean-ctx__ctx_knowledge",
+      "mcp__lean-ctx__ctx_graph",
+      "mcp__lean-ctx__ctx_retrieve",
+      "mcp__lean-ctx__ctx_provider",
+      "mcp__codegraph__*"
     ],
-    "defaultMode": "bypassPermissions"
+    "deny": [
+      "Grep",
+      "Glob"
+    ],
+    "defaultMode": "auto"
   },
+  "model": "claude-fable-5[1m]",
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/validate-bash.sh"
-          }
-        ]
-      }
-    ],
     "Notification": [
       {
         "matcher": "",
@@ -43,6 +96,127 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook read-dedup"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/validate-bash.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/plan-mode-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook rewrite"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|read|ReadFile|read_file|View|view|Grep|grep|Search|search|ListFiles|list_files|ListDirectory|list_directory|Glob|glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook redirect"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codegraph prompt-hook"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -50,7 +224,51 @@
     "command": "~/.claude/simple-statusline.sh"
   },
   "enabledPlugins": {
-    "ralph-loop@claude-plugins-official": true
+    "caveman@caveman": true,
+    "cf-bug-report@cleverfarm": true,
+    "cf-cc@cleverfarm": true,
+    "cf-eod@cleverfarm": true,
+    "cf-kb@cleverfarm": true,
+    "cf-planning@cleverfarm": true,
+    "cf-release@cleverfarm": true,
+    "cf-vault-db@cleverfarm": true,
+    "mempalace@mempalace": false,
+    "ralph-loop@claude-plugins-official": true,
+    "slack@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
   },
-  "skipDangerousModePermissionPrompt": true
+  "extraKnownMarketplaces": {
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
+    },
+    "cleverfarm": {
+      "source": {
+        "source": "directory",
+        "path": "/home/zimmi/work/cleverfarm/repos/cf-knowledge-base"
+      }
+    },
+    "mempalace": {
+      "source": {
+        "source": "github",
+        "repo": "milla-jovovich/mempalace"
+      }
+    },
+    "voicemode": {
+      "source": {
+        "source": "github",
+        "repo": "mbailey/voicemode"
+      }
+    }
+  },
+  "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark",
+  "editorMode": "vim",
+  "autoCompactEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "voiceEnabled": true
 }
