@@ -4,6 +4,8 @@
 - Do not use memory as a way of storing knowledge. Use local files instead. If there is no file yet, create it.
 - When writing code, do not add any comments. Just write the code.
 
+@LEARNED.md
+
 ## Tools
 
 - Use `glab` CLI (not `gh`) for all GitLab operations (MRs, issues, pipelines).

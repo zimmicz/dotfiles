@@ -1,0 +1,6 @@
+[Unit]
+Description=Claude Code nightly reflection
+
+[Service]
+Type=oneshot
+ExecStart=%h/.claude/scripts/nightly-reflection.sh

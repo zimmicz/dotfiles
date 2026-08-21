@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Claude Code nightly reflection at 6:40, catch up on next login if missed
+
+[Timer]
+OnCalendar=*-*-* 06:40:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
