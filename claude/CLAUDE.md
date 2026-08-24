@@ -15,8 +15,6 @@
 
 - At the end of each plan, give me a list of unresolved tasks questions to answer, if any. Make the questions extremely concise. Sacrificec grammar for the sake of concision.
 
-@RTK.md
-
 <!-- lean-ctx -->
 <!-- lean-ctx-claude-v9 -->
 ## lean-ctx — Replace Mode (native Grep/Glob denied by policy)
