@@ -11,9 +11,9 @@ Ticket: $ARGUMENTS
 
 ## Steps
 
-1. If no ticket ID in arguments, detect from current branch (CFD-XXXX pattern)
-2. Detect MR for current branch via `mcp__GitLab__search` (scope: merge_requests, search: branch name, project: `cleverfarm/cleverfarm/cf-farm-frontend`)
-3. If MR found, fetch review comments via `mcp__GitLab__get_workitem_notes` (type: merge_request). Filter to reviewer comments (not yours). Present a summary of what reviewers flagged.
+1. If no ticket ID in arguments, detect from current branch (`[A-Z]+-\d+` pattern)
+2. Detect repo path from `git remote get-url origin`. Fetch MR + review comments in one shell call: `glab mr view <branch> --comments`. Fallback if glab fails: `mcp__GitLab__search` (scope: merge_requests, search: branch name, project: detected repo path) then `mcp__GitLab__get_workitem_notes` (type: merge_request).
+3. Filter to reviewer comments (not yours). Present a summary of what reviewers flagged.
 4. If no MR found or no comments, fall back to asking: "What needed changing and why?"
 5. User can add extra context or lessons beyond what's in the MR comments.
 6. Extract actionable patterns (max 3). For each lesson, determine:
