@@ -1,7 +1,7 @@
 [Unit]
-Description=Claude Code nightly reflection
+Description=Claude Code nightly reflection + usage report
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:%h/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=%h/.claude/scripts/nightly-reflection.sh
+ExecStart=%h/.claude/scripts/nightly-claude.sh

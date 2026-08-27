@@ -6,6 +6,8 @@ DOTFILES_DIR="/home/zimmi/dotfiles"
 mkdir ~/.claude > /dev/null 2>&1
 mkdir ~/.claude/hooks > /dev/null 2>&1
 mkdir ~/.claude/scripts > /dev/null 2>&1
+mkdir ~/.claude/commands > /dev/null 2>&1
+mkdir ~/.claude/usage > /dev/null 2>&1
 mkdir -p ~/.claude/skills/{cf-feedback,cf-mr,cf-ticket,cf-tickets,cf-work,cf-worktree} 2>/dev/null
 mkdir -p ${CONFIG_DIR}/systemd/user > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/i3 > /dev/null 2>&1
@@ -26,6 +28,10 @@ ln -sf ${DOTFILES_DIR}/claude/hooks/plan-mode-guard.sh ~/.claude/hooks/plan-mode
 ln -sf ${DOTFILES_DIR}/claude/simple-statusline.sh ~/.claude/simple-statusline.sh
 ln -sf ${DOTFILES_DIR}/claude/LEARNED.md ~/.claude/LEARNED.md
 ln -sf ${DOTFILES_DIR}/claude/scripts/nightly-reflection.sh ~/.claude/scripts/nightly-reflection.sh
+ln -sf ${DOTFILES_DIR}/claude/scripts/nightly-claude.sh ~/.claude/scripts/nightly-claude.sh
+ln -sf ${DOTFILES_DIR}/claude/scripts/usage-report.sh ~/.claude/scripts/usage-report.sh
+ln -sf ${DOTFILES_DIR}/claude/scripts/model-prices.tsv ~/.claude/scripts/model-prices.tsv
+ln -sf ${DOTFILES_DIR}/claude/commands/cost.md ~/.claude/commands/cost.md
 ln -sf ${DOTFILES_DIR}/claude/systemd/claude-reflection.service ${CONFIG_DIR}/systemd/user/claude-reflection.service
 ln -sf ${DOTFILES_DIR}/claude/systemd/claude-reflection.timer ${CONFIG_DIR}/systemd/user/claude-reflection.timer
 
