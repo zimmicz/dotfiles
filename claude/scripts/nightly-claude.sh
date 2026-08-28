@@ -39,7 +39,7 @@ fi
 
 if [ "$DRY_RUN" = 0 ] && [ -s "$USAGE_TXT" ]; then
   echo "--- usage slack dm"
-  claude -p "Read $USAGE_TXT and send its contents VERBATIM as a plain-text Slack DM to channel_id $SLACK_SELF_ID. Do not add commentary, do not reformat, do not recompute any number. Reply with 'sent' when done." \
+  claude -p "Read $USAGE_TXT and send its contents VERBATIM as a Slack DM to channel_id $SLACK_SELF_ID. It contains a markdown table - pass it through exactly as written, keeping every pipe and separator row. Do not add commentary, do not reformat, do not recompute any number. Reply with 'sent' when done." \
     --allowedTools "Read mcp__plugin_slack_slack__slack_send_message" \
     --add-dir "$HOME/.claude"
   echo "dm exit: $?"

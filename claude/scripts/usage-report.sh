@@ -248,6 +248,16 @@ function ht(n) {
   return sprintf("%d", n)
 }
 function usd(c) { return sprintf("$%.2f", c) }
+function clean(s) {
+  gsub(/https?:\/\/[^ ]+/, "<link>", s)
+  gsub(/\/home\/[^ ]+/, "<path>", s)
+  gsub(/\|/, "/", s)
+  gsub(/  +/, " ", s)
+  sub(/^ +/, "", s)
+  sub(/ +$/, "", s)
+  if (s == "") s = "-"
+  return s
+}
 BEGIN {
   FS = OFS = "\t"
   split(ROLL, r, "\t")
@@ -296,16 +306,25 @@ END {
     print "on every later request of that session."
     print "Sessions spanning midnight are split by message timestamp (Europe/Prague)."
   } else {
-    printf "Token usage %s - %s notional%s\n", WINDOW, usd(cost),
+    printf "Token usage %s — *%s notional*%s\n", WINDOW, usd(cost),
       (mixall == "" ? "" : " (" mixall ")")
-    printf "in %s (cache read %.0f%%) - out %s - %d requests - %d sessions\n",
-      ht(inside), crshare, ht(out), req, sessions
-    printf "7d %s - 30d %s\n", usd(r[1]), usd(r[2])
+    printf "in %s (cache read %.0f%%) · out %s · %d requests · %d sessions · 7d %s · 30d %s\n\n",
+      ht(inside), crshare, ht(out), req, sessions, usd(r[1]), usd(r[2])
+    if (nd > 1) {
+      print "| cost | day | project | branch | session |"
+      print "| --- | --- | --- | --- | --- |"
+    } else {
+      print "| cost | project | branch | session |"
+      print "| --- | --- | --- | --- |"
+    }
     for (i = 1; i <= ns; i++) {
       split(srow[i], f, "\t")
-      printf "  %8s  %-21s %-26s %s\n", usd(f[12]), substr(f[3], 1, 21),
-        substr(f[4], 1, 26), substr(f[13], 1, 55)
+      if (nd > 1)
+        printf "| %s | %s | %s | %s | %s |\n", usd(f[12]), f[1], f[3], f[4], clean(f[13])
+      else
+        printf "| %s | %s | %s | %s |\n", usd(f[12]), f[3], f[4], clean(f[13])
     }
+    print ""
     if (lo > 0)
       printf "lean-ctx: %s of %s tool tokens compressed away (~%s saved, lower bound)\n",
         ht(ls), ht(lo), usd(lsusd)
