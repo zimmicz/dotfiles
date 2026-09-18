@@ -3,3 +3,56 @@
 Auto-generated nightly by ~/.claude/scripts/nightly-reflection.sh. Edit/delete freely; job dedupes against whatever's here.
 
 - Default lang = English in chat, always. Czech only for Jira comments (my-voice.md). No unprompted Czech drift.
+- User edits drafts in vim before posting. On "edit draft" / "chci to upravit ve vimu": write draft to file, wait, re-read edited file, use user version verbatim. Don't regenerate.
+- After user rewrites draft, diff their version vs mine, fold style deltas into ~/.claude/my-voice.md. Standing ask ("update my-voice if needed").
+- Edit plugin skill/command → bump plugin version in same change. User had to remind.
+- Debugging data issues: query dev DB yourself (cf-vault-db) before asserting behavior. User demands "check the db" — verify, don't infer.
+- Visual/UI bug from screenshot: confirm WHICH element user means before investigating. Assumed sidebar close btn, user meant select-box clear icon ("no no stop"). Wasted many tool calls on wrong target.
+- Status/testing/MR/Jira drafts: reconcile against work already done before showing. Draft listed bugs "still open" I'd already fixed ("you've fixed em already"). Don't report fixed items as open.
+- Delegating verbatim-extraction work (transcripts, recipes, etc) to subagents: explicitly say "no paraphrase, exact wording." Default extraction behavior compresses. User caught shortened recipe transcript ("ty jsi zkratil vystup, recepty musis vracet jak jsou zapsane").
+- Batch/AFK MR creation: default all MRs to draft. User: "all the PRs we create should be drafts."
+- AFK/autonomous batch runs: pause after each batch, wait for explicit continue. Don't auto-chain remaining batches. User: "when you're done with this batch, pause until i tell you to continue."
+- Links in chat: plain URLs, never markdown `[text](url)`. User terminal don't render em ("these are not links").
+- Q about user's own tooling (vim/zsh/tmux keybinds): grep ~/dotfiles first, answer from HIS config. Gave generic vim answer, user: "there's shortcut in my config".
+- One-off helper scripts → ~/bin, repo-agnostic. Not inside the repo. User: "should live in ~/bin so i can run it in any repo".
+- Restoring dropped/regressed feature: read the MR commits that removed it BEFORE reimplementing. User: "did you go through the pr commits? it should be obvious how it worked before".
+- /code-review output: every finding needs concrete verified repro steps, not just file:line + theory. User: "for all of these i need a way to reproduce".
+- "is this branch/change still needed?" → prove empirically, run impacted tests locally without the change. Don't reason from diff.
+- Chore/tech work: never commit straight on develop. Jira tech ticket first → branch → MR. User had to say "create the ticket first".
+- FE change done → give app screen URL to eyeball it (branch deploy https://<branch>.dev.cleverfarm.cz/... or localhost path). User asked 3 sessions running ("on what app screen url", "tell me screen url where i can eyeball em").
+- Slack reports with tabular data: real markdown table, never rendered image/ASCII screenshot. User: image "not very readable", "real markdown table works brilliant".
+- Batch/AFK MRs: draft AND no reviewers assigned. User: "create draft prs without reviewers".
+- Stable upstream contract/API: verify once, don't recheck every step. User: "no need to recheck contract on every step".
+- Dependent/stacked tickets: state branch base + sibling-branch overlap check upfront. User asked twice "did you base the branch on DEV-2162?"; also resets child branch when parent updates ("updated dev-2190 branch, reset again").
+- Tangential bug found mid-task → spin off separate ticket, tackle in AFK/bg mode right away, don't block current work. User: "create separate ticket and work on it in afk mode right away".
+- Before assuming API/query-param type behavior, check how sibling services already implement it, don't infer from one. User: "check how other services work with farmIds... it should be an array" — turned out to vary per service.
+- Local/narrow fix that works still triggers "can't it be fixed globally?" — default to root-cause/systemic fix over one-off patch.
+- New translated UI strings → add ALL supported languages, not just one/two. User: "did you add all the languages?"
+- Spin-off/follow-up tickets → default assignee=self + current sprint unless told otherwise. User: "assign to me, bring to this sprint".
+- Disputing an MR/PR reviewer comment → verify the specific claim empirically before replying, don't just explain the mechanism. User: "can you prove [reviewer] misinterpreted the change".
+- Skill/plugin hygiene: one source only — marketplace plugin wins, delete legacy ~/.claude/skills copies/symlinks. Also symlink skill `references/` dir. User: "smaž ty legacy symlinky, nech jen plugin", "cf-mr references are not symlinked".
+- Before commit/push/MR: run relevant unit tests + local checks (lint/format/typecheck) unprompted. User keeps asking ("run the unit tests you created", "run checks locally, fix failures if any, commit, push").
+- MR pushed + pipeline green → mark ready (drop Draft:), approve as user, enable auto-merge. Don't park it at draft waiting.
+- Conventions (labels, naming, formats) → search cf-kb KB first, don't invent. User: "did you check KB for label format?"
+- Migration/refactor → delete leftovers in SAME change: dead wrappers, unused hooks/styles, now-empty dirs. User had to list em one by one ("why do we need LegacyFieldErrors?", "delete useCustomStyles too", "check if styles dir is empty, delete if so").
+- Hand-rolled state/flags (isSubmitting etc) → check existing codebase pattern first (tanstack query mutation…). User: "could we follow the pattern we use elsewhere with tanstack query?"
+- Shared/DS component glitch → fix in design system + storybook story covering the states, not app-level override. User: "ugly -> need to solve this in DS itself".
+- Change skill behavior → update its description/frontmatter too, not just steps. User: "also update the skill description, it mentions useFlag only".
+- Prerequisite found mid-ticket → new BLOCKING ticket + postpone current one, don't push through. User: "postpone this ticket and create a new one that blocks this one".
+- Invented numeric limits (min/max, thresholds) get challenged. Derive from spec/data or ask. User: "why did you use min max -999 and 999?"
+- Skill/plugin "not installed" claim: session available-skills list shows only a subset — check plugin dir on disk before saying it's missing. User: "check for mattpocock-skills handoff again, i see it".
+- Worktree already has PLAN.md/TICKET.md → read it BEFORE planning or coding. Planned from scratch, plan conflicted with mine. User: "how about PLAN.md".
+- Hotfix on production branch → ship only the proven fix; adjacent cleanup/refactor/dead-mirror deletion goes to develop. User: "hmm the change feels bit too big".
+- Never leave @ts-ignore / ts-expect-error behind — solve the type. User: "drop ts-ignore and solve that".
+- Jira via curl + ~/bin/jira wrapper, not Atlassian MCP (MCP can't attach files, no agile API, token cost).
+- Personal tooling (~/bin scripts, custom CLIs) lives in ~/dotfiles, symlinked. Never ship it to the team KB repo. User: "revert this - i dont want to ship custom jira cli to KB".
+- E2E page objects: no structural/DOM-shape locators (`locator("../..")`) — add name-based data-testid to the component instead. User: "cant we use data-testid nested inside that?"
+- Widening a shared/DS component public API gets challenged. Present no-API-change alternatives first. User: "this api fields weird, other options?"
+- Batch MRs green → play the manual nightly-preview deploy job on all of em so user can eyeball. User: "run nightly build on all the prs created so i can check they work".
+- Green checks ≠ done. Flag dubious architecture yourself (hook returning a component etc), don't wait to be asked. User: "is the architecture itself correct? Hook returning component?"
+- Runtime error right after my edit → assume MY bug, prove it in code first. Blamed "stale HMR bundle" twice; second time it was a real bug of mine.
+- UI issue persists after "fixed" → verify against running DOM, not disk source. Said "on disk nothing can draw that line", user pasted the actual `<hr>` node.
+- Planning: don't skip the grill/interview pass before writing plan. User: "shouldnt you grill me now?"
+- Never ask approval for a draft I haven't actually printed. Referenced "the draft below", never showed it.
+- Several independent fixes in one ask → batch/parallelize by default. User: "tackle in parallel if possible".
+- User-suggested reuse ("could use the Map from /map route") must land visibly in the plan. User re-asked "did you incorporate this?"
