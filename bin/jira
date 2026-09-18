@@ -1,0 +1,42 @@
+#!/bin/zsh
+set -e
+
+JIRA_BASE="https://cleverfarm.atlassian.net"
+
+if [[ -z "$JIRA_EMAIL" || -z "$JIRA_TOKEN" ]]; then
+  echo "Error: JIRA_EMAIL / JIRA_TOKEN not set" >&2
+  exit 1
+fi
+
+METHOD="${1:u}"
+ENDPOINT="$2"
+BODY="$3"
+
+if [[ -z "$METHOD" || -z "$ENDPOINT" ]]; then
+  echo "Usage: jira <METHOD> <endpoint> [body-json]" >&2
+  echo "       jira add-comment <TICKET-ID> <message>" >&2
+  exit 1
+fi
+
+if [[ "$METHOD" == "ADD-COMMENT" ]]; then
+  TICKET="$2"
+  MSG="$3"
+  if [[ -z "$TICKET" || -z "$MSG" ]]; then
+    echo "Usage: jira add-comment <TICKET-ID> <message>" >&2
+    exit 1
+  fi
+  BODY=$(jq -n --arg body "$MSG" '{body: $body}')
+  exec curl -sS -X POST \
+    -u "$JIRA_EMAIL:$JIRA_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$BODY" \
+    "$JIRA_BASE/rest/api/2/issue/$TICKET/comment"
+fi
+
+CURL_ARGS=(-sS -X "$METHOD" -u "$JIRA_EMAIL:$JIRA_TOKEN" -H "Content-Type: application/json")
+
+if [[ -n "$BODY" ]]; then
+  CURL_ARGS+=(-d "$BODY")
+fi
+
+exec curl "${CURL_ARGS[@]}" "$JIRA_BASE$ENDPOINT"
