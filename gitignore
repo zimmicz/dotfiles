@@ -3,3 +3,7 @@
 .serena
 
 **/.claude/settings.local.json
+/PLAN.md
+/TICKET.md
+/install.log
+.codegraph/
