@@ -19,6 +19,7 @@ alias c="command claude --enable-auto-mode"
 alias xclaude="command claude --dangerously-skip-permissions"
 alias dclaude='docker run --rm -it --cap-add NET_ADMIN --cap-add NET_RAW --user $(id -u):$(id -g) -v ~/.claude:/home/node/.claude -v ~/.claude.json:/home/node/.claude.json -v /home/zimmi/dotfiles:/home/zimmi/dotfiles -v $PWD:/workspace -w /workspace claude-code claude --dangerously-skip-permissions'
 alias claude='echo "Use c instead" && false'
+alias cr="command claude resume"
 alias tf="terraform "
 alias lg="lazygit"
 alias g="git "
