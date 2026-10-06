@@ -31,7 +31,6 @@ Auto-generated nightly by ~/.claude/scripts/nightly-reflection.sh. Edit/delete f
 - Spin-off/follow-up tickets → default assignee=self + current sprint unless told otherwise. User: "assign to me, bring to this sprint".
 - Disputing an MR/PR reviewer comment → verify the specific claim empirically before replying, don't just explain the mechanism. User: "can you prove [reviewer] misinterpreted the change".
 - Skill/plugin hygiene: one source only — marketplace plugin wins, delete legacy ~/.claude/skills copies/symlinks. Also symlink skill `references/` dir. User: "smaž ty legacy symlinky, nech jen plugin", "cf-mr references are not symlinked".
-- Before commit/push/MR: run relevant unit tests + local checks (lint/format/typecheck) unprompted. User keeps asking ("run the unit tests you created", "run checks locally, fix failures if any, commit, push").
 - MR pushed + pipeline green → mark ready (drop Draft:), approve as user, enable auto-merge. Don't park it at draft waiting.
 - Conventions (labels, naming, formats) → search cf-kb KB first, don't invent. User: "did you check KB for label format?"
 - Migration/refactor → delete leftovers in SAME change: dead wrappers, unused hooks/styles, now-empty dirs. User had to list em one by one ("why do we need LegacyFieldErrors?", "delete useCustomStyles too", "check if styles dir is empty, delete if so").
@@ -56,3 +55,20 @@ Auto-generated nightly by ~/.claude/scripts/nightly-reflection.sh. Edit/delete f
 - Never ask approval for a draft I haven't actually printed. Referenced "the draft below", never showed it.
 - Several independent fixes in one ask → batch/parallelize by default. User: "tackle in parallel if possible".
 - User-suggested reuse ("could use the Map from /map route") must land visibly in the plan. User re-asked "did you incorporate this?"
+- Numbered batch of PR/MR review comments → wait for user to pick subset to fix now, defer rest till told continue. User: "#1 headerSlot, #3 snackbar, #8 delete dead code, come back when done".
+- User "can't see changes" right after an edit → check for stale vim buffer re-save clobbering it, tell user to :e/:e! reload before touching file again.
+- Risky/speculative fix spanning multiple spots → apply to one instance first, get user to verify it works, then extend to rest. Don't batch-apply unproven fixes.
+- Test fails right after my edit → don't patch the test, question/fix the real bug in code under test. User: "do not fix test, fix maptiler call. should it be even invalidated?"
+- MR reviewer comments: draft replies ≠ done. Actually post the replies AND resolve threads. User: "did you reply to pr comments?" → I'd only drafted → "post them and resolve threads".
+- New UI mirroring existing screen (tabs, infobox, header) → copy that screen's structure / extract its component, don't rebuild + restyle. Stuck in fix loop → diff against working reference. User: "why dont you extract tabs component from telematics.control?", "why don't you use the same structure as in the main map?"
+- New/extracted component: no speculative customization (styled wrappers, extra props) — justify each or drop. User: "why do we need styled Box? why do we need this at all? do we need to customize?"
+- Cross-repo usage audits → fetch + grep remote default branch, not local clones (often stale). Usage/absence claims need proof. User: "did you check gitlab version or the local repo?", "can you prove it?"
+- Explaining rules/process/how-to → lead with concrete worked example (real numbers, step-by-step), not abstract rules. User: "i dont understand how to proceed... i need a concrete example".
+- Offered spin-off ticket → wait for answer, never create it preemptively. Small related follow-up often "do it here (without a ticket)" in current branch. Created DEV-2829 before user replied, had to ask about deleting it.
+- "try it (right here)" in repo after feasibility check = make the code changes, not another probe/demo request. User: "i mean do the code changes".
+- Grill/plan questions: numbered, each with my recommended answer + tradeoff. User replies tersely ("ok (a), rest as recommended", "yes, go with recs"). Follow-ups on one Q (18b) answered in place.
+- PLAN.md and Jira plan comment must match, and be the plan actually used for impl. User: "does plan.md match jira comment and is it the plan you're going to use?" Check sync before posting/implementing.
+- Question hinges on code state elsewhere (api codegen, sibling repo/branch) → inspect it myself before asking user. User: "check integrations repo to see for yourself", "check our integrations.ts api codegen. it is ready, isnt it?"
+- Shell/tool setup (zsh plugins etc) → install via ~/dotfiles + install.sh, not ad-hoc. Verify plugin load order after (compdef errors). User: "did you install it through dotfiles and install.sh?"
+- React `renderXxx()` inline helper fns → make real JSX components. User: "shouldn't this be just a regular jsx component?"
+- Run lint + format before calling UI/code change done. User: "lint and format failing".

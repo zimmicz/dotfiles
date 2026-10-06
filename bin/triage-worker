@@ -1,0 +1,107 @@
+#!/bin/zsh
+set -uo pipefail
+
+MAX=${MAX:-3}
+REPOS=~/work/cleverfarm/repos
+LOG_DIR=~/.local/state/cf-triage
+AI_MARK="AI triage (Claude, headless)"
+SLACK_CHANNEL=C0C49QDLGAH
+NOTES=$LOG_DIR/notes.txt
+mkdir -p $LOG_DIR
+
+search() {
+  jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=labels,comment&maxResults=$2"
+}
+
+note() {
+  echo "[$1](https://cleverfarm.atlassian.net/browse/$1) $2" >>$NOTES
+}
+
+relabel() {
+  jira PUT "/rest/api/2/issue/$1" "{\"update\":{\"labels\":[{\"remove\":\"$2\"},{\"add\":\"$3\"}]}}" >/dev/null
+}
+
+analyze() {
+  local KEY=$1 REPO=$2 LOG=$LOG_DIR/$1.log
+  echo "=== $KEY ($REPO) $(date -Iseconds)" | tee -a $LOG
+  if [[ -z "$REPO" || ! -d $REPOS/$REPO/.git ]]; then
+    echo "  no repo '$REPO'" | tee -a $LOG
+    return 1
+  fi
+  local SETUP=$(cd $REPOS/$REPO && cf-work $KEY --no-launch --no-claim 2>&1)
+  echo "$SETUP" >>$LOG
+  local WT=($REPOS/$REPO/.worktrees/${KEY}-*(N/[1]))
+  local TIER=$(grep -oP 'claude --model \K\w+' <<<"$SETUP" || echo sonnet)
+  if [[ -z "$WT" ]]; then
+    echo "  worktree setup failed" | tee -a $LOG
+    return 1
+  fi
+  (cd $WT && claude -p "/cf-work $KEY --headless" \
+    --model $TIER \
+    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
+    --output-format json </dev/null >>$LOG 2>&1) && [[ -f $WT/PLAN.md ]] \
+    && echo "  ok -> $WT/PLAN.md" | tee -a $LOG
+}
+
+implement() {
+  local KEY=$1 REPO=$2 LOG=$LOG_DIR/$1.log
+  echo "=== implement $KEY ($REPO) $(date -Iseconds)" | tee -a $LOG
+  [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] || { echo "  no repo '$REPO'" | tee -a $LOG; return 1; }
+  local SETUP=$(cd $REPOS/$REPO && cf-work $KEY --no-launch 2>&1)
+  echo "$SETUP" >>$LOG
+  local WT=($REPOS/$REPO/.worktrees/${KEY}-*(N/[1]))
+  local TIER=$(grep -oP 'claude --model \K\w+' <<<"$SETUP" || echo sonnet)
+  [[ -n "$WT" && -f $WT/PLAN.md ]] || { echo "  no worktree/PLAN.md" | tee -a $LOG; return 1; }
+  (cd $WT && claude -p "/cf-ticket $KEY --headless" \
+    --model $TIER \
+    --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
+    --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*)" \
+    --output-format json </dev/null >>$LOG 2>&1)
+  local MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null | jq -r '.[0].web_url // empty')
+  [[ -n "$MR" ]] && echo "  mr -> $MR" | tee -a $LOG && echo "$MR" >$LOG_DIR/$KEY.mr
+}
+
+ROWS_JQ='.issues[] | "\(.key) \((.fields.labels | map(select(startswith("repo-"))) | first // "repo-") | ltrimstr("repo-"))"'
+
+if [[ -n "${1:-}" ]]; then
+  NEW=""
+  IMPL=""
+  REPLIES=""
+  LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
+  if [[ " $LABELS " == *" ai-fix "* ]]; then
+    IMPL=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
+  else
+    NEW=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
+  fi
+else
+  NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
+  IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' ${IMPL_MAX:-1} | jq -r "$ROWS_JQ")
+  REPLIES=$(search 'project = DEV AND labels = triaged AND statusCategory = "To Do" AND updated >= -2h' 20 \
+    | jq -r --arg m "$AI_MARK" '.issues[] | select((.fields.comment.comments | last | .body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not)' \
+    | jq -rs "{issues: .} | $ROWS_JQ")
+fi
+
+while read -r KEY REPO; do
+  [[ -z "$KEY" ]] && continue
+  if analyze $KEY $REPO; then relabel $KEY triage triaged; note $KEY "triaged, PLAN.md ready (add \`ai-fix\` to implement)"; else relabel $KEY triage triage-failed; note $KEY "triage failed, see \`$LOG_DIR/$KEY.log\`"; fi
+done <<<"$NEW"
+
+while read -r KEY REPO; do
+  [[ -z "$KEY" ]] && continue
+  echo "--- follow-up $KEY"
+  if analyze $KEY $REPO; then note $KEY "your reply answered"; else note $KEY "reply follow-up failed, see \`$LOG_DIR/$KEY.log\`"; fi
+done <<<"$REPLIES"
+
+while read -r KEY REPO; do
+  [[ -z "$KEY" ]] && continue
+  if implement $KEY $REPO; then relabel $KEY ai-fix ai-mr; note $KEY "draft MR: $(cat $LOG_DIR/$KEY.mr)"; else relabel $KEY ai-fix ai-fix-failed; note $KEY "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$KEY.log\`"; fi
+done <<<"$IMPL"
+
+if [[ -s $NOTES ]]; then
+  MSG="**cf-triage run $(date '+%H:%M')**
+$(sed 's/^/• /' $NOTES)"
+  claude -p "Send this message VERBATIM to Slack channel_id $SLACK_CHANNEL. Do not add, reformat or comment. Reply 'sent'.
+
+$MSG" --model haiku --allowedTools "mcp__plugin_slack_slack__slack_send_message mcp__claude_ai_Slack__slack_send_message" --output-format json </dev/null 2>/dev/null \
+    | jq -e '(.is_error | not) and (.permission_denials | length == 0)' >/dev/null && rm -f $NOTES
+fi

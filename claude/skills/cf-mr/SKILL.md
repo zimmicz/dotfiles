@@ -3,6 +3,7 @@ name: cf-mr
 description: |
   Create MR for current ticket. Use when user says "create MR",
   "merge request", "push", "cf-mr", or "ready for review".
+  With `--headless`: draft MR via glab, no reviewers, no prompts.
 ---
 
 # Create MR for current ticket
@@ -24,7 +25,7 @@ description: |
    - `source_branch`: current branch
    - `target_branch`: detected base branch (not always develop!)
    - `title`: `type: [DEV-XXXX] english description` (conventional commits: feat, fix, chore, refactor, test; use the actual ticket key)
-   - `description`: ticket summary + brief list of changes from git diff
+   - `description`: first line = 🤖 prefix from `~/.claude/my-voice.md` "Posted by Claude" (language of the body), then ticket summary + brief list of changes from git diff
    - `assignee_ids`: [18554466] (michal.zimmermann1)
    - `reviewer_ids`: per step 6 (empty for non-cf-farm-frontend repos)
 8. Transition ticket to review via `atlassian.getTransitionsForJiraIssue` then `atlassian.transitionJiraIssue` — pick the transition whose target status is "Review" (or "In Review" if that's what exists)
@@ -33,3 +34,13 @@ description: |
 11. **Log time** — prompt: "Log time on <ticket>? (duration like `2h`, or `n` to skip)". If duration provided, invoke `cf-log-time` flow with that duration.
 12. **Quick retro** — ask: "Any mid-impl pivots from requirement gaps? (y/n + brief note)". Append row to `memory/workflow-retro-log.md`:
     `| {date} | {ticket} | {pivot count} | {what was caught/missed} | {notes} |`
+
+## Headless mode (`--headless` in arguments)
+
+No user present. Steps 1–5 as above, then:
+
+- Step 6: no reviewers, any repo.
+- Step 7: `glab mr create --draft --yes --source-branch <branch> --target-branch <base> --assignee michal.zimmermann1 --title "<title>" --description "<desc>"` (GitLab MCP not available headless). Title/description rules as in step 7; description starts with the 🤖 prefix line per `~/.claude/my-voice.md` "Posted by Claude".
+- Step 8: skip — ticket stays In Progress while the MR is draft.
+- Step 10: cf-farm-frontend only — play `use Nightly backend` without asking, report preview URL.
+- Steps 11–12: skip.

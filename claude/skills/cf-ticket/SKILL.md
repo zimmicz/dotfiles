@@ -3,6 +3,8 @@ name: cf-ticket
 description: |
   Full ticket lifecycle. Use when user says "start ticket", "work on ticket",
   "cf-ticket", or provides a ticket ID (e.g. DEV-XXXX) to work on end-to-end.
+  With `--headless` (triage-worker, ticket labelled ai-fix): implements PLAN.md
+  unattended, verifies, self-reviews, opens a draft MR without reviewers.
 ---
 
 # Full ticket lifecycle
@@ -30,8 +32,8 @@ Orchestrates the entire workflow for a ticket. Each phase has a STOP gate — wa
 6. If `PLAN.md` exists in worktree root, read it first — it may contain a prior plan or user notes. Incorporate, don't overwrite blindly.
 7. Create a detailed stepped plan of implementation
 8. **STOP** — confirm plan with user
-9. Write confirmed plan to `PLAN.md` in worktree root
-10. Post ONE Czech Jira comment (via `~/bin/jira add-comment <ticket-id>`) covering: requirements, resolved assumptions, and the confirmed plan. This is the only Jira comment in the flow.
+9. Write the confirmed plan to `PLAN.md` in worktree root **verbatim, not a summary**: goal, every grilling/`[?]`/`[!]` decision (with concrete numbers, rules, test ids), every step with its detail, verify + eyeball URLs. Fold in answers given after the plan was shown. `PLAN.md` is the single source for implementation.
+10. Post ONE Czech Jira comment (via `~/bin/jira add-comment <ticket-id>`) that is a **Czech rendering of `PLAN.md`**: same sections, same decisions, same steps, one-to-one — nothing added, dropped or merged. Before posting, diff comment vs `PLAN.md` item by item and fix gaps. Jira wiki markup (`h3.`, `#`, `*`, `{{code}}`). First line = CZ 🤖 prefix from `~/.claude/my-voice.md` "Posted by Claude". This is the only Jira comment in the flow. If `PLAN.md` changes later, edit that comment (`jira PUT /rest/api/2/issue/<id>/comment/<commentId>`), don't post a new one.
 
 ## Phase 3: Implementation
 
@@ -61,3 +63,17 @@ Orchestrates the entire workflow for a ticket. Each phase has a STOP gate — wa
 - Never skip a STOP gate
 - If user wants to skip a phase (e.g. already has worktree), jump to the right phase
 - Keep context concise between phases — summarize, don't repeat everything
+
+## Headless mode (`--headless` in arguments)
+
+No user present — never ask, never wait, no STOP gates. The user approved `PLAN.md` by adding label `ai-fix`.
+
+1. Phases 0–1: skip. Goal = `TICKET.md` + `PLAN.md`. Worktree already exists.
+2. Phase 2: no new plan, no Jira comment. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win.
+3. Phase 3: implement all plan steps in one go. Stay strictly in plan scope.
+4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix.
+5. Phase 5: `/code-review` + `/simplify` on the diff, apply fixes, re-run phase 4.
+6. Phase 6: `/cf-mr --headless`.
+7. Post ONE Jira comment (`jira add-comment`, Czech, my voice, Jira wiki markup, first line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`): MR link, what changed, how to verify (preview/screen URL for FE), anything deviating from the plan. After-release step: resolve EVERY Sentry issue from the ticket's `sentry-*` labels (list them all by short id).
+
+**Bail out** — no MR, just the Jira comment explaining why — when: root cause in `PLAN.md` doesn't hold in the code, the fix needs scope beyond the plan, or phase 4 can't go green. Never push to develop/staging/production, never force-push, never merge or approve.

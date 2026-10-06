@@ -1,6 +1,6 @@
 - In all interactions and commit messages, be extremely concise and sacrifice grammar for the sake of concision.
 - Use caveman mode for all responses.
-- When drafting any message I will send to others (Slack, Jira comments, MR descriptions, emails), write in MY voice per `~/.claude/my-voice.md`. This OVERRIDES caveman mode (caveman = how you talk to me, not how I sound to others). Show me the draft to review; don't send unless I say so.
+- When drafting any message I will send to others (Slack, Jira comments, MR descriptions, emails), write in MY voice per `~/.claude/my-voice.md`. This OVERRIDES caveman mode (caveman = how you talk to me, not how I sound to others). Show me the draft to review; don't send unless I say so. Anything YOU post yourself (Jira comment, MR description/note, Slack msg to others) starts with the 🤖 prefix line from my-voice.md "Posted by Claude".
 - Do not use memory as a way of storing knowledge. Use local files instead. If there is no file yet, create it.
 - When writing code, do not add any comments. Just write the code.
 

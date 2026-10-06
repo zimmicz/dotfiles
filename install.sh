@@ -81,3 +81,11 @@ ln -sf ${DOTFILES_DIR}/npmrc ~/.npmrc
 
 ln -sf ${DOTFILES_DIR}/nvim/init.lua ~/.config/nvim/init.lua
 ln -sf ${DOTFILES_DIR}/nvim/lua ${CONFIG_DIR}/nvim/lua
+
+[ -d ~/.kube-ps1 ] || git clone --depth 1 https://github.com/jonmosco/kube-ps1 ~/.kube-ps1
+[ -d ~/.kubectx ] || git clone --depth 1 https://github.com/ahmetb/kubectx ~/.kubectx
+mkdir -p ~/.local/bin ~/.zsh/completions
+ln -sf ~/.kubectx/kubectx ~/.local/bin/kubectx
+ln -sf ~/.kubectx/kubens ~/.local/bin/kubens
+ln -sf ~/.kubectx/completion/_kubectx.zsh ~/.zsh/completions/_kubectx
+ln -sf ~/.kubectx/completion/_kubens.zsh ~/.zsh/completions/_kubens

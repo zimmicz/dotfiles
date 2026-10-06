@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(ln:*)",
-      "mcp__lean-ctx__ctx_shell"
+      "mcp__lean-ctx__ctx_shell",
+      "mcp__lean-ctx__ctx_search"
     ]
   }
 }

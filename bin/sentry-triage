@@ -1,0 +1,40 @@
+#!/bin/zsh
+set -euo pipefail
+
+MAX=${MAX:-10}
+LOG_DIR=~/.local/state/cf-triage
+mkdir -p $LOG_DIR
+
+MODE="Create the tickets and assign the Sentry issues."
+[[ "${1:-}" == "--dry-run" ]] && MODE="DRY RUN: do NOT create tickets, do NOT update Sentry. Only print what you would create (summary, labels, product, repo)."
+
+PROMPT="You turn Sentry issues into Jira tickets. No human is present, never ask questions. $MODE
+
+Sentry: org cleverfarm-sro, regionUrl https://us.sentry.io. My Sentry user id: 3546621.
+Jira: use the shell wrapper \`jira <METHOD> <endpoint> [json]\` (REST, base https://cleverfarm.atlassian.net).
+
+1. ONLY Sentry projects fe-monitoring and can-frontend, ignore all others. search_issues twice (projectSlugOrId fe-monitoring, then can-frontend), query 'is:unresolved is:unassigned', sort freq, period 90d, limit 100. Merge both lists, order by event count desc.
+SHORTID = the full Sentry short id incl. project prefix, e.g. CAN-FRONTEND-JS or FE-MONITORING-6DN (never just the suffix).
+
+2. Walk the list in order. Dedup each issue: \`jira GET \"/rest/api/3/search/jql?jql=labels%3Dsentry-<SHORTID>&fields=key\"\`. Already ticketed -> no new ticket, just do step 5 with the existing key. Stop after $MAX NEW tickets.
+3. Issues in this batch with the same title in the same project = one ticket carrying every sentry-<SHORTID> label.
+4. For each new ticket: get_sentry_resource on the issue (details + latest event). Create via \`jira POST /rest/api/2/issue '<json>'\`:
+   - project key DEV, issuetype name Bug
+   - summary: '[Sentry] <title>' (max 200 chars)
+   - labels: triage, sentry-<SHORTID> (each), repo-<repo>
+   - customfield_13543: [{\"id\": \"<product id>\"}]
+   - description (Jira wiki markup, English, facts only, no speculation): Sentry link(s), project, culprit, level, events, users, first/last seen, environment, release, top in-app stack frames verbatim in {code} block, relevant tags, request URL/method.
+   Repo + product by Sentry project:
+   - fe-monitoring -> repo cf-farm-frontend; product by route: /telematics 11714, /sensors or /irrigation 11712, /actions /parcels /catalogues /stores 11711, satellite/biomonitoring/prescription 11713, else 11710
+   - can-frontend -> repo can-frontend, product 11707
+5. update_issue assignedTo 'user:3546621', reason 'Jira: https://cleverfarm.atlassian.net/browse/<KEY>'.
+6. Final answer: one line per Sentry issue: '<SHORTID> -> <KEY> (new|existing)' or '<SHORTID> -> error: <why>'."
+
+claude -p "$PROMPT" \
+  --model sonnet \
+  --allowedTools "mcp__claude_ai_Sentry Bash(jira:*)" \
+  --output-format json \
+  </dev/null | tee $LOG_DIR/sentry-$(date +%F-%H%M).json | jq -r '.result, "cost: $\(.total_cost_usd)"' | tee $LOG_DIR/sentry-last.txt
+
+[[ "${1:-}" == "--dry-run" ]] || grep -oE '^[A-Z0-9-]+ -> DEV-[0-9]+ \(new' $LOG_DIR/sentry-last.txt \
+  | sed -E 's|^([A-Z0-9-]+) -> (DEV-[0-9]+).*|new ticket [\2](https://cleverfarm.atlassian.net/browse/\2) from Sentry \1|' >>$LOG_DIR/notes.txt || true

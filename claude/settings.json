@@ -6,12 +6,8 @@
     "allow": [
       "Bash(find:*)",
       "Bash(git:*)",
-      "Bash(python:*)",
-      "Bash(python3:*)",
       "Bash(jq:*)",
       "Bash(npm:*)",
-      "Bash(npx:*)",
-      "Bash(node:*)",
       "Bash(nvm:*)",
       "Bash(ls:*)",
       "Read",
@@ -84,7 +80,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "claude-opus-4-6",
+  "model": "sonnet",
   "hooks": {
     "Notification": [
       {
@@ -235,7 +231,10 @@
     "mempalace@mempalace": false,
     "ralph-loop@claude-plugins-official": true,
     "slack@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true
+    "typescript-lsp@claude-plugins-official": true,
+    "cf-investigator@cleverfarm": true,
+    "cf-cli-skill@cleverfarm": true,
+    "ponytail@ponytail": true
   },
   "extraKnownMarketplaces": {
     "caveman": {
@@ -263,12 +262,64 @@
       }
     }
   },
+  "pluginConfigs": {
+    "cf-eod@cleverfarm": {
+      "options": {
+        "accountId": "712020:d8b09ea3-beb7-4afc-af06-6d7119474a4f",
+        "gitAuthor": "Michal Zimmermann",
+        "repoScanPath": "~/work/cleverfarm/repos",
+        "dailyTarget": 480
+      }
+    }
+  },
   "tui": "fullscreen",
+  "voice": {
+    "enabled": true,
+    "mode": "hold"
+  },
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "editorMode": "vim",
   "autoCompactEnabled": true,
   "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(glab mr view:*)",
+      "Bash(jira issue view:*)"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Bash(terraform apply:*) in */terraform/prod/*",
+      "Bash(aws s3 rm:*) against cf-satellite*"
+    ],
+    "environment": [
+      "### Org-wide",
+      "**Organization**: CleverFarm (repos prefixed `cf-`, CleverAnalytics `can-`, plus `cf-knowledge-base`)",
+      "**Cloud provider(s)**: AWS (ECR registry `347810685165.dkr.ecr.eu-central-1.amazonaws.com`)",
+      "**Repository visibility**: Not queryable here (no remotes on this repo) — assume private per shipped default",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: Not queryable here (origin/HEAD unset, no remotes) — unknown",
+      "**CI/CD deploy targets**: AWS ECR (`347810685165.dkr.ecr.eu-central-1.amazonaws.com`); Terraform-managed AWS infra (S3, IAM) across sibling product repos (cf-agroevidence, can-infrastructure, cf-deployment, agrodata, automation) — prod and dev environments both present",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
+      "**Source control**: The trusted repo only (no remotes configured) — this folder holds CleverFarm/CleverAnalytics repos (cf-*, can-*) plus cf-knowledge-base, but none are checked out here as remotes",
+      "**Trusted internal domains**: cleverfarm.atlassian.net",
+      "**Trusted cloud buckets**: cf-satellite (config-derived — not a confirmed upload destination; uploads of local data still require confirmation), cf-satellite-test (config-derived — not a confirmed upload destination; uploads of local data still require confirmation)",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: `.env` files and Terraform state/vars across cf-agroevidence, can-frontend, can-infrastructure, automation, agrodata, asahi, can-news, can-notifications, can-prices, can-users, cf-deployment (contain credentials/config); `can-infrastructure/terraform/auth0/vault.tf` and related auth0 Terraform (identity/auth secrets); `cf-deployment/scripts/aws-prod_sync.sh` and `aws-share-prod-snapshots.py` (prod data handling scripts) — share only with audiences cleared at the named+specifics bar",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any host/namespace/resource containing `prod` or `production` as a whole segment — e.g. `can-frontend/terraform/prod/*`, `cf-agroevidence/terraform/prod/*`, `asahi/helm/asahi-service/values-prod.yaml`, `cf-deployment/scripts/aws-prod_sync.sh`, `aws-share-prod-snapshots.py`, k8s namespace patterns matching `prod`",
+      "**Protected deployment namespaces / environments**: `prod` Terraform workspaces/dirs seen across cf-agroevidence, can-frontend, and related repos (e.g. `*/terraform/prod/*`)",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; `cf-agroevidence/terraform/{dev,prod}/iam.tf`; `can-infrastructure/terraform/auth0/*` (auth/identity config); any Terraform under a `prod` directory",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development",
+      "**Trusted repo**: This folder (/home/zimmi/work/cleverfarm/repos) — no git remotes configured; holds CleverFarm (cf-*) and CleverAnalytics (can-*) repos plus cf-knowledge-base",
+      "**Org-specific CLIs**: `glab` (GitLab CLI, preferred over `gh` per project CLAUDE.md), `jira` CLI, `lean-ctx` / `ctx_*` MCP tools, `codegraph` CLI"
+    ]
+  },
   "voiceEnabled": true
 }

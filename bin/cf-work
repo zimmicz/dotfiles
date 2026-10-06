@@ -1,0 +1,182 @@
+#!/bin/zsh
+# Usage: cf-work DEV-1234 [base-branch] [--no-launch] [--no-claim]
+# Scripted worktree setup (Jira REST, no headless claude), then launches claude with ticket context.
+# Env: JIRA_EMAIL, JIRA_TOKEN required. CF_MODEL overrides model tier.
+# --no-launch: do everything but print the launch command instead of exec-ing claude.
+# --no-claim: skip assigning to me + In Progress transition (headless triage).
+
+set -e
+
+MY_ACCOUNT_ID="712020:d8b09ea3-beb7-4afc-af06-6d7119474a4f"
+
+NO_LAUNCH=""
+NO_CLAIM=""
+ARGS=()
+for arg in "$@"; do
+  if [[ "$arg" == "--no-launch" ]]; then
+    NO_LAUNCH=1
+  elif [[ "$arg" == "--no-claim" ]]; then
+    NO_CLAIM=1
+  else
+    ARGS+=("$arg")
+  fi
+done
+TICKET="${ARGS[1]:u}"
+BASE="${ARGS[2]}"
+if [[ -z "$TICKET" ]]; then
+  echo "Usage: cf-work DEV-1234 [base-branch] [--no-launch] [--no-claim]"
+  exit 1
+fi
+if [[ -z "$JIRA_EMAIL" || -z "$JIRA_TOKEN" ]]; then
+  echo "Error: JIRA_EMAIL / JIRA_TOKEN not set"
+  exit 1
+fi
+
+if ! command -v jira >/dev/null; then
+  echo "Error: jira wrapper not on PATH (ln -s <cf-knowledge-base>/claude/scripts/jira ~/bin/jira)"
+  exit 1
+fi
+
+echo "→ Fetching $TICKET..."
+ISSUE=$(jira GET "/rest/api/2/issue/$TICKET?fields=summary,description,status,assignee,priority,issuetype,labels,comment,parent,issuelinks")
+
+SUMMARY=$(jq -r '.fields.summary' <<<"$ISSUE")
+STATUS=$(jq -r '.fields.status.name' <<<"$ISSUE")
+ASSIGNEE=$(jq -r '.fields.assignee.accountId // ""' <<<"$ISSUE")
+ISSUETYPE=$(jq -r '.fields.issuetype.name' <<<"$ISSUE")
+IS_HOTFIX=$(jq -r '(.fields.issuetype.name | test("hotfix"; "i")) or (.fields.labels | map(ascii_downcase) | index("hotfix") != null)' <<<"$ISSUE")
+
+if [[ -z "$BASE" ]]; then
+  [[ "$IS_HOTFIX" == "true" ]] && BASE="production" || BASE="develop"
+  if ! git ls-remote --exit-code --heads origin "$BASE" >/dev/null 2>&1; then
+    DEFAULT=$(git ls-remote --symref origin HEAD | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2}')
+    echo "  (origin/$BASE missing, falling back to origin/$DEFAULT)"
+    BASE="$DEFAULT"
+  fi
+fi
+echo "  $SUMMARY [$STATUS, $ISSUETYPE] base: $BASE"
+
+if [[ -n "$NO_CLAIM" ]]; then
+  echo "→ --no-claim: skipping assign + In Progress"
+elif [[ "$ASSIGNEE" != "$MY_ACCOUNT_ID" ]]; then
+  echo "→ Assigning to me..."
+  jira PUT "/rest/api/2/issue/$TICKET/assignee" "{\"accountId\":\"$MY_ACCOUNT_ID\"}" >/dev/null
+fi
+
+if [[ -z "$NO_CLAIM" && "$STATUS" != "In Progress" ]]; then
+  TRANSITION_ID=$(jira GET "/rest/api/2/issue/$TICKET/transitions" | jq -r '.transitions[] | select(.to.name == "In Progress") | .id' | head -1)
+  if [[ -n "$TRANSITION_ID" ]]; then
+    echo "→ Transitioning to In Progress..."
+    jira POST "/rest/api/2/issue/$TICKET/transitions" "{\"transition\":{\"id\":\"$TRANSITION_ID\"}}" >/dev/null
+  else
+    echo "  (no In Progress transition from '$STATUS', skipping)"
+  fi
+fi
+
+EXISTING=(.worktrees/${TICKET}-*(N/[1]))
+if [[ -n "$EXISTING" ]]; then
+  WORKTREE="$EXISTING"
+  echo "→ Worktree exists: $WORKTREE"
+else
+  echo "→ Generating branch name..."
+  # Amplify builds the preview domain as "<branch>.dev.cleverfarm.cz" and asks
+  # ACM for a wildcard cert, so the name validated is "*.<branch>.dev.cleverfarm.cz".
+  # X.509 CommonName caps at 64: 64 - 18 (".dev.cleverfarm.cz") - 2 ("*.") = 44.
+  # Over that, terraform apply fails with "The first domain name can be no
+  # longer than 64 characters" and the branch gets no preview.
+  BRANCH_MAX=44
+  SLUG=$(claude -p --model haiku --strict-mcp-config \
+    "Translate this Jira ticket title to English and output ONLY a lowercase kebab-case slug, max $((BRANCH_MAX - ${#TICKET} - 1)) characters, no ticket number, ASCII only: $SUMMARY" \
+    </dev/null 2>/dev/null | tr -d '[:space:]' | tr -cd 'a-z0-9-' || true)
+  if [[ -z "$SLUG" ]]; then
+    SLUG=$(iconv -f UTF-8 -t ASCII//TRANSLIT <<<"$SUMMARY" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//;s/-$//')
+  fi
+  BRANCH="${TICKET}-${SLUG}"
+  BRANCH="${BRANCH[1,$BRANCH_MAX]}"
+  BRANCH="${BRANCH%-}"
+  if (( ${#BRANCH} > BRANCH_MAX )); then
+    echo "✗ Branch name '$BRANCH' is ${#BRANCH} chars, over the ${BRANCH_MAX}-char Amplify preview limit." >&2
+    exit 1
+  fi
+  WORKTREE=".worktrees/$BRANCH"
+
+  echo "→ Creating worktree $WORKTREE from origin/$BASE..."
+  git fetch origin "$BASE"
+  git worktree add "$WORKTREE" "origin/$BASE" -b "$BRANCH"
+  [[ -f .env ]] && cp .env "$WORKTREE/.env"
+fi
+
+PARENTS_MD=""
+PARENT_KEY=$(jq -r '.fields.parent.key // ""' <<<"$ISSUE")
+SEEN=""
+while [[ -n "$PARENT_KEY" && "$SEEN" != *"|$PARENT_KEY|"* ]]; do
+  SEEN="${SEEN}|$PARENT_KEY|"
+  echo "→ Fetching parent $PARENT_KEY..."
+  PARENT=$(jira GET "/rest/api/2/issue/$PARENT_KEY?fields=summary,description,issuetype,parent")
+  PARENTS_MD+=$(jq -r '
+    "\n## Parent: \(.key): \(.fields.summary) [\(.fields.issuetype.name)]\n" +
+    "\n\(.fields.description // "(empty)")\n"
+  ' <<<"$PARENT")
+  PARENT_KEY=$(jq -r '.fields.parent.key // ""' <<<"$PARENT")
+done
+
+LINKS_MD=""
+while IFS=$'\t' read -r REL LINK_KEY; do
+  [[ -z "$LINK_KEY" ]] && continue
+  echo "→ Fetching linked $LINK_KEY ($REL)..."
+  LINKED=$(jira GET "/rest/api/2/issue/$LINK_KEY?fields=summary,description,issuetype,status")
+  LINKS_MD+=$(jq -r --arg rel "$REL" '
+    "\n## Linked (\($rel)): \(.key): \(.fields.summary) [\(.fields.issuetype.name), \(.fields.status.name)]\n" +
+    "\n\(.fields.description // "(empty)")\n"
+  ' <<<"$LINKED")
+done < <(jq -r '.fields.issuelinks[]? | [(if .inwardIssue then .type.inward else .type.outward end), (.inwardIssue // .outwardIssue).key] | @tsv' <<<"$ISSUE")
+
+echo "→ Writing TICKET.md..."
+jq -r '
+  "# \(.key): \(.fields.summary)\n" +
+  "\n**Status:** \(.fields.status.name) | **Type:** \(.fields.issuetype.name) | **Priority:** \(.fields.priority.name // "-") | **Labels:** \(.fields.labels | join(", "))\n" +
+  "\n## Description\n\n\(.fields.description // "(empty)")\n" +
+  $parents +
+  $links +
+  "\n## Comments (\(.fields.comment.comments | length))\n" +
+  (.fields.comment.comments | map("\n### \(.author.displayName) — \(.created[0:16])\n\n\(.body)") | join("\n"))
+' --arg parents "$PARENTS_MD" --arg links "$LINKS_MD" <<<"$ISSUE" > "$WORKTREE/TICKET.md"
+
+if [[ -f "$WORKTREE/package.json" && ! -d "$WORKTREE/node_modules" ]]; then
+  if [[ -f "$WORKTREE/pnpm-lock.yaml" ]]; then
+    INSTALL="pnpm i --frozen-lockfile"
+  elif [[ -f "$WORKTREE/package-lock.json" ]]; then
+    INSTALL="npm ci"
+  else
+    INSTALL=""
+  fi
+  if [[ -n "$INSTALL" ]]; then
+    echo "→ $INSTALL in background (log: $WORKTREE/install.log)..."
+    ( cd "$WORKTREE" && nohup ${=INSTALL} >install.log 2>&1 ) &
+    disown
+  fi
+fi
+if command -v codegraph >/dev/null; then
+  ( nohup codegraph init "$WORKTREE" >/dev/null 2>&1 ) &
+  disown
+fi
+
+DESC_LEN=$(jq -r '.fields.description // "" | length' <<<"$ISSUE")
+BULLETS=$(jq -r '.fields.description // "" | [scan("(?m)^\\s*[*#-]")] | length' <<<"$ISSUE")
+if [[ -n "$CF_MODEL" ]]; then
+  TIER="$CF_MODEL"; REASON="CF_MODEL override"
+elif (( DESC_LEN > 600 || BULLETS >= 3 )); then
+  TIER="opus"; REASON="desc ${DESC_LEN}ch, ${BULLETS} bullets → large"
+else
+  TIER="sonnet"; REASON="desc ${DESC_LEN}ch, ${BULLETS} bullets → small"
+fi
+echo "→ Model: $TIER ($REASON) — override with CF_MODEL=tier"
+
+if [[ -n "$NO_LAUNCH" ]]; then
+  echo "→ Ready. Launch with:"
+  echo "  cd $WORKTREE && claude --model $TIER \"/cf-ticket $TICKET\""
+  exit 0
+fi
+
+cd "$WORKTREE"
+exec claude --model "$TIER" "/cf-ticket $TICKET"

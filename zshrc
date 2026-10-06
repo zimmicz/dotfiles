@@ -19,7 +19,7 @@ alias c="command claude --enable-auto-mode"
 alias xclaude="command claude --dangerously-skip-permissions"
 alias dclaude='docker run --rm -it --cap-add NET_ADMIN --cap-add NET_RAW --user $(id -u):$(id -g) -v ~/.claude:/home/node/.claude -v ~/.claude.json:/home/node/.claude.json -v /home/zimmi/dotfiles:/home/zimmi/dotfiles -v $PWD:/workspace -w /workspace claude-code claude --dangerously-skip-permissions'
 alias claude='echo "Use c instead" && false'
-alias cr="command claude resume"
+alias cr="command claude --resume"
 alias tf="terraform "
 alias lg="lazygit"
 alias g="git "
@@ -33,6 +33,13 @@ alias ntar='tar -cf'
 alias tl='tmuxloader'
 alias vim='/opt/nvim/bin/nvim'
 alias nvim='/opt/nvim/bin/nvim'
+autoload -Uz compinit && compinit
+alias k=kubectl
+export KUBE_EDITOR=/opt/nvim/bin/nvim
+command -v kubectl >/dev/null && source <(kubectl completion zsh) && compdef k=kubectl
+source ~/.kube-ps1/kube-ps1.sh
+setopt PROMPT_SUBST
+RPROMPT='$(kube_ps1)'
 LS_COLORS='no=0:ex=1;41;97:fi=1;42;97:di=1;40;97:ln=04;36:pi=40;33:so=01;35:bd=40;33;01:'
 export LS_COLORS
 setopt PROMPT_CR

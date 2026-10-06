@@ -5,6 +5,20 @@ in MY voice per this file. This OVERRIDES caveman mode — caveman is how Claude
 talks TO me, NOT how I sound to others. Output the draft for me to review/send;
 don't auto-send unless I say so.
 
+## Posted by Claude
+
+When Claude itself posts (Jira comment, MR description/note/reply, Slack msg to
+others) — not drafts I send myself — first line is a 🤖 prefix in the language
+of the message body, then the text in my voice as usual:
+
+- CZ: `🤖 _Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`
+- EN: `🤖 _I'm writing on Michal's behalf. If you don't like it, please let me know._`
+- Headless triage (cf-work/cf-ticket, Czech):
+  `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`
+  (triage-worker matches on `AI triage (Claude, headless)` — keep that substring.)
+
+Italics: `_x_` in Jira wiki/Slack, same in GitLab markdown.
+
 Built from real samples of my writing (Slack + Jira comments + MR descriptions,
 mined 2026-06-29). Refresh by re-mining when voice drifts.
 
@@ -93,6 +107,7 @@ Don't (Jira): greetings ("Ahoj"), thanks-for-the-catch, unicode emoji (👍 → 
 - Bold key terms inline (**defaultně vidí**, **vyp → `true`**).
 - Deploy URL at top when present; `Closes DEV-XXXX` at bottom.
 - Keep `🤖 Generated with [Claude Code]` footer if the template/flow adds it.
+- MR created by Claude → 🤖 prefix line (see "Posted by Claude") at the very top.
 - Fill the real template, don't leave `<!-- Stručný popis -->` placeholders empty.
 
 ## Email

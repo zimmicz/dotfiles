@@ -1,0 +1,10 @@
+[Unit]
+Description=Sentry -> Jira triage tickets, then headless cf-work analysis
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:%h/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=%h/.config/cf-triage.env
+ExecStart=-%h/bin/sentry-triage
+ExecStart=%h/bin/triage-worker
+TimeoutStartSec=110min
