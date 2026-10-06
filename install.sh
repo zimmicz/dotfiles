@@ -8,7 +8,7 @@ mkdir ~/.claude/hooks > /dev/null 2>&1
 mkdir ~/.claude/scripts > /dev/null 2>&1
 mkdir ~/.claude/commands > /dev/null 2>&1
 mkdir ~/.claude/usage > /dev/null 2>&1
-mkdir -p ~/.claude/skills/{cf-feedback,cf-mr,cf-ticket,cf-tickets,cf-work,cf-worktree} 2>/dev/null
+mkdir -p ~/.claude/skills/{cf-feedback,cf-mr,cf-ticket,cf-tickets,cf-work,cf-worktree,verify-ui} 2>/dev/null
 mkdir -p ${CONFIG_DIR}/systemd/user > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/i3 > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/i3blocks > /dev/null 2>&1
@@ -42,6 +42,9 @@ ln -sf ${DOTFILES_DIR}/claude/skills/cf-ticket/SKILL.md ~/.claude/skills/cf-tick
 ln -sf ${DOTFILES_DIR}/claude/skills/cf-tickets/SKILL.md ~/.claude/skills/cf-tickets/SKILL.md
 ln -sf ${DOTFILES_DIR}/claude/skills/cf-work/SKILL.md ~/.claude/skills/cf-work/SKILL.md
 ln -sf ${DOTFILES_DIR}/claude/skills/cf-worktree/SKILL.md ~/.claude/skills/cf-worktree/SKILL.md
+ln -sf ${DOTFILES_DIR}/claude/skills/verify-ui/SKILL.md ~/.claude/skills/verify-ui/SKILL.md
+
+claude mcp get playwright > /dev/null 2>&1 || claude mcp add -s user playwright -- npx -y @playwright/mcp@latest --headless
 
 ln -sf ${DOTFILES_DIR}/i3/config ${CONFIG_DIR}/i3/config
 ln -sf ${DOTFILES_DIR}/i3blocks/config ${CONFIG_DIR}/i3blocks/config

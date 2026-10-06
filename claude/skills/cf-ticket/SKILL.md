@@ -4,7 +4,8 @@ description: |
   Full ticket lifecycle. Use when user says "start ticket", "work on ticket",
   "cf-ticket", or provides a ticket ID (e.g. DEV-XXXX) to work on end-to-end.
   With `--headless` (triage-worker, ticket labelled ai-fix): implements PLAN.md
-  unattended, verifies, self-reviews, opens a draft MR without reviewers.
+  unattended, verifies (tests, lint, typecheck, visual check via /verify-ui for UI
+  changes), self-reviews, opens a draft MR without reviewers.
 ---
 
 # Full ticket lifecycle
@@ -44,7 +45,8 @@ Orchestrates the entire workflow for a ticket. Each phase has a STOP gate — wa
 ## Phase 4: Verify
 
 14. Run tests, lint, typecheck (`nr test`, `nr lint`, `nr typecheck` or project equivalents). Fix failures.
-15. **STOP** if any test/lint failures required non-trivial fixes — show what changed
+14a. If diff touches UI files (`*.tsx`, `*.css`, stories), run `/verify-ui` — screenshots at desktop + mobile, all states. UI is not verified until this passes. Include the verdict table in the MR description; if something couldn't be checked (auth wall), say so there.
+15. **STOP** if any test/lint failures or visual fixes required non-trivial changes — show what changed
 
 ## Phase 5: Self-review
 
@@ -71,7 +73,7 @@ No user present — never ask, never wait, no STOP gates. The user approved `PLA
 1. Phases 0–1: skip. Goal = `TICKET.md` + `PLAN.md`. Worktree already exists.
 2. Phase 2: no new plan, no Jira comment. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win.
 3. Phase 3: implement all plan steps in one go. Stay strictly in plan scope.
-4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix.
+4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix. UI diff → `/verify-ui` against Storybook (Playwright, headless); routes needing auth can't be checked — list them in the MR description and Jira comment as unverified.
 5. Phase 5: `/code-review` + `/simplify` on the diff, apply fixes, re-run phase 4.
 6. Phase 6: `/cf-mr --headless`.
 7. Post ONE Jira comment (`jira add-comment`, Czech, my voice, Jira wiki markup, first line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`): MR link, what changed, how to verify (preview/screen URL for FE), anything deviating from the plan. After-release step: resolve EVERY Sentry issue from the ticket's `sentry-*` labels (list them all by short id).
