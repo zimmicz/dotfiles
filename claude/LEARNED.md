@@ -72,3 +72,4 @@ Auto-generated nightly by ~/.claude/scripts/nightly-reflection.sh. Edit/delete f
 - Shell/tool setup (zsh plugins etc) → install via ~/dotfiles + install.sh, not ad-hoc. Verify plugin load order after (compdef errors). User: "did you install it through dotfiles and install.sh?"
 - React `renderXxx()` inline helper fns → make real JSX components. User: "shouldn't this be just a regular jsx component?"
 - Run lint + format before calling UI/code change done. User: "lint and format failing".
+- Personal/non-work repos (home automation etc): GitHub account zimmicz, never cf-zimmicz (work). User: "Use zimmicz account, not cf-zimmicz".
