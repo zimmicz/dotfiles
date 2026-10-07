@@ -172,10 +172,27 @@ else
 fi
 echo "→ Model: $TIER ($REASON) — override with CF_MODEL=tier"
 
+USE_WORKMUX=""
+[[ -n "$TMUX" ]] && command -v workmux >/dev/null && USE_WORKMUX=1
+
 if [[ -n "$NO_LAUNCH" ]]; then
   echo "→ Ready. Launch with:"
-  echo "  cd $WORKTREE && claude --model $TIER \"/cf-ticket $TICKET\""
+  if [[ -n "$USE_WORKMUX" ]]; then
+    echo "  workmux open ${WORKTREE:t} -p \"/cf-ticket $TICKET\"   (agent: claude --model $TIER)"
+  else
+    echo "  cd $WORKTREE && claude --model $TIER \"/cf-ticket $TICKET\""
+  fi
   exit 0
+fi
+
+if [[ -n "$USE_WORKMUX" ]]; then
+  WM_CONFIG=$(mktemp --suffix=.yaml)
+  { cat ~/.config/workmux/config.yaml; printf 'agent: claude --model %s\n' "$TIER"; } > "$WM_CONFIG"
+  echo "→ workmux open ${WORKTREE:t}"
+  WM_RC=0
+  workmux open --config "$WM_CONFIG" "${WORKTREE:t}" -p "/cf-ticket $TICKET" || WM_RC=$?
+  rm -f "$WM_CONFIG"
+  exit $WM_RC
 fi
 
 cd "$WORKTREE"

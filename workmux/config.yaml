@@ -1,0 +1,10 @@
+worktree_dir: .worktrees
+nerdfont: true
+panes:
+  - command: <agent>
+    focus: true
+  - split: vertical
+    percentage: 30
+  - command: lazygit
+    split: horizontal
+    target: 1
