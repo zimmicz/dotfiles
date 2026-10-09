@@ -190,8 +190,15 @@ if [[ -n "$USE_WORKMUX" ]]; then
   { cat ~/.config/workmux/config.yaml; printf 'agent: claude --model %s\n' "$TIER"; } > "$WM_CONFIG"
   echo "→ workmux open ${WORKTREE:t}"
   WM_RC=0
+  ORIG_WIN=$(tmux display -p '#{window_id}')
+  ORIG_IDX=$(tmux display -p '#{window_index}')
   workmux open --config "$WM_CONFIG" "${WORKTREE:t}" -p "/cf-ticket $TICKET" || WM_RC=$?
   rm -f "$WM_CONFIG"
+  if (( WM_RC == 0 )) && [[ $(tmux display -p -t "$ORIG_WIN" '#{window_panes}') == 1 ]]; then
+    NEW_WIN=$(tmux list-windows -f '#{window_active}' -F '#{window_id}')
+    tmux kill-window -t "$ORIG_WIN"
+    tmux move-window -s "$NEW_WIN" -t "$ORIG_IDX"
+  fi
   exit $WM_RC
 fi
 
