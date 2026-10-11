@@ -3,13 +3,7 @@
 CONFIG_DIR="/home/zimmi/.config"
 DOTFILES_DIR="/home/zimmi/dotfiles"
 
-mkdir ~/.claude > /dev/null 2>&1
-mkdir ~/.claude/hooks > /dev/null 2>&1
-mkdir ~/.claude/scripts > /dev/null 2>&1
-mkdir ~/.claude/commands > /dev/null 2>&1
-mkdir ~/.claude/usage > /dev/null 2>&1
-mkdir -p ~/.claude/skills/{cf-feedback,cf-mr,cf-ticket,cf-tickets,cf-work,cf-worktree,verify-ui} 2>/dev/null
-mkdir -p ${CONFIG_DIR}/systemd/user > /dev/null 2>&1
+mkdir -p ~/.claude/usage ${CONFIG_DIR}/systemd/user > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/i3 > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/i3blocks > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/nvim > /dev/null 2>&1
@@ -22,31 +16,19 @@ mkdir -p ${CONFIG_DIR}/workmux > /dev/null 2>&1
 mkdir ~/.tmuxloader-sessions > /dev/null 2>&1
 
 
-ln -sf ${DOTFILES_DIR}/claude/CLAUDE.md ~/.claude/CLAUDE.md
-ln -sf ${DOTFILES_DIR}/claude/settings.json ~/.claude/settings.json
-ln -sf ${DOTFILES_DIR}/claude/hooks/validate-bash.sh ~/.claude/hooks/validate-bash.sh
-ln -sf ${DOTFILES_DIR}/claude/hooks/plan-mode-guard.sh ~/.claude/hooks/plan-mode-guard.sh
-ln -sf ${DOTFILES_DIR}/claude/simple-statusline.sh ~/.claude/simple-statusline.sh
-ln -sf ${DOTFILES_DIR}/claude/LEARNED.md ~/.claude/LEARNED.md
-ln -sf ${DOTFILES_DIR}/claude/scripts/nightly-reflection.sh ~/.claude/scripts/nightly-reflection.sh
-ln -sf ${DOTFILES_DIR}/claude/scripts/session-digest.sh ~/.claude/scripts/session-digest.sh
-ln -sf ${DOTFILES_DIR}/claude/scripts/nightly-claude.sh ~/.claude/scripts/nightly-claude.sh
-ln -sf ${DOTFILES_DIR}/claude/scripts/usage-report.sh ~/.claude/scripts/usage-report.sh
-ln -sf ${DOTFILES_DIR}/claude/scripts/slack-post.sh ~/.claude/scripts/slack-post.sh
-ln -sf ${DOTFILES_DIR}/claude/scripts/model-prices.tsv ~/.claude/scripts/model-prices.tsv
-ln -sf ${DOTFILES_DIR}/claude/scripts/usage-dashboard.html ~/.claude/scripts/usage-dashboard.html
-ln -sf ${DOTFILES_DIR}/claude/commands/cost.md ~/.claude/commands/cost.md
-ln -sf ${DOTFILES_DIR}/claude/systemd/claude-reflection.service ${CONFIG_DIR}/systemd/user/claude-reflection.service
-ln -sf ${DOTFILES_DIR}/claude/systemd/claude-reflection.timer ${CONFIG_DIR}/systemd/user/claude-reflection.timer
-
-# claude skills
-ln -sf ${DOTFILES_DIR}/claude/skills/cf-feedback/SKILL.md ~/.claude/skills/cf-feedback/SKILL.md
-ln -sf ${DOTFILES_DIR}/claude/skills/cf-mr/SKILL.md ~/.claude/skills/cf-mr/SKILL.md
-ln -sf ${DOTFILES_DIR}/claude/skills/cf-ticket/SKILL.md ~/.claude/skills/cf-ticket/SKILL.md
-ln -sf ${DOTFILES_DIR}/claude/skills/cf-tickets/SKILL.md ~/.claude/skills/cf-tickets/SKILL.md
-ln -sf ${DOTFILES_DIR}/claude/skills/cf-work/SKILL.md ~/.claude/skills/cf-work/SKILL.md
-ln -sf ${DOTFILES_DIR}/claude/skills/cf-worktree/SKILL.md ~/.claude/skills/cf-worktree/SKILL.md
-ln -sf ${DOTFILES_DIR}/claude/skills/verify-ui/SKILL.md ~/.claude/skills/verify-ui/SKILL.md
+# claude: user/ = personal, cleverfarm/ = work-scoped; every file symlinked to ~/.claude at same relative path,
+# systemd/ units go to ~/.config/systemd/user, docs/ stays unlinked
+find ~/.claude ${CONFIG_DIR}/systemd/user -xtype l -lname "${DOTFILES_DIR}/claude/*" -delete 2>/dev/null
+for scope in user cleverfarm; do
+  for f in $(cd ${DOTFILES_DIR}/claude/${scope} && find * -type f ! -path 'docs/*' ! -path 'systemd/*'); do
+    mkdir -p ~/.claude/$(dirname ${f})
+    ln -sf ${DOTFILES_DIR}/claude/${scope}/${f} ~/.claude/${f}
+  done
+  for u in ${DOTFILES_DIR}/claude/${scope}/systemd/*; do
+    ln -sf ${u} ${CONFIG_DIR}/systemd/user/$(basename ${u})
+  done
+done
+systemctl --user daemon-reload && systemctl --user enable claude-reflection.timer
 
 claude mcp get playwright > /dev/null 2>&1 || claude mcp add -s user playwright -- npx -y @playwright/mcp@latest --headless
 

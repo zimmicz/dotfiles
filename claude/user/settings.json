@@ -55,7 +55,6 @@
       "Bash(git add app/precision-farming/routes/parcel-detail/nitrogen/components/NuptTable.tsx && git commit --no-edit)",
       "Bash(git fetch origin develop)",
       "Bash(git worktree add .worktrees/CFD-9896-areas-v2-cache-invalidation origin/develop -b CFD-9896-areas-v2-cache-invalidation)",
-      "Bash(find /home/zimmi/work/cleverfarm/repos/cf-farm-frontend/.worktrees/CFD-9784-eph-decimal-places-dose/app/evidence/actions/ActionEph -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) | xargs ls -lh)",
       "mcp__plugin_slack_slack__slack_read_thread",
       "WebFetch(domain:grafana.dev.cleverfarm.internal)",
       "mcp__plugin_slack_slack__slack_read_channel",
@@ -81,6 +80,83 @@
     "defaultMode": "auto"
   },
   "model": "fable",
+  "deniedMcpServers": [
+    {
+      "serverName": "claude.ai Atlassian MCP"
+    },
+    {
+      "serverName": "claude.ai Atlassian Rovo"
+    },
+    {
+      "serverName": "claude.ai Google Slides"
+    },
+    {
+      "serverName": "claude.ai Google Sheets"
+    },
+    {
+      "serverName": "claude.ai Webflow"
+    },
+    {
+      "serverName": "claude.ai Intuit Mailchimp"
+    },
+    {
+      "serverName": "claude.ai Mixpanel EU"
+    },
+    {
+      "serverName": "claude.ai Mixpanel"
+    },
+    {
+      "serverName": "claude.ai Pipedrive MCP"
+    },
+    {
+      "serverName": "claude.ai ChytreSMS (Make Toolbox)"
+    },
+    {
+      "serverName": "claude.ai Fireflies"
+    },
+    {
+      "serverName": "claude.ai Keboola MCP"
+    },
+    {
+      "serverName": "claude.ai Pipedrive (Make Toolbox)"
+    },
+    {
+      "serverName": "claude.ai GitLab"
+    },
+    {
+      "serverName": "claude.ai Postman"
+    },
+    {
+      "serverName": "claude.ai Make"
+    },
+    {
+      "serverName": "claude.ai Gmail"
+    },
+    {
+      "serverName": "claude.ai Notion"
+    },
+    {
+      "serverName": "claude.ai monday.com"
+    },
+    {
+      "serverName": "claude.ai Linear"
+    },
+    {
+      "serverName": "claude.ai Intercom"
+    },
+    {
+      "serverName": "claude.ai HubSpot"
+    },
+    {
+      "serverName": "claude.ai Canva"
+    },
+    {
+      "serverName": "claude.ai Box"
+    },
+    {
+      "serverName": "claude.ai Asana"
+    }
+  ],
   "hooks": {
     "Notification": [
       {
@@ -188,16 +264,6 @@
           {
             "type": "command",
             "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
-          }
-        ]
-      },
-      {
-        "matcher": "^(startup|resume|clear|compact|fork)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash '/home/zimmi/.claude/hooks/herdr-agent-state.sh' session",
-            "timeout": 10
           }
         ]
       },
@@ -365,82 +431,5 @@
       "**Org-specific CLIs**: `glab` (GitLab CLI, preferred over `gh` per project CLAUDE.md), `jira` CLI, `lean-ctx` / `ctx_*` MCP tools, `codegraph` CLI"
     ]
   },
-  "voiceEnabled": true,
-  "deniedMcpServers": [
-    {
-      "serverName": "claude.ai Atlassian MCP"
-    },
-    {
-      "serverName": "claude.ai Atlassian Rovo"
-    },
-    {
-      "serverName": "claude.ai Google Slides"
-    },
-    {
-      "serverName": "claude.ai Google Sheets"
-    },
-    {
-      "serverName": "claude.ai Webflow"
-    },
-    {
-      "serverName": "claude.ai Intuit Mailchimp"
-    },
-    {
-      "serverName": "claude.ai Mixpanel EU"
-    },
-    {
-      "serverName": "claude.ai Mixpanel"
-    },
-    {
-      "serverName": "claude.ai Pipedrive MCP"
-    },
-    {
-      "serverName": "claude.ai ChytreSMS (Make Toolbox)"
-    },
-    {
-      "serverName": "claude.ai Fireflies"
-    },
-    {
-      "serverName": "claude.ai Keboola MCP"
-    },
-    {
-      "serverName": "claude.ai Pipedrive (Make Toolbox)"
-    },
-    {
-      "serverName": "claude.ai GitLab"
-    },
-    {
-      "serverName": "claude.ai Postman"
-    },
-    {
-      "serverName": "claude.ai Make"
-    },
-    {
-      "serverName": "claude.ai Gmail"
-    },
-    {
-      "serverName": "claude.ai Notion"
-    },
-    {
-      "serverName": "claude.ai monday.com"
-    },
-    {
-      "serverName": "claude.ai Linear"
-    },
-    {
-      "serverName": "claude.ai Intercom"
-    },
-    {
-      "serverName": "claude.ai HubSpot"
-    },
-    {
-      "serverName": "claude.ai Canva"
-    },
-    {
-      "serverName": "claude.ai Box"
-    },
-    {
-      "serverName": "claude.ai Asana"
-    }
-  ]
+  "voiceEnabled": true
 }

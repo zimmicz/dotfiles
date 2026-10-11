@@ -1,2 +1,0 @@
-#!/bin/sh
-exec "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx" hook redirect
