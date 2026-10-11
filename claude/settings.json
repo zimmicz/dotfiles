@@ -1,269 +1,7 @@
 {
-  "agentPushNotifEnabled": true,
-  "autoCompactEnabled": true,
-  "autoMode": {
-    "allow": [
-      "$defaults",
-      "Bash(glab mr view:*)",
-      "Bash(jira issue view:*)"
-    ],
-    "environment": [
-      "### Org-wide",
-      "**Organization**: CleverFarm (repos prefixed `cf-`, CleverAnalytics `can-`, plus `cf-knowledge-base`)",
-      "**Cloud provider(s)**: AWS (ECR registry `347810685165.dkr.ecr.eu-central-1.amazonaws.com`)",
-      "**Repository visibility**: Not queryable here (no remotes on this repo) — assume private per shipped default",
-      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
-      "**Secrets management**: None configured",
-      "**Default / protected branches**: Not queryable here (origin/HEAD unset, no remotes) — unknown",
-      "**CI/CD deploy targets**: AWS ECR (`347810685165.dkr.ecr.eu-central-1.amazonaws.com`); Terraform-managed AWS infra (S3, IAM) across sibling product repos (cf-agroevidence, can-infrastructure, cf-deployment, agrodata, automation) — prod and dev environments both present",
-      "**Network posture**: None configured",
-      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
-      "**Source control**: The trusted repo only (no remotes configured) — this folder holds CleverFarm/CleverAnalytics repos (cf-*, can-*) plus cf-knowledge-base, but none are checked out here as remotes",
-      "**Trusted internal domains**: cleverfarm.atlassian.net",
-      "**Trusted cloud buckets**: cf-satellite (config-derived — not a confirmed upload destination; uploads of local data still require confirmation), cf-satellite-test (config-derived — not a confirmed upload destination; uploads of local data still require confirmation)",
-      "**Key internal services**: None configured",
-      "**Internal package registry**: None configured",
-      "**Sensitive data locations & audiences**: `.env` files and Terraform state/vars across cf-agroevidence, can-frontend, can-infrastructure, automation, agrodata, asahi, can-news, can-notifications, can-prices, can-users, cf-deployment (contain credentials/config); `can-infrastructure/terraform/auth0/vault.tf` and related auth0 Terraform (identity/auth secrets); `cf-deployment/scripts/aws-prod_sync.sh` and `aws-share-prod-snapshots.py` (prod data handling scripts) — share only with audiences cleared at the named+specifics bar",
-      "**Data retention / declassification**: None configured",
-      "**Sensitive remote targets**: any host/namespace/resource containing `prod` or `production` as a whole segment — e.g. `can-frontend/terraform/prod/*`, `cf-agroevidence/terraform/prod/*`, `asahi/helm/asahi-service/values-prod.yaml`, `cf-deployment/scripts/aws-prod_sync.sh`, `aws-share-prod-snapshots.py`, k8s namespace patterns matching `prod`",
-      "**Protected deployment namespaces / environments**: `prod` Terraform workspaces/dirs seen across cf-agroevidence, can-frontend, and related repos (e.g. `*/terraform/prod/*`)",
-      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; `cf-agroevidence/terraform/{dev,prod}/iam.tf`; `can-infrastructure/terraform/auth0/*` (auth/identity config); any Terraform under a `prod` directory",
-      "### User-specific",
-      "**Primary use of Claude Code**: software development",
-      "**Trusted repo**: This folder (/home/zimmi/work/cleverfarm/repos) — no git remotes configured; holds CleverFarm (cf-*) and CleverAnalytics (can-*) repos plus cf-knowledge-base",
-      "**Org-specific CLIs**: `glab` (GitLab CLI, preferred over `gh` per project CLAUDE.md), `jira` CLI, `lean-ctx` / `ctx_*` MCP tools, `codegraph` CLI"
-    ],
-    "soft_deny": [
-      "$defaults",
-      "Bash(terraform apply:*) in */terraform/prod/*",
-      "Bash(aws s3 rm:*) against cf-satellite*"
-    ]
-  },
-  "editorMode": "vim",
-  "enabledPlugins": {
-    "caveman@caveman": true,
-    "cf-bug-report@cleverfarm": true,
-    "cf-cc@cleverfarm": true,
-    "cf-cli-skill@cleverfarm": true,
-    "cf-eod@cleverfarm": true,
-    "cf-investigator@cleverfarm": true,
-    "cf-kb@cleverfarm": true,
-    "cf-planning@cleverfarm": true,
-    "cf-release@cleverfarm": true,
-    "cf-vault-db@cleverfarm": true,
-    "mempalace@mempalace": false,
-    "ponytail@ponytail": true,
-    "ralph-loop@claude-plugins-official": true,
-    "slack@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true
-  },
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
-  "extraKnownMarketplaces": {
-    "caveman": {
-      "source": {
-        "repo": "JuliusBrussee/caveman",
-        "source": "github"
-      }
-    },
-    "cleverfarm": {
-      "source": {
-        "path": "/home/zimmi/work/cleverfarm/repos/cf-knowledge-base",
-        "source": "directory"
-      }
-    },
-    "mempalace": {
-      "source": {
-        "repo": "milla-jovovich/mempalace",
-        "source": "github"
-      }
-    },
-    "voicemode": {
-      "source": {
-        "repo": "mbailey/voicemode",
-        "source": "github"
-      }
-    }
-  },
-  "hooks": {
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "command": "workmux set-window-status waiting",
-            "type": "command"
-          }
-        ],
-        "matcher": "permission_prompt|elicitation_dialog"
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe",
-            "type": "command"
-          }
-        ],
-        "matcher": ".*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "workmux set-window-status working",
-            "type": "command"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook read-dedup",
-            "type": "command"
-          }
-        ],
-        "matcher": "Read"
-      }
-    ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe",
-            "type": "command"
-          }
-        ],
-        "matcher": ".*"
-      }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "bash ~/.claude/hooks/validate-bash.sh",
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash ~/.claude/hooks/plan-mode-guard.sh",
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      },
-      {
-        "hooks": [
-          {
-            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook rewrite",
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash|bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook redirect",
-            "type": "command"
-          }
-        ],
-        "matcher": "Read|read|ReadFile|read_file|View|view|Grep|grep|Search|search|ListFiles|list_files|ListDirectory|list_directory|Glob|glob"
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe",
-            "type": "command"
-          }
-        ],
-        "matcher": ".*"
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe",
-            "type": "command"
-          }
-        ],
-        "matcher": ".*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash '/home/zimmi/.claude/hooks/herdr-agent-state.sh' session",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "^(startup|resume|clear|compact|fork)$"
-      },
-      {
-        "hooks": [
-          {
-            "command": "workmux register-agent",
-            "type": "command"
-          }
-        ],
-        "matcher": "startup|resume|clear|fork"
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe",
-            "type": "command"
-          }
-        ],
-        "matcher": ".*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "workmux set-window-status done",
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe",
-            "type": "command"
-          }
-        ],
-        "matcher": ".*"
-      },
-      {
-        "hooks": [
-          {
-            "command": "codegraph prompt-hook",
-            "type": "command"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "command": "workmux set-window-status working",
-            "type": "command"
-          }
-        ]
-      }
-    ]
-  },
-  "model": "sonnet",
   "permissions": {
     "allow": [
       "Bash(find:*)",
@@ -336,11 +74,236 @@
       "mcp__lean-ctx__ctx_provider",
       "mcp__codegraph__*"
     ],
-    "defaultMode": "auto",
     "deny": [
       "Grep",
       "Glob"
+    ],
+    "defaultMode": "auto"
+  },
+  "model": "fable",
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt|elicitation_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "workmux set-window-status waiting"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "workmux set-window-status working"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook read-dedup"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/validate-bash.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/plan-mode-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook rewrite"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|read|ReadFile|read_file|View|view|Grep|grep|Search|search|ListFiles|list_files|ListDirectory|list_directory|Glob|glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook redirect"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      },
+      {
+        "matcher": "^(startup|resume|clear|compact|fork)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '/home/zimmi/.claude/hooks/herdr-agent-state.sh' session",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "workmux register-agent"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "workmux set-window-status done"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codegraph prompt-hook"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "workmux set-window-status working"
+          }
+        ]
+      }
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/simple-statusline.sh"
+  },
+  "enabledPlugins": {
+    "caveman@caveman": true,
+    "cf-bug-report@cleverfarm": true,
+    "cf-cc@cleverfarm": true,
+    "cf-cli-skill@cleverfarm": true,
+    "cf-eod@cleverfarm": true,
+    "cf-investigator@cleverfarm": true,
+    "cf-kb@cleverfarm": true,
+    "cf-planning@cleverfarm": true,
+    "cf-release@cleverfarm": true,
+    "cf-vault-db@cleverfarm": true,
+    "mempalace@mempalace": false,
+    "ponytail@ponytail": true,
+    "ralph-loop@claude-plugins-official": true,
+    "slack@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
+    },
+    "cleverfarm": {
+      "source": {
+        "source": "directory",
+        "path": "/home/zimmi/work/cleverfarm/repos/cf-knowledge-base"
+      }
+    },
+    "mempalace": {
+      "source": {
+        "source": "github",
+        "repo": "milla-jovovich/mempalace"
+      }
+    },
+    "voicemode": {
+      "source": {
+        "source": "github",
+        "repo": "mbailey/voicemode"
+      }
+    }
   },
   "pluginConfigs": {
     "cf-eod@cleverfarm": {
@@ -352,18 +315,132 @@
       }
     }
   },
-  "skipAutoPermissionPrompt": true,
-  "skipDangerousModePermissionPrompt": true,
-  "skipWorkflowUsageWarning": true,
-  "statusLine": {
-    "command": "~/.claude/simple-statusline.sh",
-    "type": "command"
-  },
-  "theme": "dark",
   "tui": "fullscreen",
   "voice": {
     "enabled": true,
     "mode": "hold"
   },
-  "voiceEnabled": true
+  "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark",
+  "editorMode": "vim",
+  "autoCompactEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(glab mr view:*)",
+      "Bash(jira issue view:*)"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Bash(terraform apply:*) in */terraform/prod/*",
+      "Bash(aws s3 rm:*) against cf-satellite*"
+    ],
+    "environment": [
+      "### Org-wide",
+      "**Organization**: CleverFarm (repos prefixed `cf-`, CleverAnalytics `can-`, plus `cf-knowledge-base`)",
+      "**Cloud provider(s)**: AWS (ECR registry `347810685165.dkr.ecr.eu-central-1.amazonaws.com`)",
+      "**Repository visibility**: Not queryable here (no remotes on this repo) — assume private per shipped default",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured",
+      "**Default / protected branches**: Not queryable here (origin/HEAD unset, no remotes) — unknown",
+      "**CI/CD deploy targets**: AWS ECR (`347810685165.dkr.ecr.eu-central-1.amazonaws.com`); Terraform-managed AWS infra (S3, IAM) across sibling product repos (cf-agroevidence, can-infrastructure, cf-deployment, agrodata, automation) — prod and dev environments both present",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
+      "**Source control**: The trusted repo only (no remotes configured) — this folder holds CleverFarm/CleverAnalytics repos (cf-*, can-*) plus cf-knowledge-base, but none are checked out here as remotes",
+      "**Trusted internal domains**: cleverfarm.atlassian.net",
+      "**Trusted cloud buckets**: cf-satellite (config-derived — not a confirmed upload destination; uploads of local data still require confirmation), cf-satellite-test (config-derived — not a confirmed upload destination; uploads of local data still require confirmation)",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: `.env` files and Terraform state/vars across cf-agroevidence, can-frontend, can-infrastructure, automation, agrodata, asahi, can-news, can-notifications, can-prices, can-users, cf-deployment (contain credentials/config); `can-infrastructure/terraform/auth0/vault.tf` and related auth0 Terraform (identity/auth secrets); `cf-deployment/scripts/aws-prod_sync.sh` and `aws-share-prod-snapshots.py` (prod data handling scripts) — share only with audiences cleared at the named+specifics bar",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any host/namespace/resource containing `prod` or `production` as a whole segment — e.g. `can-frontend/terraform/prod/*`, `cf-agroevidence/terraform/prod/*`, `asahi/helm/asahi-service/values-prod.yaml`, `cf-deployment/scripts/aws-prod_sync.sh`, `aws-share-prod-snapshots.py`, k8s namespace patterns matching `prod`",
+      "**Protected deployment namespaces / environments**: `prod` Terraform workspaces/dirs seen across cf-agroevidence, can-frontend, and related repos (e.g. `*/terraform/prod/*`)",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; `cf-agroevidence/terraform/{dev,prod}/iam.tf`; `can-infrastructure/terraform/auth0/*` (auth/identity config); any Terraform under a `prod` directory",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development",
+      "**Trusted repo**: This folder (/home/zimmi/work/cleverfarm/repos) — no git remotes configured; holds CleverFarm (cf-*) and CleverAnalytics (can-*) repos plus cf-knowledge-base",
+      "**Org-specific CLIs**: `glab` (GitLab CLI, preferred over `gh` per project CLAUDE.md), `jira` CLI, `lean-ctx` / `ctx_*` MCP tools, `codegraph` CLI"
+    ]
+  },
+  "voiceEnabled": true,
+  "deniedMcpServers": [
+    {
+      "serverName": "claude.ai Atlassian MCP"
+    },
+    {
+      "serverName": "claude.ai Atlassian Rovo"
+    },
+    {
+      "serverName": "claude.ai Google Slides"
+    },
+    {
+      "serverName": "claude.ai Google Sheets"
+    },
+    {
+      "serverName": "claude.ai Webflow"
+    },
+    {
+      "serverName": "claude.ai Intuit Mailchimp"
+    },
+    {
+      "serverName": "claude.ai Mixpanel EU"
+    },
+    {
+      "serverName": "claude.ai Mixpanel"
+    },
+    {
+      "serverName": "claude.ai Pipedrive MCP"
+    },
+    {
+      "serverName": "claude.ai ChytreSMS (Make Toolbox)"
+    },
+    {
+      "serverName": "claude.ai Fireflies"
+    },
+    {
+      "serverName": "claude.ai Keboola MCP"
+    },
+    {
+      "serverName": "claude.ai Pipedrive (Make Toolbox)"
+    },
+    {
+      "serverName": "claude.ai GitLab"
+    },
+    {
+      "serverName": "claude.ai Postman"
+    },
+    {
+      "serverName": "claude.ai Make"
+    },
+    {
+      "serverName": "claude.ai Gmail"
+    },
+    {
+      "serverName": "claude.ai Notion"
+    },
+    {
+      "serverName": "claude.ai monday.com"
+    },
+    {
+      "serverName": "claude.ai Linear"
+    },
+    {
+      "serverName": "claude.ai Intercom"
+    },
+    {
+      "serverName": "claude.ai HubSpot"
+    },
+    {
+      "serverName": "claude.ai Canva"
+    },
+    {
+      "serverName": "claude.ai Box"
+    },
+    {
+      "serverName": "claude.ai Asana"
+    }
+  ]
 }
