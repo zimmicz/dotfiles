@@ -6,7 +6,6 @@ export LC_NUMERIC=C
 SCRIPTS="$HOME/.claude/scripts"
 LOG_DIR="$HOME/.claude/logs"
 USAGE_DIR="$HOME/.claude/usage"
-SLACK_CHANNEL_ID="C0C97UE8F2L"
 DATE="$(date -d yesterday +%F)"
 LOG_FILE="$LOG_DIR/nightly-$(date +%F).log"
 USAGE_TXT="$LOG_DIR/usage-$DATE.txt"
@@ -40,9 +39,7 @@ fi
 
 if [ "$DRY_RUN" = 0 ] && [ -s "$USAGE_TXT" ]; then
   echo "--- usage slack post"
-  claude -p "Read $USAGE_TXT and send its contents VERBATIM as a Slack message to channel_id $SLACK_CHANNEL_ID. It contains a markdown table - pass it through exactly as written, keeping every pipe and separator row. Do not add commentary, do not reformat, do not recompute any number. Reply with 'sent' when done." \
-    --allowedTools "Read mcp__plugin_slack_slack__slack_send_message" \
-    --add-dir "$HOME/.claude"
+  "$SCRIPTS/slack-post.sh" "Claude usage $DATE" < "$USAGE_TXT"
   echo "slack exit: $?"
 fi
 

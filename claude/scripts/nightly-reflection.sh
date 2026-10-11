@@ -10,7 +10,6 @@ CLAUDE_MD="$HOME/.claude/CLAUDE.md"
 DIGEST="$HOME/.claude/scripts/session-digest.sh"
 MAX_FILES=60
 MAX_LEARNED=50
-SLACK_CHANNEL_ID="C0C97UE8F2L"
 
 mkdir -p "$LOG_DIR"
 exec >>"$LOG_FILE" 2>&1
@@ -62,11 +61,11 @@ PROMPT="Read $LEARNED_FILE and $CLAUDE_MD first, so you know what rules already 
 - GLOBAL (tool choice, communication style, workflow habits, cross-project): append one terse bullet (fragments OK, sacrifice grammar for concision, matching existing style) under '## Learned' in $LEARNED_FILE. Skip duplicates of what's already there or in $CLAUDE_MD.
 - REPO-SPECIFIC (conventions, gotchas, commands, structure of one codebase): append to <repo>/CLAUDE.local.md under a '## Learned' heading (create the file with that heading if missing), where <repo> is the 'repo:' path of the session. Skip duplicates of what's already in that file or in <repo>/CLAUDE.md. Skip if repo is 'none'.
 - Ticket details, one-off facts, things Claude got right: skip.
-Append only, never delete or rewrite existing bullets, do not touch any other file.$TRUNC_NOTE$COMPACT_NOTE Finally send a short plain-text Slack message to channel_id $SLACK_CHANNEL_ID summarizing: how many sessions you reviewed, what new rules you added and where (or that there were none), one line why each. Keep the Slack message terse. Print the same summary as your final answer."
+Append only, never delete or rewrite existing bullets, do not touch any other file.$TRUNC_NOTE$COMPACT_NOTE Finally print a terse summary as your final answer: how many sessions you reviewed, what new rules you added and where (or that there were none), one line why each. Do not send it anywhere."
 
-claude -p "$PROMPT" \
-  --allowedTools "Read Edit Write mcp__plugin_slack_slack__slack_send_message" \
-  "${ADD_DIRS[@]}"
+SUMMARY=$(claude -p "$PROMPT" --allowedTools "Read Edit Write" "${ADD_DIRS[@]}")
+echo "$SUMMARY"
+printf '%s' "$SUMMARY" | "$HOME/.claude/scripts/slack-post.sh" "Claude reflection" || echo "slack post failed"
 
 echo "$NOW" > "$STATE_FILE"
 echo "=== done $(date -Iseconds) ==="
