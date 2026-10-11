@@ -1,12 +1,42 @@
 #!/bin/zsh
 set -euo pipefail
 
-MAX=${MAX:-10}
+MAX=${MAX:-1}
+REPOS=~/work/cleverfarm/repos
 LOG_DIR=~/.local/state/cf-triage
+STAMP=$LOG_DIR/sentry-today
+NOTES=$LOG_DIR/notes.txt
+PIPELINE_LABELS='triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed'
 mkdir -p $LOG_DIR
 
+DRY=0
+[[ "${1:-}" == "--dry-run" ]] && DRY=1
+
+if (( ! DRY )) && [[ "$(cat $STAMP 2>/dev/null)" == "$(date +%F)" ]]; then
+  echo "already ran today"
+  exit 0
+fi
+
+OPEN=()
+while read -r KEY STATUS REPO; do
+  [[ -z "$KEY" ]] && continue
+  STATES=""
+  [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] && STATES=$(cd $REPOS/$REPO && glab mr list --all --search $KEY -F json 2>/dev/null | jq -r '[.[].state] | unique | join(",")' || true)
+  [[ -n "$STATES" && "$STATES" != *opened* && "$STATES" != *locked* ]] && continue
+  OPEN+=("$KEY ($STATUS, MR: ${STATES:-none})")
+done < <(jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "project = DEV AND labels in ($PIPELINE_LABELS) AND statusCategory != Done" '$q|@uri')&fields=key,labels,status" \
+  | jq -r '.issues[] | "\(.key) \(.fields.status.name | gsub(" "; "_")) \(.fields.labels | map(select(startswith("repo-"))) | first // "" | ltrimstr("repo-"))"')
+if (( ${#OPEN} )); then
+  echo "blocked: ${(j:, :)OPEN}"
+  if (( ! DRY )); then
+    echo "no new Sentry issue today, blocking: ${(j:, :)OPEN}" >>$NOTES
+    date +%F >$STAMP
+    exit 0
+  fi
+fi
+
 MODE="Create the tickets and assign the Sentry issues."
-[[ "${1:-}" == "--dry-run" ]] && MODE="DRY RUN: do NOT create tickets, do NOT update Sentry. Only print what you would create (summary, labels, product, repo)."
+(( DRY )) && MODE="DRY RUN: do NOT create tickets, do NOT update Sentry. Only print what you would create (summary, labels, product, repo, belongs-in-Sentry verdict)."
 
 PROMPT="You turn Sentry issues into Jira tickets. No human is present, never ask questions. $MODE
 
@@ -24,11 +54,12 @@ SHORTID = the full Sentry short id incl. project prefix, e.g. CAN-FRONTEND-JS or
    - labels: triage, sentry-<SHORTID> (each), repo-<repo>
    - customfield_13543: [{\"id\": \"<product id>\"}]
    - description (Jira wiki markup, English, facts only, no speculation): Sentry link(s), project, culprit, level, events, users, first/last seen, environment, release, top in-app stack frames verbatim in {code} block, relevant tags, request URL/method.
+   - description MUST end with section 'h3. Belongs in Sentry?' = yes/no + one-line reason. 'no' = noise to filter client-side: browser extension, bot/crawler, user offline or cancelled request, ChunkLoadError after deploy, third-party script, unsupported browser, expected 4xx, dev/localhost environment. Name the filter that should catch it (ignoreErrors / denyUrls / beforeSend) and whether an existing rule should already have matched.
    Repo + product by Sentry project:
    - fe-monitoring -> repo cf-farm-frontend; product by route: /telematics 11714, /sensors or /irrigation 11712, /actions /parcels /catalogues /stores 11711, satellite/biomonitoring/prescription 11713, else 11710
    - can-frontend -> repo can-frontend, product 11707
 5. update_issue assignedTo 'user:3546621', reason 'Jira: https://cleverfarm.atlassian.net/browse/<KEY>'.
-6. Final answer: one line per Sentry issue: '<SHORTID> -> <KEY> (new|existing)' or '<SHORTID> -> error: <why>'."
+6. Final answer: one line per Sentry issue: '<SHORTID> -> <KEY> (new|existing) [sentry: yes|no]' or '<SHORTID> -> error: <why>'."
 
 claude -p "$PROMPT" \
   --model sonnet \
@@ -36,5 +67,7 @@ claude -p "$PROMPT" \
   --output-format json \
   </dev/null | tee $LOG_DIR/sentry-$(date +%F-%H%M).json | jq -r '.result, "cost: $\(.total_cost_usd)"' | tee $LOG_DIR/sentry-last.txt
 
-[[ "${1:-}" == "--dry-run" ]] || grep -oE '^[A-Z0-9-]+ -> DEV-[0-9]+ \(new' $LOG_DIR/sentry-last.txt \
-  | sed -E 's|^([A-Z0-9-]+) -> (DEV-[0-9]+).*|new ticket [\2](https://cleverfarm.atlassian.net/browse/\2) from Sentry \1|' >>$LOG_DIR/notes.txt || true
+(( DRY )) && exit 0
+date +%F >$STAMP
+grep -oE '^[A-Z0-9-]+ -> DEV-[0-9]+ \(new.*' $LOG_DIR/sentry-last.txt \
+  | sed -E 's|^([A-Z0-9-]+) -> (DEV-[0-9]+)[^[]*(\[.*\])?|new ticket [\2](https://cleverfarm.atlassian.net/browse/\2) from Sentry \1 \3|' >>$NOTES || true

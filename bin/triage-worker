@@ -5,9 +5,10 @@ MAX=${MAX:-3}
 REPOS=~/work/cleverfarm/repos
 LOG_DIR=~/.local/state/cf-triage
 AI_MARK="AI triage (Claude, headless)"
-SLACK_CHANNEL=C0C49QDLGAH
 NOTES=$LOG_DIR/notes.txt
 mkdir -p $LOG_DIR
+
+[[ "${TRIAGE_LOCKED:-}" == 1 ]] || exec env TRIAGE_LOCKED=1 flock -n $LOG_DIR/.lock $0 "$@"
 
 search() {
   jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=labels,comment&maxResults=$2"
@@ -18,7 +19,16 @@ note() {
 }
 
 relabel() {
-  jira PUT "/rest/api/2/issue/$1" "{\"update\":{\"labels\":[{\"remove\":\"$2\"},{\"add\":\"$3\"}]}}" >/dev/null
+  local OPS="{\"add\":\"$3\"}"
+  [[ -n "$2" ]] && OPS="{\"remove\":\"$2\"},$OPS"
+  jira PUT "/rest/api/2/issue/$1" "{\"update\":{\"labels\":[$OPS]}}" >/dev/null
+}
+
+resolve_sentry() {
+  local KEY=$1; shift
+  claude -p "Sentry org cleverfarm-sro, regionUrl https://us.sentry.io. No human present, never ask. For EACH of these issue short ids: $* -> update_issue status 'resolved', reason 'Jira $KEY released'. Final answer: 'done' if all succeeded, else the errors." \
+    --model haiku --allowedTools "mcp__claude_ai_Sentry__update_issue" --output-format json </dev/null 2>>$LOG_DIR/$KEY.log \
+    | jq -e '(.is_error | not) and (.permission_denials | length == 0) and (.result | test("^done"; "i"))' >/dev/null
 }
 
 analyze() {
@@ -67,6 +77,7 @@ if [[ -n "${1:-}" ]]; then
   NEW=""
   IMPL=""
   REPLIES=""
+  DONE=""
   LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
   if [[ " $LABELS " == *" ai-fix "* ]]; then
     IMPL=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
@@ -76,9 +87,11 @@ if [[ -n "${1:-}" ]]; then
 else
   NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
   IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' ${IMPL_MAX:-1} | jq -r "$ROWS_JQ")
-  REPLIES=$(search 'project = DEV AND labels = triaged AND statusCategory = "To Do" AND updated >= -2h' 20 \
-    | jq -r --arg m "$AI_MARK" '.issues[] | select((.fields.comment.comments | last | .body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not)' \
+  REPLIES=$(search 'project = DEV AND labels = triaged AND statusCategory = "To Do"' 20 \
+    | jq -r --arg m "$AI_MARK" '.issues[] | select((.fields.comment.comments | length > 0) and ((.fields.comment.comments | last | .body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not))' \
     | jq -rs "{issues: .} | $ROWS_JQ")
+  DONE=$(search 'project = DEV AND labels in (triaged, ai-mr) AND labels not in (ai-done) AND status = Done' 5 \
+    | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
 fi
 
 while read -r KEY REPO; do
@@ -97,11 +110,12 @@ while read -r KEY REPO; do
   if implement $KEY $REPO; then relabel $KEY ai-fix ai-mr; note $KEY "draft MR: $(cat $LOG_DIR/$KEY.mr)"; else relabel $KEY ai-fix ai-fix-failed; note $KEY "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$KEY.log\`"; fi
 done <<<"$IMPL"
 
-if [[ -s $NOTES ]]; then
-  MSG="**cf-triage run $(date '+%H:%M')**
-$(sed 's/^/• /' $NOTES)"
-  claude -p "Send this message VERBATIM to Slack channel_id $SLACK_CHANNEL. Do not add, reformat or comment. Reply 'sent'.
+while read -r KEY IDS; do
+  [[ -z "$KEY" || -z "$IDS" ]] && continue
+  if resolve_sentry $KEY ${=IDS}; then relabel $KEY "" ai-done; note $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
+done <<<"$DONE"
 
-$MSG" --model haiku --allowedTools "mcp__plugin_slack_slack__slack_send_message mcp__claude_ai_Slack__slack_send_message" --output-format json </dev/null 2>/dev/null \
-    | jq -e '(.is_error | not) and (.permission_denials | length == 0)' >/dev/null && rm -f $NOTES
+if [[ -s $NOTES ]]; then
+  printf '**cf-triage run %s**\n%s\n' "$(date '+%H:%M')" "$(sed 's/^/• /' $NOTES)" \
+    | ~/.claude/scripts/slack-post.sh "cf-triage" && rm -f $NOTES
 fi

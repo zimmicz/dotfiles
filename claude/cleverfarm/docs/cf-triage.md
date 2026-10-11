@@ -6,22 +6,24 @@ Unattended pipeline on my laptop. Turns Sentry issues into DEV bugs, analyzes th
 
 ```
 Sentry (fe-monitoring, can-frontend)
-  │  sentry-triage          every weekday hour, max 10 new tickets/run
+  │  sentry-triage          first run of each workday, 1 new ticket, ONLY if no pipeline ticket is open
   ▼
-DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      Sentry issue assigned to me + Jira link note
-  │  triage-worker          max 3/run: cf-work --no-claim → claude -p "/cf-work KEY --headless"
+DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentry; description ends with "Belongs in Sentry?" verdict
+  │  triage-worker          hourly: cf-work --no-claim → claude -p "/cf-work KEY --headless"
   ▼
-[triaged]  worktree + PLAN.md + Czech Jira comment (🤖 + "AI triage" marker)
-  │  I reply in Jira  →  next run answers, updates PLAN.md   (To Do only, reply ≤2h old)
+[triaged]  worktree + PLAN.md (first section: Belongs in Sentry? → filter fix if no) + Czech Jira comment (🤖 + "AI triage" marker)
+  │  I reply in Jira  →  next hourly run answers, updates PLAN.md   (To Do only, any age)
   │  I add label ai-fix
   ▼  triage-worker          max 1/run: cf-work (claims) → claude -p "/cf-ticket KEY --headless"
 [ai-mr]  draft MR, no reviewers, assigned to me + Jira comment with MR link
-  │  I review, mark ready, add reviewers, merge, after release resolve all sentry-* issues
-  ▼
-done
+  │  I review, mark ready, add reviewers, merge; release moves ticket to Done
+  ▼  triage-worker          ticket Done → resolves every sentry-* issue (haiku + Sentry MCP)
+[ai-done]  → next morning sentry-triage picks the next issue
 ```
 
-Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts a summary to Slack `#cf-triage` (private, C0C49QDLGAH).
+One issue at a time: `sentry-triage` skips the day (Slack note) while any ticket labelled `triage|triaged|triage-failed|ai-fix|ai-mr|ai-fix-failed` is not Done AND its MR is not merged/closed (`glab mr list --all --search KEY` in the `repo-*` repo; no MR at all = blocking, so failed/unfixed tickets block until closed). Jira status doesn't matter — `On nightly` with a merged MR is fine. Sentry resolve waits for status `Done` (prod release), not Release candidate. Stamp `~/.local/state/cf-triage/sentry-today` = already ran today (delete to re-run).
+
+Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts a summary to Slack `#zimmi-claude` via `~/.claude/scripts/slack-post.sh` (incoming webhook, no LLM).
 
 ## Labels
 
@@ -35,20 +37,22 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | `ai-fix` | **my approval** to implement PLAN.md | me |
 | `ai-mr` | draft MR exists | triage-worker |
 | `ai-fix-failed` | agent bailed out (see its Jira comment) or no MR | triage-worker |
+| `ai-done` | ticket Done, Sentry issues resolved | triage-worker |
 
 ## Files
 
 | path | what |
 |---|---|
-| `~/dotfiles/bin/sentry-triage` | stage 1: claude -p (sonnet) + Sentry MCP + `jira` → tickets. `--dry-run`, `MAX=` |
-| `~/dotfiles/bin/triage-worker` | stages 2–4: triage, reply follow-up, implement; Slack summary. `triage-worker DEV-X` = one ticket (implements if it has `ai-fix`). `MAX=`, `IMPL_MAX=` |
+| `~/dotfiles/bin/sentry-triage` | stage 1: open-ticket gate + daily stamp, then claude -p (sonnet) + Sentry MCP + `jira` → ticket. `--dry-run` (ignores gate + stamp), `MAX=` (default 1) |
+| `~/dotfiles/bin/triage-worker` | stages 2–5: triage, reply follow-up, implement, resolve Sentry on Done; Slack summary. flock'd (manual run while timer runs = exits). `triage-worker DEV-X` = one ticket (implements if it has `ai-fix`). `MAX=`, `IMPL_MAX=` |
 | `~/dotfiles/bin/cf-work` | worktree setup; `--no-launch`, `--no-claim` (skip assign + In Progress) |
 | `~/dotfiles/claude/skills/cf-work` | `--headless`: root-cause analysis → PLAN.md + comment; follow-up mode on replies |
 | `~/dotfiles/claude/skills/cf-ticket` | `--headless`: implement PLAN.md, verify, self-review, `/cf-mr --headless` |
 | `~/dotfiles/claude/skills/cf-mr` | `--headless`: `glab mr create --draft`, no reviewers, stays In Progress, FE plays Nightly preview |
-| `~/dotfiles/claude/systemd/cf-triage.{service,timer}` | symlinked to `~/.config/systemd/user/`; Mon–Fri hourly, `Persistent=true`, 110 min timeout |
+| `~/dotfiles/claude/systemd/cf-triage.{service,timer}` | symlinked to `~/.config/systemd/user/`; Mon–Fri hourly 07–18, `Persistent=true`, 110 min timeout |
 | `~/.config/cf-triage.env` | `JIRA_EMAIL`, `JIRA_TOKEN` (0600, not in git) |
-| `~/.local/state/cf-triage/` | `<KEY>.log`, `sentry-*.json`, `sentry-last.txt`, `notes.txt` (pending Slack lines) |
+| `~/.local/state/cf-triage/` | `<KEY>.log`, `sentry-*.json`, `sentry-last.txt`, `sentry-today` (daily stamp), `notes.txt` (pending Slack lines), `.lock` |
+| `~/.config/claude/slack-webhook` | incoming webhook URL for `#zimmi-claude` (0600, not in git) |
 | `~/dotfiles/gitignore` | ignores `PLAN.md`, `TICKET.md`, `install.log`, `.codegraph/` so MRs don't pick them up |
 
 ## Setup
@@ -76,10 +80,11 @@ Prereqs (already done):
 
 ## Test one ticket by hand
 
-1. `MAX=1 sentry-triage --dry-run` → preview; `MAX=1 sentry-triage` → 1 real ticket
+1. `sentry-triage --dry-run` → preview (shows gate verdict too); `rm ~/.local/state/cf-triage/sentry-today; sentry-triage` → 1 real ticket (only if nothing open)
 2. `triage-worker DEV-XXXX` → analysis (any DEV ticket with a `repo-*` label works)
 3. comment in Jira, `triage-worker` (no args) → reply answered
 4. add `ai-fix`, `triage-worker DEV-XXXX` → draft MR
+5. ticket Done → `triage-worker` (no args) → Sentry issues resolved, label `ai-done`
 
 Pick up manually instead: `cd ~/work/cleverfarm/repos/<repo> && cf-work DEV-XXXX` → claims ticket, reuses worktree + PLAN.md, launches interactive `/cf-ticket`.
 
@@ -102,17 +107,16 @@ Pick up manually instead: `cd ~/work/cleverfarm/repos/<repo> && cf-work DEV-XXXX
 
 ## Notifications
 
-- Slack `#cf-triage`, one message per run with activity; notes kept until a confirmed send (no permission denials).
-- Posts come from my account → Slack/Jira won't ping me. Real pings = Slack app incoming webhook (not set up).
+- Slack `#zimmi-claude` via incoming webhook (`slack-post.sh`, same as nightly digests), one message per run with activity; notes kept until curl succeeds.
+- Webhook posts ping like any bot message. Jira comments come from my account → no Jira ping.
 
 ## Costs (DEV-2825 test)
 
-create ticket ~$0.45 · analysis ~$0.65 · reply ~$0.4 · implement ~$1.6 (opus) · Slack post (haiku) cents.
+create ticket ~$0.45 · analysis ~$0.65 · reply ~$0.4 · implement ~$1.6 (opus) · Sentry resolve (haiku) cents · Slack post free.
 
 ## Known gaps
 
-- reply after >2h offline is missed (window `updated >= -2h`)
 - editing an old non-AI comment counts as a new reply if it's the last one
 - MCP login expiry → runs fail, visible only as `*-failed` labels / Slack / logs
-- no auto-resolve in Sentry after release
-- Persistent catch-up can fire once on Saturday if the laptop was off at Friday's last slot
+- Persistent catch-up can fire once on Saturday if the laptop was off at Friday's last slot (daily stamp keeps it to one ticket)
+- a `triage-failed` / `ai-fix-failed` ticket blocks new issues until I close or relabel it

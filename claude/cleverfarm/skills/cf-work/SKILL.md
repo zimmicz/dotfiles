@@ -42,9 +42,9 @@ No user present — never ask, never wait. Replaces step 5:
 1. Steps 1–4 as above. Ticket is usually a Sentry bug: stack frames + culprit are in `TICKET.md`.
 2. Explore code (ctx_* / codegraph / `git log|blame`) to find root cause. Sentry `get_sentry_resource` / `search_events` for more events if the ticket lacks detail. Read-only — no code changes.
 3. Write `PLAN.md` in worktree root:
+   - **Belongs in Sentry?** — ALWAYS first, mandatory, yes/no + evidence. "No" = not our bug: browser extension, bot/crawler, user offline / cancelled request, ChunkLoadError after deploy, third-party script, unsupported browser, expected 4xx, dev/localhost env. Then the fix plan is a client-side filter at the Sentry init — `app/shared/services/SentryLogger.service.ts` (cf-farm-frontend) or `src/common/services/logger.ts` (can-frontend): `ignoreErrors`, `denyUrls` or `beforeSend`. Read the existing rules first; if one should already match, explain why it slipped through and fix that rule instead of adding another.
    - **Root cause** — hypothesis + evidence (file:line, frames, git history). Say plainly if unconfirmed.
    - **Fix plan** — stepped, files to touch, tests to add
-   - **Noise?** — if it's not our bug (browser quirk, network, expected 4xx), say so + recommend ignore/filter in Sentry
    - `[?]` / `[!]` checklist from step 4
 4. Post ONE Czech Jira comment via `jira add-comment <ticket-id> "<text>"` (bare `jira`, matches the permission allowlist) in the user's voice (`~/.claude/my-voice.md`): root cause, plan summary, `[?]` questions. First line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._` (triage-worker detects replies by it). Jira wiki markup, not markdown: `h3.` headings, `*` bullets, `#` numbered, `{{code}}` inline, `{code}` blocks.
 
