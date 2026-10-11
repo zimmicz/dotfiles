@@ -32,6 +32,7 @@ ln -sf ${DOTFILES_DIR}/claude/scripts/nightly-reflection.sh ~/.claude/scripts/ni
 ln -sf ${DOTFILES_DIR}/claude/scripts/nightly-claude.sh ~/.claude/scripts/nightly-claude.sh
 ln -sf ${DOTFILES_DIR}/claude/scripts/usage-report.sh ~/.claude/scripts/usage-report.sh
 ln -sf ${DOTFILES_DIR}/claude/scripts/model-prices.tsv ~/.claude/scripts/model-prices.tsv
+ln -sf ${DOTFILES_DIR}/claude/scripts/usage-dashboard.html ~/.claude/scripts/usage-dashboard.html
 ln -sf ${DOTFILES_DIR}/claude/commands/cost.md ~/.claude/commands/cost.md
 ln -sf ${DOTFILES_DIR}/claude/systemd/claude-reflection.service ${CONFIG_DIR}/systemd/user/claude-reflection.service
 ln -sf ${DOTFILES_DIR}/claude/systemd/claude-reflection.timer ${CONFIG_DIR}/systemd/user/claude-reflection.timer

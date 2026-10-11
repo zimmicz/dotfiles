@@ -23,6 +23,7 @@ echo "--- usage report for $DATE"
 if "$SCRIPTS/usage-report.sh" --date "$DATE" --format slack > "$USAGE_TXT.tmp"; then
   mv "$USAGE_TXT.tmp" "$USAGE_TXT"
   "$SCRIPTS/usage-report.sh" --date "$DATE" --format md --no-ledger > /dev/null
+  "$SCRIPTS/usage-report.sh" --date "$DATE" --format html --no-ledger > /dev/null
   cat "$USAGE_TXT"
 else
   echo "usage-report.sh failed (exit $?)"

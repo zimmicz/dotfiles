@@ -31,7 +31,8 @@ usage: $(basename "$0") [--date YYYY-MM-DD | --since YYYY-MM-DD | --week | --mon
   --since D    D .. today
   --week       last 7 days including today
   --month      last 30 days including today
-  --format     md (default, also written to $USAGE_DIR/report-<window>.md) or slack (plain text)
+  --format     md (default, also written to $USAGE_DIR/report-<window>.md), slack (plain text)
+               or html (30-day dashboard from the ledgers -> $USAGE_DIR/index.html)
   --no-ledger  do not update $USAGE_DIR/*.tsv
 EOF
 }
@@ -51,7 +52,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$SINCE" ] || { SINCE="$(date -d yesterday +%F)"; UNTIL="$SINCE"; }
-case "$FORMAT" in md|slack) ;; *) echo "bad --format: $FORMAT" >&2; exit 2 ;; esac
+case "$FORMAT" in md|slack|html) ;; *) echo "bad --format: $FORMAT" >&2; exit 2 ;; esac
 
 date -d "$SINCE" +%F >/dev/null 2>&1 || { echo "bad date: $SINCE" >&2; exit 2; }
 date -d "$UNTIL" +%F >/dev/null 2>&1 || { echo "bad date: $UNTIL" >&2; exit 2; }
@@ -73,7 +74,7 @@ JQ_PROG='
 | ($d.timestamp[0:19] + "Z" | fromdateiso8601) as $t
 | select($t >= $ws and $t < $we)
 | ($t | strflocaltime("%Y-%m-%d")) as $day
-| if ($d.type == "assistant") and ($d.requestId != null) and ($d.message.usage != null)
+| (if ($d.type == "assistant") and ($d.requestId != null) and ($d.message.usage != null)
      and (($d.message.model // "") | startswith("claude"))
   then ["U", $d.requestId, $day, ($d.sessionId // "unknown"), $d.message.model,
         ($d.message.usage.input_tokens // 0),
@@ -82,13 +83,23 @@ JQ_PROG='
         ($d.message.usage.cache_creation.ephemeral_1h_input_tokens // 0),
         ($d.message.usage.cache_read_input_tokens // 0),
         ($d.message.usage.output_tokens // 0),
-        ($d.cwd // ""), ($d.gitBranch // "")] | @tsv
+        ($d.cwd // ""), ($d.gitBranch // ""),
+        ($d.message.usage.output_tokens_details.thinking_tokens // 0),
+        ($d.agentId // "")] | @tsv
+  elif ($d.type == "user") and ($d.isCompactSummary == true)
+  then ["C", ($d.sessionId // "unknown"), $day] | @tsv
   elif ($d.type == "user") and ($d.isSidechain != true) and ($d.toolUseResult == null)
        and (($d.message.content | type) == "string")
   then ["L", ($d.sessionId // "unknown"), $day, ($t | tostring),
         ($d.cwd // ""), ($d.gitBranch // ""),
         ($d.message.content | gsub("[\n\r\t]"; " ") | .[0:80])] | @tsv
-  else empty end
+  elif ($d.type == "user") and ($d.isSidechain != true) and (($d.message.content | type) == "array")
+  then ($d.message.content[] | select(.type == "tool_result")
+        | ["R", ($d.sessionId // "unknown"), $day, .tool_use_id, (.content | tostring | length)] | @tsv)
+  else empty end),
+  (if ($d.type == "assistant") and ($d.isSidechain != true)
+   then ($d.message.content[]? | select(.type == "tool_use") | ["N", .id, .name] | @tsv)
+   else empty end)
 '
 
 : > "$TMP/raw.tsv"
@@ -100,6 +111,9 @@ fi
 
 grep '^U' "$TMP/raw.tsv" 2>/dev/null | sort -t$'\t' -u -k2,2 > "$TMP/u.tsv"
 grep '^L' "$TMP/raw.tsv" 2>/dev/null | sort -t$'\t' -k2,2 -k4,4n > "$TMP/l.tsv"
+grep '^N' "$TMP/raw.tsv" 2>/dev/null | sort -u > "$TMP/n.tsv"
+grep '^R' "$TMP/raw.tsv" 2>/dev/null > "$TMP/r.tsv"
+grep '^C' "$TMP/raw.tsv" 2>/dev/null > "$TMP/c.tsv"
 
 : > "$TMP/lctx.tsv"
 if [ -f "$LCTX_EVENTS" ]; then
@@ -152,7 +166,37 @@ function mix(prefix, cost,   i, n, arr, out, k, best, bl, bk, used) {
   delete names; delete vals; delete used
   return out
 }
+function ht(n) {
+  if (n >= 1000000) return sprintf("%.1fM", n / 1000000)
+  if (n >= 1000) return sprintf("%.0fk", n / 1000)
+  return sprintf("%d", n)
+}
+function tools(key,   k, n, i, bl, bk, out) {
+  n = 0
+  for (k in tt) {
+    if (index(k, key SUBSEP) != 1) continue
+    n++; tn[n] = substr(k, length(key SUBSEP) + 1); tv[n] = tt[k]
+  }
+  out = ""
+  for (i = 1; i <= n; i++) {
+    bl = -1; bk = 0
+    for (k = 1; k <= n; k++) if (!(k in tu) && tv[k] > bl) { bl = tv[k]; bk = k }
+    if (!bk) break
+    tu[bk] = 1
+    out = out (out == "" ? "" : ";") tn[bk] ":" int(tv[bk])
+  }
+  delete tn; delete tv; delete tu
+  return (out == "" ? "-" : out)
+}
 BEGIN { FS = OFS = "\t" }
+FILENAME == NFILE { tname[$2] = $3; next }
+FILENAME == RFILE {
+  if (!($4 in tname)) next
+  k = $3 SUBSEP $2
+  tt[k SUBSEP tname[$4]] += $5 / 4; ttot[k] += $5 / 4
+  next
+}
+FILENAME == CFILE { comp[$3 SUBSEP $2]++; next }
 FILENAME == PRICES {
   if ($0 ~ /^#/ || NF < 3) next
   if ($1 == "DEFAULT") { pin["DEFAULT"] = $2; pout["DEFAULT"] = $3; next }
@@ -177,6 +221,10 @@ FILENAME == LFILE {
   scost[key] += cost
   if ($11 != "") sproj[key] = $11
   if ($12 != "") sbr[key] = $12
+  ctx = $6 + $7 + $8 + $9
+  sctx[key] += ctx; if (ctx > speak[key]) speak[key] = ctx
+  sth[key] += $13
+  if ($14 != "" && !(key SUBSEP $14 in agents)) { agents[key SUBSEP $14] = 1; nsub[key]++ }
   mcost["S" SUBSEP key SUBSEP shortmodel(model)] += cost
   mcost["D" SUBSEP day SUBSEP shortmodel(model)] += cost
   if (!(day in dreq)) days[++nd] = day
@@ -194,7 +242,9 @@ END {
     l = lab[ssid[key]]; if (l == "") l = "-"
     print sday[key], ssid[key], (proj == "" ? "-" : proj), br, mix("S" SUBSEP key, scost[key]),
           sreq[key], s_in[key], s5[key], s1[key], scr[key], sout[key],
-          sprintf("%.6f", scost[key]), l > SESSOUT
+          sprintf("%.6f", scost[key]), l,
+          int(sctx[key] / sreq[key]), speak[key], sth[key], nsub[key] + 0, comp[key] + 0,
+          int(ttot[key]), tools(key) > SESSOUT
   }
   for (i = 1; i <= nd; i++) {
     day = days[i]
@@ -216,7 +266,8 @@ awk -f "$TMP/agg.awk" \
   -v PRICES="$PRICES" -v LFILE="$TMP/l.tsv" -v LCTX="$TMP/lctx.tsv" \
   -v CW5M="$CW5M" -v CW1H="$CW1H" -v CR="$CR" \
   -v SESSOUT="$TMP/sessions.new" -v DAYOUT="$TMP/days.new" \
-  "$PRICES" "$TMP/lctx.tsv" "$TMP/l.tsv" "$TMP/u.tsv"
+  -v NFILE="$TMP/n.tsv" -v RFILE="$TMP/r.tsv" -v CFILE="$TMP/c.tsv" \
+  "$PRICES" "$TMP/lctx.tsv" "$TMP/l.tsv" "$TMP/n.tsv" "$TMP/r.tsv" "$TMP/c.tsv" "$TMP/u.tsv"
 
 sort -t$'\t' -k1,1 -k12,12gr "$TMP/sessions.new" -o "$TMP/sessions.new"
 sort -t$'\t' -k1,1 "$TMP/days.new" -o "$TMP/days.new"
@@ -333,6 +384,19 @@ END {
   }
 }
 AWK
+
+if [ "$FORMAT" = html ]; then
+  touch "$SESS_LEDGER"
+  {
+    sed -e 's|@@WINDOW@@|'"$D30..$UNTIL"'|' -e '/@@SESSIONS@@/q' "$SCRIPT_DIR/usage-dashboard.html" | sed '$d'
+    awk -F'\t' -v s="$D30" -v u="$UNTIL" '$1 >= s && $1 <= u' "$SESS_LEDGER" | sed 's|</script|<\\/script|g'
+    sed -n '/@@SESSIONS@@/,/@@DAYS@@/p' "$SCRIPT_DIR/usage-dashboard.html" | sed '1d;$d'
+    awk -F'\t' -v s="$D30" -v u="$UNTIL" '$1 >= s && $1 <= u' "$DAY_LEDGER"
+    sed '1,/@@DAYS@@/d' "$SCRIPT_DIR/usage-dashboard.html"
+  } > "$USAGE_DIR/index.html"
+  echo "$USAGE_DIR/index.html"
+  exit 0
+fi
 
 if [ ! -s "$TMP/days.new" ]; then
   if [ "$FORMAT" = slack ]; then

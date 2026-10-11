@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude usage @@WINDOW@@</title>
+<style>
+:root { --bg:#fff; --fg:#1a1a1a; --mut:#6b6b6b; --line:#e3e3e3; --th:#f4f4f4; --acc:#2563eb; }
+@media (prefers-color-scheme: dark) { :root { --bg:#111; --fg:#e8e8e8; --mut:#9a9a9a; --line:#2a2a2a; --th:#1b1b1b; --acc:#60a5fa; } }
+* { box-sizing:border-box }
+body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui,sans-serif }
+h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 8px }
+.mut { color:var(--mut) }
+.kpi { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0 }
+.kpi div { min-width:120px; padding:8px 12px; border:1px solid var(--line); border-radius:6px }
+.kpi b { display:block; font-size:20px } .kpi span { font-size:12px; color:var(--mut) }
+.wrap { overflow-x:auto }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; white-space:nowrap }
+th, td { padding:4px 8px; border-bottom:1px solid var(--line); text-align:right }
+th:first-child, td:first-child, th.l, td.l { text-align:left }
+th { background:var(--th); cursor:pointer; position:sticky; top:0; user-select:none }
+th.on { color:var(--acc) }
+td.l.p { max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+small { color:var(--mut) }
+</style>
+</head>
+<body>
+<h1>Claude usage <span class="mut">@@WINDOW@@</span></h1>
+<div class="mut">notional = list API prices, not plan billing · click headers to sort</div>
+<div class="kpi" id="kpi"></div>
+<h2>Days</h2><div class="wrap"><table id="days"></table></div>
+<h2>Tool results in context <small>main chain only, tokens ≈ bytes/4</small></h2><div class="wrap"><table id="tools"></table></div>
+<h2>Sessions <small>split at midnight</small></h2><div class="wrap"><table id="sessions"></table></div>
+<script id="sessions-tsv" type="text/tsv">
+@@SESSIONS@@
+</script>
+<script id="days-tsv" type="text/tsv">
+@@DAYS@@
+</script>
+<script>
+const tsv = id => document.getElementById(id).textContent.split("\n").filter(Boolean).map(l => l.split("\t"));
+const n = v => +v || 0;
+const ht = v => v >= 1e6 ? (v/1e6).toFixed(1)+"M" : v >= 1e3 ? Math.round(v/1e3)+"k" : String(Math.round(v));
+const usd = v => "$"+v.toFixed(2);
+const S = tsv("sessions-tsv"), D = tsv("days-tsv");
+
+const tot = D.reduce((a,d) => ({ s:a.s+n(d[1]), r:a.r+n(d[2]), in:a.in+n(d[3])+n(d[4])+n(d[5])+n(d[6]), cr:a.cr+n(d[6]), out:a.out+n(d[7]), c:a.c+n(d[8]), lo:a.lo+n(d[10]), ls:a.ls+n(d[11]), lu:a.lu+n(d[12]) }), {s:0,r:0,in:0,cr:0,out:0,c:0,lo:0,ls:0,lu:0});
+document.getElementById("kpi").innerHTML = [
+  [usd(tot.c), "notional cost"], [tot.s, "sessions"], [tot.r, "requests"],
+  [ht(tot.in), "input side"], [tot.in ? Math.round(tot.cr/tot.in*100)+"%" : "-", "cache read share"],
+  [ht(tot.out), "output"], [usd(tot.lu), "lean-ctx saved (lower bound)"],
+].map(([v,l]) => `<div><b>${v}</b><span>${l}</span></div>`).join("");
+
+const tools = {};
+for (const r of S) for (const t of (r[19] || "").split(";")) {
+  const [name, tok] = t.split(":"); if (!name || name === "-") continue;
+  tools[name] = tools[name] || { tok:0, sess:0 }; tools[name].tok += n(tok); tools[name].sess++;
+}
+const ttot = Object.values(tools).reduce((a,t) => a+t.tok, 0);
+
+function table(id, cols, rows, sortIdx, desc) {
+  const el = document.getElementById(id);
+  let si = sortIdx, sd = desc;
+  const render = () => {
+    const sorted = [...rows].sort((a,b) => {
+      const x = a[si], y = b[si];
+      const c = typeof x === "number" ? x - y : String(x).localeCompare(String(y));
+      return sd ? -c : c;
+    });
+    el.innerHTML = "<tr>" + cols.map((c,i) => `<th class="${c.l?"l":""} ${i===si?"on":""}" data-i="${i}">${c.h}${i===si?(sd?" ↓":" ↑"):""}</th>`).join("") + "</tr>"
+      + sorted.map(r => "<tr>" + cols.map((c,i) => `<td class="${c.l?"l":""} ${c.p?"p":""}" title="${c.p?String(r[i]).replace(/"/g,"&quot;"):""}">${c.f ? c.f(r[i]) : r[i]}</td>`).join("") + "</tr>").join("");
+    el.querySelectorAll("th").forEach(th => th.onclick = () => { const i = +th.dataset.i; sd = i === si ? !sd : true; si = i; render(); });
+  };
+  render();
+}
+
+table("days",
+  [{h:"day",l:1},{h:"sessions"},{h:"requests"},{h:"cost",f:usd},{h:"models",l:1},{h:"input side",f:ht},{h:"cache read",f:v=>v+"%"},{h:"output",f:ht},{h:"lean-ctx saved",f:usd},{h:"note",l:1}],
+  D.map(d => { const i = n(d[3])+n(d[4])+n(d[5])+n(d[6]); return [d[0], n(d[1]), n(d[2]), n(d[8]), d[9], i, i ? Math.round(n(d[6])/i*100) : 0, n(d[7]), n(d[12]), d[13] === "-" ? "" : d[13]]; }),
+  0, true);
+
+table("tools",
+  [{h:"tool",l:1},{h:"tokens",f:ht},{h:"share",f:v=>v+"%"},{h:"sessions"},{h:"avg / session",f:ht}],
+  Object.entries(tools).map(([k,t]) => [k, t.tok, ttot ? Math.round(t.tok/ttot*100) : 0, t.sess, t.tok/t.sess]),
+  1, true);
+
+table("sessions",
+  [{h:"cost",f:usd},{h:"day",l:1},{h:"project",l:1},{h:"branch",l:1},{h:"models",l:1},{h:"req"},{h:"avg ctx",f:ht},{h:"peak ctx",f:ht},{h:"cache read",f:ht},{h:"out",f:ht},{h:"think",f:ht},{h:"sub"},{h:"compact"},{h:"tool tok",f:ht},{h:"top tools",l:1},{h:"prompt",l:1,p:1}],
+  S.map(r => [n(r[11]), r[0], r[2], r[3], r[4], n(r[5]), n(r[13]), n(r[14]), n(r[9]), n(r[10]), n(r[15]), n(r[16]), n(r[17]), n(r[18]),
+    (r[19] || "-").split(";").slice(0,3).map(t => { const [a,b] = t.split(":"); return b ? a.replace(/^mcp__/,"")+" "+ht(n(b)) : a; }).join(" · "),
+    r[12] || "-"]),
+  0, true);
+</script>
+</body>
+</html>
