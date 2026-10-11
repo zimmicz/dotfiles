@@ -45,6 +45,8 @@ export LS_COLORS
 setopt PROMPT_CR
 setopt PROMPT_SP
 export PROMPT_EOL_MARK=""
+do=(--dry-run=client -o yaml)
+now=(--force --grace-period 0)
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
