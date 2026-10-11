@@ -3,6 +3,7 @@
 - When drafting any message I will send to others (Slack, Jira comments, MR descriptions, emails), write in MY voice per `~/.claude/my-voice.md`. This OVERRIDES caveman mode (caveman = how you talk to me, not how I sound to others). Show me the draft to review; don't send unless I say so. Anything YOU post yourself (Jira comment, MR description/note, Slack msg to others) starts with the 🤖 prefix line from my-voice.md "Posted by Claude".
 - Do not use memory as a way of storing knowledge. Use local files instead. If there is no file yet, create it.
 - When writing code, do not add any comments. Just write the code.
+- When I correct you (wrong tool, wrong approach, "no", "stop", "I told you"), append one terse bullet before continuing: global habit → `~/.claude/LEARNED.md` under `## Learned`; repo-specific → `<repo>/CLAUDE.local.md` under `## Learned`. Skip if already covered.
 
 @LEARNED.md
 

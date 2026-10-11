@@ -29,6 +29,7 @@ ln -sf ${DOTFILES_DIR}/claude/hooks/plan-mode-guard.sh ~/.claude/hooks/plan-mode
 ln -sf ${DOTFILES_DIR}/claude/simple-statusline.sh ~/.claude/simple-statusline.sh
 ln -sf ${DOTFILES_DIR}/claude/LEARNED.md ~/.claude/LEARNED.md
 ln -sf ${DOTFILES_DIR}/claude/scripts/nightly-reflection.sh ~/.claude/scripts/nightly-reflection.sh
+ln -sf ${DOTFILES_DIR}/claude/scripts/session-digest.sh ~/.claude/scripts/session-digest.sh
 ln -sf ${DOTFILES_DIR}/claude/scripts/nightly-claude.sh ~/.claude/scripts/nightly-claude.sh
 ln -sf ${DOTFILES_DIR}/claude/scripts/usage-report.sh ~/.claude/scripts/usage-report.sh
 ln -sf ${DOTFILES_DIR}/claude/scripts/model-prices.tsv ~/.claude/scripts/model-prices.tsv
