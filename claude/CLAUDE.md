@@ -9,6 +9,7 @@
 ## Tools
 
 - Use `glab` CLI (not `gh`) for all GitLab operations (MRs, issues, pipelines).
+- Screenshots/images you take to look at yourself: ≤1280px wide, jpeg. Never Read the same image twice; reuse what you saw.
 - `npm run` is aliased to `nr` for all NPM operations. When you try to run a command with `npm run` it returns non zero exit code as a hint to run `nr` instead.
 
 ## Plans

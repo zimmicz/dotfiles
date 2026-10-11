@@ -20,8 +20,8 @@ Goal: catch stretched flex children, overflowing widths, double borders, wrong i
 3. Storybook running? `curl -sf localhost:6006/index.json`. If not: start `pnpm run storybook` in background, wait for `/index.json`. Story ids come from `/index.json` (`entries[*].id`, filter by `importPath`).
 4. Per story, with Playwright MCP (`mcp__playwright__*`):
    - `browser_navigate` to `http://localhost:6006/iframe.html?id=<story-id>&viewMode=story`
-   - `browser_resize` 1280x800 → `browser_take_screenshot`
-   - `browser_resize` 375x800 → `browser_take_screenshot`
+   - `browser_resize` 1280x800 → `browser_take_screenshot` (`type: jpeg`, `scale: css`)
+   - `browser_resize` 375x800 → `browser_take_screenshot` (same)
    - `browser_console_messages` (errors only)
    - Cover every state: default, hover/focus/open (click via `browser_snapshot` refs), disabled, error, long text, empty.
 5. App route needing auth/VPN (not Storybook): use claude-in-chrome (`mcp__claude-in-chrome__*`, real logged-in session) or give user the URL (`https://<branch>.dev.cleverfarm.cz/...` or localhost path). Playwright MCP has fresh profile, no Auth0 session.
