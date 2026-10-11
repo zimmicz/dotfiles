@@ -95,7 +95,10 @@ JQ_PROG='
         ($d.message.content | gsub("[\n\r\t]"; " ") | .[0:80])] | @tsv
   elif ($d.type == "user") and ($d.isSidechain != true) and (($d.message.content | type) == "array")
   then ($d.message.content[] | select(.type == "tool_result")
-        | ["R", ($d.sessionId // "unknown"), $day, .tool_use_id, (.content | tostring | length)] | @tsv)
+        | ["R", ($d.sessionId // "unknown"), $day, .tool_use_id,
+           (.content | if type == "string" then length / 4
+                       elif type == "array" then ([.[] | if .type == "image" then 1500 else ((.text // "") | length / 4) end] | add // 0)
+                       else (tostring | length / 4) end | floor)] | @tsv)
   else empty end),
   (if ($d.type == "assistant") and ($d.isSidechain != true)
    then ($d.message.content[]? | select(.type == "tool_use") | ["N", .id, .name] | @tsv)
@@ -193,7 +196,7 @@ FILENAME == NFILE { tname[$2] = $3; next }
 FILENAME == RFILE {
   if (!($4 in tname)) next
   k = $3 SUBSEP $2
-  tt[k SUBSEP tname[$4]] += $5 / 4; ttot[k] += $5 / 4
+  tt[k SUBSEP tname[$4]] += $5; ttot[k] += $5
   next
 }
 FILENAME == CFILE { comp[$3 SUBSEP $2]++; next }
