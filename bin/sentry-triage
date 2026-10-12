@@ -20,10 +20,10 @@ fi
 OPEN=()
 while read -r KEY STATUS REPO; do
   [[ -z "$KEY" ]] && continue
-  STATES=""
-  [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] && STATES=$(cd $REPOS/$REPO && glab mr list --all --search $KEY -F json 2>/dev/null | jq -r '[.[].state] | unique | join(",")' || true)
-  [[ -n "$STATES" && "$STATES" != *opened* && "$STATES" != *locked* ]] && continue
-  OPEN+=("$KEY ($STATUS, MR: ${STATES:-none})")
+  STATES="no repo"
+  [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] && STATES=$(cd $REPOS/$REPO && glab mr list --all --search $KEY -F json | jq -r '[.[].state] | unique | join(",") | if . == "" then "none" else . end' || echo "lookup failed")
+  [[ "$STATES" != none && "$STATES" != no\ repo && "$STATES" != lookup\ failed && "$STATES" != *opened* && "$STATES" != *locked* ]] && continue
+  OPEN+=("$KEY ($STATUS, MR: $STATES)")
 done < <(jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "project = DEV AND labels in ($PIPELINE_LABELS) AND statusCategory != Done" '$q|@uri')&fields=key,labels,status" \
   | jq -r '.issues[] | "\(.key) \(.fields.status.name | gsub(" "; "_")) \(.fields.labels | map(select(startswith("repo-"))) | first // "" | ltrimstr("repo-"))"')
 if (( ${#OPEN} )); then
