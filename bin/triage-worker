@@ -10,6 +10,11 @@ mkdir -p $LOG_DIR
 
 [[ "${TRIAGE_LOCKED:-}" == 1 ]] || exec env TRIAGE_LOCKED=1 flock -n $LOG_DIR/.lock $0 "$@"
 
+STREAM_JQ='if .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
+  elif .type == "result" then "✅ exit error=\(.is_error) cost=$\(.total_cost_usd)\n\(.result // "")" else empty end'
+
+stream() { jq --unbuffered -r "$STREAM_JQ" }
+
 search() {
   jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=labels,comment&maxResults=$2"
 }
@@ -49,7 +54,7 @@ analyze() {
   (cd $WT && claude -p "/cf-work $KEY --headless" \
     --model $TIER \
     --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
-    --output-format json </dev/null >>$LOG 2>&1) && [[ -f $WT/PLAN.md ]] \
+    --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) && [[ -f $WT/PLAN.md ]] \
     && echo "  ok -> $WT/PLAN.md" | tee -a $LOG
 }
 
@@ -66,7 +71,7 @@ implement() {
     --model $TIER \
     --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
     --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*)" \
-    --output-format json </dev/null >>$LOG 2>&1)
+    --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null | jq -r '.[0].web_url // empty')
   [[ -n "$MR" ]] && echo "  mr -> $MR" | tee -a $LOG && echo "$MR" >$LOG_DIR/$KEY.mr
 }

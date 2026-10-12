@@ -45,7 +45,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 |---|---|
 | `~/dotfiles/bin/sentry-triage` | stage 1: open-ticket gate + daily stamp, then claude -p (sonnet) + Sentry MCP + `jira` → ticket. `--dry-run` (ignores gate + stamp), `MAX=` (default 1) |
 | `~/dotfiles/bin/triage-worker` | stages 2–5: triage, reply follow-up, implement, resolve Sentry on Done; Slack summary. flock'd (manual run while timer runs = exits). `triage-worker DEV-X` = one ticket (implements if it has `ai-fix`). `MAX=`, `IMPL_MAX=` |
-| `~/dotfiles/bin/cf-work` | worktree setup; `--no-launch`, `--no-claim` (skip assign + In Progress) |
+| `~/dotfiles/bin/cf-work` | worktree setup, one per repo (`--repos a,b` > `repo-*` labels > mapped labels `frontend`/`agroevidence`/… > cwd); same branch everywhere, claude in primary worktree + `--add-dir` siblings; `--no-launch`, `--no-claim` (skip assign + In Progress) |
 | `~/dotfiles/claude/skills/cf-work` | `--headless`: root-cause analysis → PLAN.md + comment; follow-up mode on replies |
 | `~/dotfiles/claude/skills/cf-ticket` | `--headless`: implement PLAN.md, verify, self-review, `/cf-mr --headless` |
 | `~/dotfiles/claude/skills/cf-mr` | `--headless`: `glab mr create --draft`, no reviewers, stays In Progress, FE plays Nightly preview |
@@ -76,7 +76,7 @@ Prereqs (already done):
 | `journalctl --user -u cf-triage --since today` | run output |
 | `systemctl --user start cf-triage.service` | run now |
 | `systemctl --user disable --now cf-triage.timer` | turn off |
-| `tail -f ~/.local/state/cf-triage/DEV-XXXX.log` | per-ticket detail + cost (json) |
+| `tail -f ~/.local/state/cf-triage/DEV-XXXX.log` | live per-ticket progress: 🔧 tool calls, 💬 agent text, ✅ exit + cost |
 
 ## Test one ticket by hand
 
