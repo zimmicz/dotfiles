@@ -1,8 +1,8 @@
 [Unit]
-Description=Run cf-triage hourly on weekdays
+Description=Run cf-triage every 5 min on weekdays 07-18
 
 [Timer]
-OnCalendar=Mon..Fri *-*-* 07..18:00:00
+OnCalendar=Mon..Fri *-*-* 07..18:00/5:00
 Persistent=true
 
 [Install]
