@@ -17,6 +17,15 @@ if (( ! DRY )) && [[ "$(cat $STAMP 2>/dev/null)" == "$(date +%F)" ]]; then
   exit 0
 fi
 
+for H in cleverfarm.atlassian.net us.sentry.io claude.ai; do
+  getent hosts $H >/dev/null || { echo "no network ($H), retry next tick"; exit 0; }
+done
+
+RAW=$(jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "project = DEV AND labels in ($PIPELINE_LABELS) AND statusCategory != Done" '$q|@uri')&fields=key,labels,status") \
+  || { echo "jira lookup failed"; exit 1; }
+ISSUES=$(jq -r '.issues[] | "\(.key) \(.fields.status.name | gsub(" "; "_")) \(.fields.labels | map(select(startswith("repo-"))) | first // "" | ltrimstr("repo-"))"' <<<"$RAW") \
+  || { echo "jira lookup failed: $RAW"; exit 1; }
+
 OPEN=()
 while read -r KEY STATUS REPO; do
   [[ -z "$KEY" ]] && continue
@@ -24,8 +33,7 @@ while read -r KEY STATUS REPO; do
   [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] && STATES=$(cd $REPOS/$REPO && glab mr list --all --search $KEY -F json | jq -r '[.[].state] | unique | join(",") | if . == "" then "none" else . end' || echo "lookup failed")
   [[ "$STATES" != none && "$STATES" != no\ repo && "$STATES" != lookup\ failed && "$STATES" != *opened* && "$STATES" != *locked* ]] && continue
   OPEN+=("$KEY ($STATUS, MR: $STATES)")
-done < <(jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "project = DEV AND labels in ($PIPELINE_LABELS) AND statusCategory != Done" '$q|@uri')&fields=key,labels,status" \
-  | jq -r '.issues[] | "\(.key) \(.fields.status.name | gsub(" "; "_")) \(.fields.labels | map(select(startswith("repo-"))) | first // "" | ltrimstr("repo-"))"')
+done <<<"$ISSUES"
 if (( ${#OPEN} )); then
   echo "blocked: ${(j:, :)OPEN}"
   if (( ! DRY )); then
@@ -59,7 +67,7 @@ SHORTID = the full Sentry short id incl. project prefix, e.g. CAN-FRONTEND-JS or
    - fe-monitoring -> repo cf-farm-frontend; product by route: /telematics 11714, /sensors or /irrigation 11712, /actions /parcels /catalogues /stores 11711, satellite/biomonitoring/prescription 11713, else 11710
    - can-frontend -> repo can-frontend, product 11707
 5. update_issue assignedTo 'user:3546621', reason 'Jira: https://cleverfarm.atlassian.net/browse/<KEY>'.
-6. Final answer: one line per Sentry issue: '<SHORTID> -> <KEY> (new|existing) [sentry: yes|no]' or '<SHORTID> -> error: <why>'."
+6. Final answer: one line per Sentry issue: '<SHORTID> -> <KEY> (new|existing) [sentry: yes|no]' or '<SHORTID> -> error: <why>'. Last line, alone: 'TRIAGE_DONE' only if both search_issues calls succeeded, else 'TRIAGE_FAILED: <why>'."
 
 claude -p "$PROMPT" \
   --model sonnet \
@@ -68,6 +76,7 @@ claude -p "$PROMPT" \
   </dev/null | tee $LOG_DIR/sentry-$(date +%F-%H%M).json | jq -r '.result, "cost: $\(.total_cost_usd)"' | tee $LOG_DIR/sentry-last.txt
 
 (( DRY )) && exit 0
+grep -qx TRIAGE_DONE $LOG_DIR/sentry-last.txt || { echo "triage incomplete, not stamping"; exit 1; }
 date +%F >$STAMP
 grep -oE '^[A-Z0-9-]+ -> DEV-[0-9]+ \(new.*' $LOG_DIR/sentry-last.txt \
   | awk '{ ids[$3] = ids[$3] (ids[$3] ? ", " : "") $1 ($0 ~ /sentry: no/ ? " (noise)" : "") }
