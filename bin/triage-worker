@@ -64,13 +64,9 @@ wm_window() {
   local WT=$1 LOG=$2
   tmux ls >/dev/null 2>&1 || return 0
   tmux has-session -t cf-triage 2>/dev/null || tmux new-session -d -s cf-triage -n log
-  local ANCHOR=$(tmux list-panes -s -t cf-triage -F '#{pane_id}' | head -1)
-  local CFG=$(mktemp --suffix=.yaml)
-  { cat ~/.config/workmux/config.yaml; printf 'agent: tail -n +1 -f %s\n' $LOG; } >$CFG
-  (cd ${WT:h:h} && TMUX_PANE=$ANCHOR workmux open --config $CFG --parent-session cf-triage ${WT:t}) >>$LOG 2>&1
-  rm -f $CFG
-  tmux rename-window -t $ANCHOR log
-  tmux list-panes -s -t cf-triage -f "#{==:#{pane_current_path},$WT}" -F '#{pane_id}' | head -1
+  local PANE=$(tmux list-panes -s -t cf-triage -f "#{==:#{pane_current_path},$WT}" -F '#{pane_id}' | head -1)
+  [[ -n "$PANE" ]] || PANE=$(tmux new-window -d -t cf-triage: -n ${WT:t} -c $WT -P -F '#{pane_id}' "tail -n +1 -f $LOG")
+  echo $PANE
 }
 
 implement() {
