@@ -30,6 +30,11 @@ for scope in user cleverfarm; do
 done
 systemctl --user daemon-reload && systemctl --user enable claude-reflection.timer
 
+mkdir -p ~/bin
+for f in ${DOTFILES_DIR}/bin/*; do
+  ln -sf ${f} ~/bin/$(basename ${f})
+done
+
 claude mcp get playwright > /dev/null 2>&1 || claude mcp add -s user playwright -- npx -y @playwright/mcp@latest --headless
 
 ln -sf ${DOTFILES_DIR}/i3/config ${CONFIG_DIR}/i3/config
