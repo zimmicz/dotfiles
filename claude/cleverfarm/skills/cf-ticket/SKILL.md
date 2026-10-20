@@ -30,15 +30,15 @@ Orchestrates the entire workflow for a ticket. Each phase has a STOP gate — wa
 
 4. Run `/cf-work`
 5. **STOP** — wait for answers to `[?]` items, confirmation of `[!]` items
-6. If `PLAN.md` exists in worktree root, read it first — it may contain a prior plan or user notes. Incorporate, don't overwrite blindly.
-7. Create a detailed stepped plan of implementation
-8. **STOP** — confirm plan with user
-9. Write the confirmed plan to `PLAN.md` in worktree root **verbatim, not a summary**: goal, every grilling/`[?]`/`[!]` decision (with concrete numbers, rules, test ids), every step with its detail, verify + eyeball URLs. Fold in answers given after the plan was shown. `PLAN.md` is the single source for implementation.
+6. If `PLAN.md` exists in worktree root, read it first — it may contain a prior plan or user notes. Incorporate, don't overwrite blindly. If it is already a confirmed full plan (goal, decisions, steps) and the session was just cleared/restarted for implementation, skip 7–9 and go to Phase 3 with `PLAN.md` as the plan.
+7. Call `EnterPlanMode`, then create a detailed stepped plan of implementation. Session runs on `opusplan`: Opus plans, Sonnet implements.
+8. **STOP** — `ExitPlanMode` with the full plan text is the approval gate. User picks "clear context and implement" → Sonnet continues with the approved plan text.
+9. Right after approval (plan mode blocks edits, so not before), write the confirmed plan to `PLAN.md` in worktree root **verbatim, not a summary**: goal, every grilling/`[?]`/`[!]` decision (with concrete numbers, rules, test ids), every step with its detail, verify + eyeball URLs. Fold in answers given after the plan was shown. `PLAN.md` is the single source for implementation.
 10. Post ONE Czech Jira comment (via `~/bin/jira add-comment <ticket-id>`) that is a **Czech rendering of `PLAN.md`**: same sections, same decisions, same steps, one-to-one — nothing added, dropped or merged. Before posting, diff comment vs `PLAN.md` item by item and fix gaps. Jira wiki markup (`h3.`, `#`, `*`, `{{code}}`). First line = CZ 🤖 prefix from `~/.claude/my-voice.md` "Posted by Claude". This is the only Jira comment in the flow. If `PLAN.md` changes later, edit that comment (`jira PUT /rest/api/2/issue/<id>/comment/<commentId>`), don't post a new one.
 
 ## Phase 3: Implementation
 
-11. User says "go" or gives direction — start coding
+11. User says "go" or gives direction, or plan was just approved via ExitPlanMode — start coding
 12. Stop after every plan step, validate with the user
 13. When implementation complete, **STOP** — ask "Ready to verify?"
 

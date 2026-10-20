@@ -219,15 +219,6 @@
         ]
       },
       {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/plan-mode-guard.sh"
-          }
-        ]
-      },
-      {
         "matcher": "Bash|bash",
         "hooks": [
           {

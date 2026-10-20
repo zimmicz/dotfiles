@@ -47,6 +47,7 @@ analyze() {
   echo "$SETUP" >>$LOG
   local WT=($REPOS/$REPO/.worktrees/${KEY}-*(N/[1]))
   local TIER=$(grep -oP 'claude --model \K\w+' <<<"$SETUP" || echo sonnet)
+  TIER=${TIER/opusplan/opus}
   if [[ -z "$WT" ]]; then
     echo "  worktree setup failed" | tee -a $LOG
     return 1

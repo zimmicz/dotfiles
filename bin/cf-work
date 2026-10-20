@@ -166,7 +166,7 @@ BULLETS=$(jq -r '.fields.description // "" | [scan("(?m)^\\s*[*#-]")] | length' 
 if [[ -n "$CF_MODEL" ]]; then
   TIER="$CF_MODEL"; REASON="CF_MODEL override"
 elif (( DESC_LEN > 600 || BULLETS >= 3 )); then
-  TIER="opus"; REASON="desc ${DESC_LEN}ch, ${BULLETS} bullets → large"
+  TIER="opusplan"; REASON="desc ${DESC_LEN}ch, ${BULLETS} bullets → large (opus plans, sonnet implements)"
 else
   TIER="sonnet"; REASON="desc ${DESC_LEN}ch, ${BULLETS} bullets → small"
 fi
