@@ -2,7 +2,7 @@
 
 Auto-generated nightly by ~/.claude/scripts/nightly-reflection.sh (global lessons; repo-specific go to `<repo>/CLAUDE.local.md`). Compacted Sundays, cap 50. Edit/delete freely; job dedupes against whatever's here.
 
-- Default lang = English in chat, always. Czech only for Jira comments (my-voice.md). No unprompted Czech drift.
+- Default lang = English in chat, always. Czech only for Jira comments (my-voice.md). No unprompted Czech drift. MR titles/descriptions/notes + new Jira tickets → English (geolayers MR !97 + DEV-3121 in Czech → "use english").
 - Drafts: never ask approval for a draft not actually printed. On "edit draft" / "chci to upravit ve vimu": write to file, wait, re-read, use user version verbatim. Then diff theirs vs mine, fold style deltas into ~/.claude/my-voice.md (standing ask).
 - Edit plugin skill/command → bump plugin version AND update skill description/frontmatter in same change. User: "also update the skill description, it mentions useFlag only".
 - Skill/plugin hygiene: one source — marketplace plugin wins, delete legacy ~/.claude/skills copies/symlinks, symlink `references/` too. "Not installed" claim → check plugin dir on disk first (session skill list = subset). User: "check for mattpocock-skills handoff again, i see it".
@@ -23,7 +23,7 @@ Auto-generated nightly by ~/.claude/scripts/nightly-reflection.sh (global lesson
 - Slack reports with tabular data: real markdown table, never image/ASCII screenshot. User: "real markdown table works brilliant".
 - Local/narrow fix that works still triggers "can't it be fixed globally?" — default to root-cause/systemic fix.
 - New translated UI strings → ALL supported languages. User: "did you add all the languages?"
-- MR pushed + pipeline green → mark ready (drop Draft:), approve as user, enable auto-merge. Don't park at draft.
+- MR pushed + pipeline green → report status, ASK before mark ready / approve / auto-merge. Never self-approve unprompted. User: "Do not autoapprove?!!" (DEV-2966).
 - Conventions (labels, naming, formats) → search cf-kb KB first, don't invent. User: "did you check KB for label format?"
 - Migration/refactor → delete leftovers in SAME change: dead wrappers, unused hooks/styles, empty dirs. User listed em one by one ("why do we need LegacyFieldErrors?", "delete useCustomStyles too").
 - Reuse existing codebase pattern/structure (tanstack mutation over hand-rolled flags, extract existing screen's tabs/header component) over rebuild. Stuck in fix loop → diff against working reference. User: "could we follow the pattern we use elsewhere?", "why dont you extract tabs component from telematics.control?"
@@ -42,7 +42,8 @@ Auto-generated nightly by ~/.claude/scripts/nightly-reflection.sh (global lesson
 - Several independent fixes in one ask → batch/parallelize by default. User: "tackle in parallel if possible", "1 and 2 in parallel".
 - User "can't see changes" right after edit → stale vim buffer re-save clobbered it; tell user :e! before touching file again.
 - Risky/speculative fix across multiple spots → one instance first, user verifies, then extend.
-- MR reviewer comments: draft replies ≠ done. Post replies AND resolve threads. User: "post them and resolve threads".
+- Fetching MR comments: read ALL non-system notes — diff threads AND general (individual_note, not resolvable) comments incl. images; never filter on resolvable or by timestamp. Missed 4 general notes + 1 thread on !4279. User: "didnt you miss this one for example?"
+- MR reviewer comments: draft replies ≠ done, post them. Resolve threads only when user says so for that batch; user's own self-review threads → never resolve, user resolves when happy. User: "post them and resolve threads" vs "do not resolve, i will when im happy".
 - Explaining process/learning plans → concrete worked example + WHY each step, tied to one end-goal project. User: "i need a concrete example", "looks like random commands", "by goal i meant something we're going towards".
 - "notify X via Jira when deployed" → wait for branch deploy/pipeline finish, THEN post. Not on push. Came up 3 sessions.
 - Resuming ticket / "did we cover it?" → re-fetch ticket desc + ALL comments myself (reviewer feedback lands mid-work), tick each item. Missed checkbox→toggle living in another comment. User: "check jira comments", "fetch it again", "you missed migration to toggles, didnt you?"
@@ -51,3 +52,16 @@ Auto-generated nightly by ~/.claude/scripts/nightly-reflection.sh (global lesson
 - Device-specific bug surviving fix attempts → isolated test page w/ lettered variants, user tests on real device, ship winner. User: "do more research" → "yes, build the test page".
 - User shell = zsh: unquoted `$var` doesn't word-split (`export do="--dry-run=client -o yaml"` broke `k run … $do`) → arrays/alias/`${=var}`.
 - Rich deliverables (demo video, tracker, report w/ media) → publish as claude.ai artifact, plain link. User: "Upload it as artefakt", wanted "interactive tracker".
+- Automated/scripted Slack posts to user → incoming webhook (bot identity), never Slack MCP as user: own msgs give no unread notifications. User: "I already tried 2, go with 1".
+- Temp allowlist/permission widening for a test (lean-ctx allow …) → revert right after test, never widen beyond what user named. User: "lean-ctx block usage-report.sh".
+- User commits/edits in same worktree concurrently → `git status`/`log` before committing; don't double-commit or redo their work. User: "i made the commit myself".
+- Per-screen decisions (restyle/verify N screens) → walk one at a time: URL + click steps, wait for verdict, then next. Not all at once. User: "let's go one by one please".
+- MR desc = self-contained: perf change → before AND after numbers in description (not only in a note); bug fix → actual root cause w/ origin commits/history, not symptom. User: "did you include both measurements in pr desc?", "what's the actual root cause?"
+- Suspected bug → failing test first proving it, then fix. User: "i want failing test for this and fix then if needed".
+- Missing data/translation at runtime → never hide the feature; render fallback (raw key) + log to Sentry. User: "we cant just hide the feature. we rather show it untranslated and log the error".
+- Grill Qs / design choices → lead with concrete scenario (state before/after), not shorthand. User "not following you" 3x in one day (Q3 season filter, flag scope, skipped part).
+- Rebuild/port of existing feature → read current impl first, keep its structure + behaviour (split forms stay split, secondary product only after main) unless told otherwise. User: "check how forms are implemented now, i am pretty sure they're split", "check how it worked before. it should work the same".
+- Shared/DS components → composition (compound components, children) over config props/flags (`isHarvest`, `showX`). User: "prefer component composition where possible".
+- Big feature → one draft acceptance MR (preview for stakeholders), commits grouped by future split; after acceptance cut stacked review MRs. User: "one MR to check it works … later split this into more for the actual code review".
+- Async race/stale-state fix → simplest first: block UI while in flight (`inert`/disabled), reuse already-loaded data. No extra fetches (`ensureQueryData`), token refs, latest-request guards. User: "too many ensureQueryData and stuff", "wouldnt it be easier to disable the form fields while some async call is in flight?"
+- Bug fix in feature/WIP code → fix the defect, keep intended behaviour. Never delete the effect/feature that triggers the bug; intent unclear → ask. Agent dropped product-clearing effect to kill a race; user: "we need the clearing though".
