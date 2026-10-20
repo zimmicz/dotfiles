@@ -79,7 +79,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "fable",
+  "model": "sonnet",
   "deniedMcpServers": [
     {
       "serverName": "claude.ai Atlassian MCP"
