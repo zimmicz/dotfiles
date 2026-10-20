@@ -1,30 +1,48 @@
 #!/bin/zsh
-# Usage: cf-work DEV-1234 [base-branch] [--no-launch] [--no-claim]
+# Usage: cf-work DEV-1234 [base-branch] [--repos a,b] [--no-launch] [--no-claim]
 # Scripted worktree setup (Jira REST, no headless claude), then launches claude with ticket context.
 # Env: JIRA_EMAIL, JIRA_TOKEN required. CF_MODEL overrides model tier.
+# Repos: --repos > ticket labels repo-<dir> > REPO_MAP labels > cwd git repo. One worktree per repo, same branch.
+# Multi-repo: claude starts in the primary worktree (cf-farm-frontend if present, else first) with --add-dir for the rest.
 # --no-launch: do everything but print the launch command instead of exec-ing claude.
 # --no-claim: skip assigning to me + In Progress transition (headless triage).
 
 set -e
 
 MY_ACCOUNT_ID="712020:d8b09ea3-beb7-4afc-af06-6d7119474a4f"
+REPOS_ROOT=~/work/cleverfarm/repos
+typeset -A REPO_MAP=(
+  frontend      cf-farm-frontend
+  agroevidence  cf-agroevidence
+  evidence      cf-agroevidence
+  irrigation    irrigation
+  stores        cf-stores
+  iot           cf-iot
+  satellite     cf-satellite
+  gateway       cf-gateway
+  integrations  integrations
+  insights      cf-insights
+  can-frontend  can-frontend
+)
 
 NO_LAUNCH=""
 NO_CLAIM=""
+REPOS_ARG=""
 ARGS=()
-for arg in "$@"; do
-  if [[ "$arg" == "--no-launch" ]]; then
-    NO_LAUNCH=1
-  elif [[ "$arg" == "--no-claim" ]]; then
-    NO_CLAIM=1
-  else
-    ARGS+=("$arg")
-  fi
+while (( $# )); do
+  case "$1" in
+    --no-launch) NO_LAUNCH=1 ;;
+    --no-claim) NO_CLAIM=1 ;;
+    --repos) REPOS_ARG="$2"; shift ;;
+    --repos=*) REPOS_ARG="${1#--repos=}" ;;
+    *) ARGS+=("$1") ;;
+  esac
+  shift
 done
 TICKET="${ARGS[1]:u}"
-BASE="${ARGS[2]}"
+BASE_ARG="${ARGS[2]}"
 if [[ -z "$TICKET" ]]; then
-  echo "Usage: cf-work DEV-1234 [base-branch] [--no-launch] [--no-claim]"
+  echo "Usage: cf-work DEV-1234 [base-branch] [--repos a,b] [--no-launch] [--no-claim]"
   exit 1
 fi
 if [[ -z "$JIRA_EMAIL" || -z "$JIRA_TOKEN" ]]; then
@@ -45,16 +63,45 @@ STATUS=$(jq -r '.fields.status.name' <<<"$ISSUE")
 ASSIGNEE=$(jq -r '.fields.assignee.accountId // ""' <<<"$ISSUE")
 ISSUETYPE=$(jq -r '.fields.issuetype.name' <<<"$ISSUE")
 IS_HOTFIX=$(jq -r '(.fields.issuetype.name | test("hotfix"; "i")) or (.fields.labels | map(ascii_downcase) | index("hotfix") != null)' <<<"$ISSUE")
+LABELS=(${(f)"$(jq -r '.fields.labels[]' <<<"$ISSUE")"})
+echo "  $SUMMARY [$STATUS, $ISSUETYPE]"
 
-if [[ -z "$BASE" ]]; then
-  [[ "$IS_HOTFIX" == "true" ]] && BASE="production" || BASE="develop"
-  if ! git ls-remote --exit-code --heads origin "$BASE" >/dev/null 2>&1; then
-    DEFAULT=$(git ls-remote --symref origin HEAD | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2}')
-    echo "  (origin/$BASE missing, falling back to origin/$DEFAULT)"
-    BASE="$DEFAULT"
-  fi
+if [[ -n "$REPOS_ARG" ]]; then
+  REPOS=(${(s:,:)REPOS_ARG})
+else
+  REPOS=()
+  for L in $LABELS; do
+    if [[ "$L" == repo-* ]]; then
+      REPOS+=("${L#repo-}")
+    elif [[ -n "${REPO_MAP[$L]}" ]]; then
+      REPOS+=("${REPO_MAP[$L]}")
+    fi
+  done
+  REPOS=(${(u)REPOS})
 fi
-echo "  $SUMMARY [$STATUS, $ISSUETYPE] base: $BASE"
+
+REPO_DIRS=()
+if (( ${#REPOS} == 0 )); then
+  if CWD_REPO=$(git rev-parse --show-toplevel 2>/dev/null); then
+    REPO_DIRS=("$CWD_REPO")
+  else
+    echo "Error: no repo from --repos or labels (${(j:, :)LABELS}) and cwd is not a git repo. Label → repo map:" >&2
+    for K in ${(ko)REPO_MAP}; do echo "  $K → $REPO_MAP[$K]" >&2; done
+    exit 1
+  fi
+else
+  if (( ${REPOS[(I)cf-farm-frontend]} )); then
+    REPOS=(cf-farm-frontend ${REPOS:#cf-farm-frontend})
+  fi
+  for R in $REPOS; do
+    if [[ ! -d "$REPOS_ROOT/$R/.git" ]]; then
+      echo "Error: $REPOS_ROOT/$R is not a git repo" >&2
+      exit 1
+    fi
+    REPO_DIRS+=("$REPOS_ROOT/$R")
+  done
+fi
+echo "→ Repos: ${(j:, :)${(@)REPO_DIRS:t}}"
 
 if [[ -n "$NO_CLAIM" ]]; then
   echo "→ --no-claim: skipping assign + In Progress"
@@ -73,11 +120,15 @@ if [[ -z "$NO_CLAIM" && "$STATUS" != "In Progress" ]]; then
   fi
 fi
 
-EXISTING=(.worktrees/${TICKET}-*(N/[1]))
-if [[ -n "$EXISTING" ]]; then
-  WORKTREE="$EXISTING"
-  echo "→ Worktree exists: $WORKTREE"
-else
+BRANCH=""
+for DIR in $REPO_DIRS; do
+  EXISTING=($DIR/.worktrees/${TICKET}-*(N/[1]))
+  if [[ -n "$EXISTING" ]]; then
+    BRANCH="${EXISTING:t}"
+    break
+  fi
+done
+if [[ -z "$BRANCH" ]]; then
   echo "→ Generating branch name..."
   # Amplify builds the preview domain as "<branch>.dev.cleverfarm.cz" and asks
   # ACM for a wildcard cert, so the name validated is "*.<branch>.dev.cleverfarm.cz".
@@ -98,13 +149,32 @@ else
     echo "✗ Branch name '$BRANCH' is ${#BRANCH} chars, over the ${BRANCH_MAX}-char Amplify preview limit." >&2
     exit 1
   fi
-  WORKTREE=".worktrees/$BRANCH"
-
-  echo "→ Creating worktree $WORKTREE from origin/$BASE..."
-  git fetch origin "$BASE"
-  git worktree add "$WORKTREE" "origin/$BASE" -b "$BRANCH"
-  [[ -f .env ]] && cp .env "$WORKTREE/.env"
 fi
+
+WORKTREES=()
+for DIR in $REPO_DIRS; do
+  EXISTING=($DIR/.worktrees/${TICKET}-*(N/[1]))
+  if [[ -n "$EXISTING" ]]; then
+    WT="$EXISTING"
+    echo "→ ${DIR:t}: worktree exists: $WT"
+  else
+    BASE="$BASE_ARG"
+    if [[ -z "$BASE" ]]; then
+      [[ "$IS_HOTFIX" == "true" ]] && BASE="production" || BASE="develop"
+      if ! git -C "$DIR" ls-remote --exit-code --heads origin "$BASE" >/dev/null 2>&1; then
+        DEFAULT=$(git -C "$DIR" ls-remote --symref origin HEAD | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2}')
+        echo "  (${DIR:t}: origin/$BASE missing, falling back to origin/$DEFAULT)"
+        BASE="$DEFAULT"
+      fi
+    fi
+    WT="$DIR/.worktrees/$BRANCH"
+    echo "→ ${DIR:t}: creating worktree $WT from origin/$BASE..."
+    git -C "$DIR" fetch origin "$BASE"
+    git -C "$DIR" worktree add "$WT" "origin/$BASE" -b "$BRANCH"
+    [[ -f "$DIR/.env" ]] && cp "$DIR/.env" "$WT/.env"
+  fi
+  WORKTREES+=("$WT")
+done
 
 PARENTS_MD=""
 PARENT_KEY=$(jq -r '.fields.parent.key // ""' <<<"$ISSUE")
@@ -131,46 +201,66 @@ while IFS=$'\t' read -r REL LINK_KEY; do
   ' <<<"$LINKED")
 done < <(jq -r '.fields.issuelinks[]? | [(if .inwardIssue then .type.inward else .type.outward end), (.inwardIssue // .outwardIssue).key] | @tsv' <<<"$ISSUE")
 
+REPOS_MD=$'\n## Repos\n\n'
+for I in {1..${#WORKTREES}}; do
+  TAG=""
+  if (( I == 1 )); then TAG=" (primary)"; fi
+  REPOS_MD+="- ${REPO_DIRS[$I]:t}$TAG: ${WORKTREES[$I]}"$'\n'
+done
+
 echo "→ Writing TICKET.md..."
-jq -r '
+TICKET_MD=$(jq -r '
   "# \(.key): \(.fields.summary)\n" +
   "\n**Status:** \(.fields.status.name) | **Type:** \(.fields.issuetype.name) | **Priority:** \(.fields.priority.name // "-") | **Labels:** \(.fields.labels | join(", "))\n" +
   "\n## Description\n\n\(.fields.description // "(empty)")\n" +
   $parents +
   $links +
+  $repos +
   "\n## Comments (\(.fields.comment.comments | length))\n" +
   (.fields.comment.comments | map("\n### \(.author.displayName) — \(.created[0:16])\n\n\(.body)") | join("\n"))
-' --arg parents "$PARENTS_MD" --arg links "$LINKS_MD" <<<"$ISSUE" > "$WORKTREE/TICKET.md"
+' --arg parents "$PARENTS_MD" --arg links "$LINKS_MD" --arg repos "$REPOS_MD" <<<"$ISSUE")
+for WT in $WORKTREES; do
+  print -r -- "$TICKET_MD" > "$WT/TICKET.md"
+done
 
-if [[ -f "$WORKTREE/package.json" && ! -d "$WORKTREE/node_modules" ]]; then
-  if [[ -f "$WORKTREE/pnpm-lock.yaml" ]]; then
-    INSTALL="pnpm i --frozen-lockfile"
-  elif [[ -f "$WORKTREE/package-lock.json" ]]; then
-    INSTALL="npm ci"
-  else
-    INSTALL=""
+for WT in $WORKTREES; do
+  if [[ -f "$WT/package.json" && ! -d "$WT/node_modules" ]]; then
+    if [[ -f "$WT/pnpm-lock.yaml" ]]; then
+      INSTALL="pnpm i --frozen-lockfile"
+    elif [[ -f "$WT/package-lock.json" ]]; then
+      INSTALL="npm ci"
+    else
+      INSTALL=""
+    fi
+    if [[ -n "$INSTALL" ]]; then
+      echo "→ ${WT:h:h:t}: $INSTALL in background (log: $WT/install.log)..."
+      ( cd "$WT" && nohup ${=INSTALL} >install.log 2>&1 ) &
+      disown
+    fi
   fi
-  if [[ -n "$INSTALL" ]]; then
-    echo "→ $INSTALL in background (log: $WORKTREE/install.log)..."
-    ( cd "$WORKTREE" && nohup ${=INSTALL} >install.log 2>&1 ) &
+  if command -v codegraph >/dev/null; then
+    ( nohup codegraph init "$WT" >/dev/null 2>&1 ) &
     disown
   fi
-fi
-if command -v codegraph >/dev/null; then
-  ( nohup codegraph init "$WORKTREE" >/dev/null 2>&1 ) &
-  disown
-fi
+done
 
 DESC_LEN=$(jq -r '.fields.description // "" | length' <<<"$ISSUE")
 BULLETS=$(jq -r '.fields.description // "" | [scan("(?m)^\\s*[*#-]")] | length' <<<"$ISSUE")
 if [[ -n "$CF_MODEL" ]]; then
   TIER="$CF_MODEL"; REASON="CF_MODEL override"
-elif (( DESC_LEN > 600 || BULLETS >= 3 )); then
-  TIER="opusplan"; REASON="desc ${DESC_LEN}ch, ${BULLETS} bullets → large (opus plans, sonnet implements)"
+elif (( DESC_LEN > 600 || BULLETS >= 3 || ${#WORKTREES} > 1 )); then
+  TIER="opusplan"; REASON="desc ${DESC_LEN}ch, ${BULLETS} bullets, ${#WORKTREES} repos → large (opus plans, sonnet implements)"
 else
   TIER="sonnet"; REASON="desc ${DESC_LEN}ch, ${BULLETS} bullets → small"
 fi
 echo "→ Model: $TIER ($REASON) — override with CF_MODEL=tier"
+
+PRIMARY_DIR="${REPO_DIRS[1]}"
+PRIMARY_WT="${WORKTREES[1]}"
+AGENT=(claude --model "$TIER")
+for WT in ${WORKTREES[2,-1]}; do
+  AGENT+=(--add-dir "$WT")
+done
 
 USE_WORKMUX=""
 [[ -n "$TMUX" ]] && command -v workmux >/dev/null && USE_WORKMUX=1
@@ -178,21 +268,21 @@ USE_WORKMUX=""
 if [[ -n "$NO_LAUNCH" ]]; then
   echo "→ Ready. Launch with:"
   if [[ -n "$USE_WORKMUX" ]]; then
-    echo "  workmux open ${WORKTREE:t} -p \"/cf-ticket $TICKET\"   (agent: claude --model $TIER)"
+    echo "  cd $PRIMARY_DIR && workmux open ${PRIMARY_WT:t} -p \"/cf-ticket $TICKET\"   (agent: ${AGENT[*]})"
   else
-    echo "  cd $WORKTREE && claude --model $TIER \"/cf-ticket $TICKET\""
+    echo "  cd $PRIMARY_WT && ${AGENT[*]} \"/cf-ticket $TICKET\""
   fi
   exit 0
 fi
 
 if [[ -n "$USE_WORKMUX" ]]; then
   WM_CONFIG=$(mktemp --suffix=.yaml)
-  { cat ~/.config/workmux/config.yaml; printf 'agent: claude --model %s\n' "$TIER"; } > "$WM_CONFIG"
-  echo "→ workmux open ${WORKTREE:t}"
+  { cat ~/.config/workmux/config.yaml; printf 'agent: %s\n' "${AGENT[*]}"; } > "$WM_CONFIG"
+  echo "→ workmux open ${PRIMARY_WT:t}"
   WM_RC=0
   ORIG_WIN=$(tmux display -p '#{window_id}')
   ORIG_IDX=$(tmux display -p '#{window_index}')
-  workmux open --config "$WM_CONFIG" "${WORKTREE:t}" -p "/cf-ticket $TICKET" || WM_RC=$?
+  (cd "$PRIMARY_DIR" && workmux open --config "$WM_CONFIG" "${PRIMARY_WT:t}" -p "/cf-ticket $TICKET") || WM_RC=$?
   rm -f "$WM_CONFIG"
   if (( WM_RC == 0 )) && [[ $(tmux display -p -t "$ORIG_WIN" '#{window_panes}') == 1 ]]; then
     NEW_WIN=$(tmux list-windows -f '#{window_active}' -F '#{window_id}')
@@ -202,5 +292,5 @@ if [[ -n "$USE_WORKMUX" ]]; then
   exit $WM_RC
 fi
 
-cd "$WORKTREE"
-exec claude --model "$TIER" "/cf-ticket $TICKET"
+cd "$PRIMARY_WT"
+exec "${AGENT[@]}" "/cf-ticket $TICKET"

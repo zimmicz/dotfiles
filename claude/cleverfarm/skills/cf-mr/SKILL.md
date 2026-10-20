@@ -10,6 +10,7 @@ description: |
 
 ## Steps
 
+0. **Multi-repo**: `TICKET.md` `## Repos` lists more than one worktree → run steps 3–7 and 10 once per worktree (`cd <worktree>` first; `git`, `glab` and repo detection are cwd-based), non-primary (BE) repos first, cf-farm-frontend last. Same branch everywhere. Every MR description lists the sibling MR URLs (`Depends on: <BE MR url>` in the FE one). Steps 8, 11, 12 run once.
 1. Detect current branch name, extract ticket ID (`[A-Z]+-\d+` pattern)
 2. Get ticket details — cheapest source first: if `TICKET.md` exists in worktree root, use it (summary, issue type). Otherwise fetch via `atlassian.getJiraIssue` (cloudId: `1f10ad4f-84e7-4939-b19a-bc8e7bf0553d`)
 3. Detect base branch: if Jira issue type is "Hotfix" → target `production`. Otherwise check `git merge-base --is-ancestor origin/<branch> HEAD` for production, staging, develop (in that order)
@@ -29,7 +30,7 @@ description: |
    - `assignee_ids`: [18554466] (michal.zimmermann1)
    - `reviewer_ids`: per step 6 (empty for non-cf-farm-frontend repos)
 8. Transition ticket to review via `atlassian.getTransitionsForJiraIssue` then `atlassian.transitionJiraIssue` — pick the transition whose target status is "Review" (or "In Review" if that's what exists)
-9. Return MR URL
+9. Return MR URL (all of them for multi-repo)
 10. **Amplify deploy preview** — only if repo is `cleverfarm/cleverfarm/cf-farm-frontend`: read `references/amplify-preview.md` (in this skill's directory) and follow it. Other repos: skip.
 11. **Log time** — prompt: "Log time on <ticket>? (duration like `2h`, or `n` to skip)". If duration provided, invoke `cf-log-time` flow with that duration.
 12. **Quick retro** — ask: "Any mid-impl pivots from requirement gaps? (y/n + brief note)". Append row to `memory/workflow-retro-log.md`:

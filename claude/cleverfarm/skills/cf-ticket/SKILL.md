@@ -24,6 +24,7 @@ Orchestrates the entire workflow for a ticket. Each phase has a STOP gate — wa
 1. If no ticket ID in arguments, ask for one
 2. Check if ticket has a parent/blocking ticket that implies a non-develop base branch. If so, surface it: "Base on `<parent-branch>`?" Also check for sibling branches off the same parent to avoid overlap.
 3. If already inside a worktree with `TICKET.md` (the `cf-work` script created it), skip to Phase 2. Otherwise run `/cf-worktree` for the ticket (thin wrapper over the same `~/bin/cf-work` script), passing the base branch if identified in step 2.
+3a. **Multi-repo**: `TICKET.md` `## Repos` lists more than one worktree → the session was launched with `--add-dir` for the siblings, all are on the same branch. Treat the set as one change: plan steps, verify (phase 4) and self-review (phase 5) per repo, in each repo's own worktree dir. BE contract first (API/DTO), FE consumes it.
 4. **STOP** — confirm worktree ready
 
 ## Phase 2: Requirements

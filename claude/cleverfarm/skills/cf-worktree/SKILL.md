@@ -7,15 +7,17 @@ description: |
 
 # Create worktree for a Jira ticket
 
-Arguments: `<ticket-id> [base-branch]` (base defaults to `develop`; script auto-switches to `production` for hotfix tickets)
+Arguments: `<ticket-id> [base-branch] [--repos a,b]` (base defaults to `develop`; script auto-switches to `production` for hotfix tickets)
 
-Thin wrapper around `~/bin/cf-work` — the script does everything: Jira fetch, assign, transition to In Progress, branch name (≤45 chars, Amplify subdomain limit), worktree, `.env` copy, `TICKET.md`, deps install (lockfile-detected, background), codegraph init, model-tier sizing.
+Thin wrapper around `~/bin/cf-work` — the script does everything: Jira fetch, assign, transition to In Progress, branch name (≤45 chars, Amplify subdomain limit), worktree per repo, `.env` copy, `TICKET.md`, deps install (lockfile-detected, background), codegraph init, model-tier sizing.
+
+Repos: `--repos` > ticket labels `repo-<dir>` > mapped labels (`frontend`, `agroevidence`, `irrigation`, … → dir under `~/work/cleverfarm/repos`, map lives in the script) > cwd repo. Multi-repo ticket = one worktree per repo, same branch; claude starts in the primary worktree (cf-farm-frontend if present) with `--add-dir` for the rest. `TICKET.md` lists them under `## Repos`.
 
 ## Steps
 
 1. Check `JIRA_EMAIL` and `JIRA_TOKEN` are set (`[[ -n "$JIRA_EMAIL" && -n "$JIRA_TOKEN" ]]`). If missing, tell user to export them and stop.
-2. Run: `~/bin/cf-work <ticket-id> [base-branch] --no-launch`
-3. Relay script output to user: worktree path, model tier + reason, and the printed launch command (`cd .worktrees/... && claude --model <tier> "/cf-ticket <ticket>"`).
+2. Run: `~/bin/cf-work <ticket-id> [base-branch] [--repos a,b] --no-launch`
+3. Relay script output to user: resolved repos, worktree paths, model tier + reason, and the printed launch command (`cd <primary worktree> && claude --model <tier> [--add-dir <sibling worktree>…] "/cf-ticket <ticket>"`).
 4. If the script fails, show its error output and stop — do NOT re-implement the flow via Jira MCP calls.
 
 ## Rules
