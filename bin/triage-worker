@@ -51,11 +51,25 @@ analyze() {
     echo "  worktree setup failed" | tee -a $LOG
     return 1
   fi
-  (cd $WT && claude -p "/cf-work $KEY --headless" \
+  local PANE=$(wm_window $WT $LOG)
+  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work $KEY --headless" \
     --model $TIER \
     --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) && [[ -f $WT/PLAN.md ]] \
     && echo "  ok -> $WT/PLAN.md" | tee -a $LOG
+}
+
+wm_window() {
+  local WT=$1 LOG=$2
+  tmux ls >/dev/null 2>&1 || return 0
+  tmux has-session -t cf-triage 2>/dev/null || tmux new-session -d -s cf-triage -n log
+  local ANCHOR=$(tmux list-panes -s -t cf-triage -F '#{pane_id}' | head -1)
+  local CFG=$(mktemp --suffix=.yaml)
+  { cat ~/.config/workmux/config.yaml; printf 'agent: tail -n +1 -f %s\n' $LOG; } >$CFG
+  (cd ${WT:h:h} && TMUX_PANE=$ANCHOR workmux open --config $CFG --parent-session cf-triage ${WT:t}) >>$LOG 2>&1
+  rm -f $CFG
+  tmux rename-window -t $ANCHOR log
+  tmux list-panes -s -t cf-triage -f "#{==:#{pane_current_path},$WT}" -F '#{pane_id}' | head -1
 }
 
 implement() {
@@ -67,7 +81,8 @@ implement() {
   local WT=($REPOS/$REPO/.worktrees/${KEY}-*(N/[1]))
   local TIER=$(grep -oP 'claude --model \K\w+' <<<"$SETUP" || echo sonnet)
   [[ -n "$WT" && -f $WT/PLAN.md ]] || { echo "  no worktree/PLAN.md" | tee -a $LOG; return 1; }
-  (cd $WT && claude -p "/cf-ticket $KEY --headless" \
+  local PANE=$(wm_window $WT $LOG)
+  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-ticket $KEY --headless" \
     --model $TIER \
     --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
     --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*)" \

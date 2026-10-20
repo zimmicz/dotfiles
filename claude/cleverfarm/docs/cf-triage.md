@@ -44,7 +44,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | path | what |
 |---|---|
 | `~/dotfiles/bin/sentry-triage` | stage 1: open-ticket gate + daily stamp, then claude -p (sonnet) + Sentry MCP + `jira` → ticket. `--dry-run` (ignores gate + stamp), `MAX=` (default 1) |
-| `~/dotfiles/bin/triage-worker` | stages 2–5: triage, reply follow-up, implement, resolve Sentry on Done; Slack summary. flock'd (manual run while timer runs = exits). `triage-worker DEV-X` = one ticket (implements if it has `ai-fix`). `MAX=`, `IMPL_MAX=` |
+| `~/dotfiles/bin/triage-worker` | stages 2–5: triage, reply follow-up, implement, resolve Sentry on Done; Slack summary. flock'd (manual run while timer runs = exits). `triage-worker DEV-X` = one ticket (implements if it has `ai-fix`). `MAX=`, `IMPL_MAX=`. Analyze + implement open the worktree via `workmux open` in tmux session `cf-triage` (agent pane = `tail -f <KEY>.log`) and runs claude with that `TMUX_PANE`, so workmux status hooks show 🤖/✅ in the dashboard. Window `log` = anchor (workmux renames the `TMUX_PANE` window, renamed back). No tmux server = skipped |
 | `~/dotfiles/bin/cf-work` | worktree setup, one per repo (`--repos a,b` > `repo-*` labels > mapped labels `frontend`/`agroevidence`/… > cwd); same branch everywhere, claude in primary worktree + `--add-dir` siblings; `--no-launch`, `--no-claim` (skip assign + In Progress) |
 | `~/dotfiles/claude/skills/cf-work` | `--headless`: root-cause analysis → PLAN.md + comment; follow-up mode on replies |
 | `~/dotfiles/claude/skills/cf-ticket` | `--headless`: implement PLAN.md, verify, self-review, `/cf-mr --headless` |
