@@ -19,6 +19,11 @@ search() {
   jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=labels,comment&maxResults=$2"
 }
 
+awaiting_reply() {
+  jq -r --arg m "$AI_MARK" '.issues[] | select((.fields.comment.comments | length > 0) and ((.fields.comment.comments | last | .body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not))' \
+    | jq -rs "{issues: .} | $ROWS_JQ"
+}
+
 note() {
   echo "[$1](https://cleverfarm.atlassian.net/browse/$1) $2" >>$NOTES
 }
@@ -94,19 +99,21 @@ if [[ -n "${1:-}" ]]; then
   NEW=""
   IMPL=""
   REPLIES=""
+  MR_REPLIES=""
   DONE=""
   LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
   if [[ " $LABELS " == *" ai-fix "* ]]; then
     IMPL=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
+  elif [[ " $LABELS " == *" ai-mr "* ]]; then
+    MR_REPLIES=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
   else
     NEW=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
   fi
 else
   NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
   IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' ${IMPL_MAX:-1} | jq -r "$ROWS_JQ")
-  REPLIES=$(search 'project = DEV AND labels = triaged AND statusCategory = "To Do"' 20 \
-    | jq -r --arg m "$AI_MARK" '.issues[] | select((.fields.comment.comments | length > 0) and ((.fields.comment.comments | last | .body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not))' \
-    | jq -rs "{issues: .} | $ROWS_JQ")
+  REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory = "To Do"' 20 | awaiting_reply)
+  MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done ORDER BY updated ASC' 20 | awaiting_reply | head -${IMPL_MAX:-1})
   DONE=$(search 'project = DEV AND labels in (triaged, ai-mr) AND labels not in (ai-done) AND status = Done' 5 \
     | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
 fi
@@ -126,6 +133,13 @@ while read -r KEY REPO; do
   [[ -z "$KEY" ]] && continue
   if implement $KEY $REPO; then relabel $KEY ai-fix ai-mr; note $KEY "draft MR: $(cat $LOG_DIR/$KEY.mr)"; else relabel $KEY ai-fix ai-fix-failed; note $KEY "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$KEY.log\`"; fi
 done <<<"$IMPL"
+
+while read -r KEY REPO; do
+  [[ -z "$KEY" ]] && continue
+  echo "--- MR follow-up $KEY"
+  implement $KEY $REPO
+  if search "key = $KEY" 1 | awaiting_reply | grep -q .; then relabel $KEY ai-mr ai-fix-failed; note $KEY "MR follow-up failed, see \`$LOG_DIR/$KEY.log\`"; else note $KEY "your reply answered on MR: $(cat $LOG_DIR/$KEY.mr)"; fi
+done <<<"$MR_REPLIES"
 
 while read -r KEY IDS; do
   [[ -z "$KEY" || -z "$IDS" ]] && continue

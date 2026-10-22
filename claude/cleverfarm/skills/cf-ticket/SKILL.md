@@ -5,7 +5,8 @@ description: |
   "cf-ticket", or provides a ticket ID (e.g. DEV-XXXX) to work on end-to-end.
   With `--headless` (triage-worker, ticket labelled ai-fix): implements PLAN.md
   unattended, verifies (tests, lint, typecheck, visual check via /verify-ui for UI
-  changes), self-reviews, opens a draft MR without reviewers.
+  changes), self-reviews, opens a draft MR without reviewers. On a ticket labelled
+  ai-mr: answers new human Jira comments by pushing fixes to the existing MR.
 ---
 
 # Full ticket lifecycle
@@ -78,5 +79,7 @@ No user present — never ask, never wait, no STOP gates. The user approved `PLA
 5. Phase 5: `/code-review` + `/simplify` on the diff, apply fixes, re-run phase 4.
 6. Phase 6: `/cf-mr --headless`.
 7. Post ONE Jira comment (`jira add-comment`, Czech, my voice, Jira wiki markup, first line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`): MR link, what changed, how to verify (preview/screen URL for FE), anything deviating from the plan. After-release step: resolve EVERY Sentry issue from the ticket's `sentry-*` labels (list them all by short id).
+
+**MR follow-up** — MR for this branch already exists (ticket labelled `ai-mr`, triage-worker re-runs on a human Jira comment newer than the last 🤖 one): skip phases 3–6 above. Read every human comment in `TICKET.md` after the last 🤖 comment, plus unresolved MR threads (`glab api`). Apply what they ask on the existing branch (scope = those comments), run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). Then post ONE Jira comment, same first line as step 7: what changed per comment, or why not.
 
 **Bail out** — no MR, just the Jira comment explaining why — when: root cause in `PLAN.md` doesn't hold in the code, the fix needs scope beyond the plan, or phase 4 can't go green. Never push to develop/staging/production, never force-push, never merge or approve.
