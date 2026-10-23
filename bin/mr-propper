@@ -5,9 +5,46 @@ REPO=~/work/cleverfarm/repos/cf-farm-frontend
 STATE=~/.local/state/mr-propper
 OUT=$STATE/$(date +%F)
 MODEL=${MODEL:-opus}
-mkdir -p $OUT
+ME=712020:d8b09ea3-beb7-4afc-af06-6d7119474a4f
+PRODUCT_CLEVERFARM=11710
+BOARD=198
+mkdir -p $STATE
 
 [[ "${PROPPER_LOCKED:-}" == 1 ]] || exec env PROPPER_LOCKED=1 flock -n $STATE/.lock $0 "$@"
+
+md2wiki() {
+  sed '1{/^# /d}' $1 \
+    | awk '{a[NR]=$0} END {for (i = 1; i <= NR; i++) {
+        if (a[i] ~ /^\|[-: |]+\|$/) continue
+        if (a[i + 1] ~ /^\|[-: |]+\|$/) gsub(/\|/, "||", a[i])
+        print a[i] }}' \
+    | sed -E 's/^## (.*)/h2. \1/; s/^- /* /; s/\*\*([^*]+)\*\*/*\1*/g; s/`([^`]+)`/{{\1}}/g'
+}
+
+file_ticket() {
+  local DIR=$1 MD=$1/ticket.md
+  [[ -f $MD ]] || { echo "no $MD"; exit 1; }
+  [[ -f $DIR/filed ]] && { echo "already filed: $(cat $DIR/filed)"; exit 1; }
+  local SUMMARY=$(sed -n '1s/^# //p' $MD)
+  local SPRINT=$(jira GET "/rest/agile/1.0/board/$BOARD/sprint?state=active" | jq '.values[0].id')
+  local BODY=$(jq -n --arg s "$SUMMARY" --arg d "$(md2wiki $MD)" --arg me $ME --arg p $PRODUCT_CLEVERFARM --argjson sprint $SPRINT '{fields: {
+    project: {key: "DEV"}, issuetype: {name: "Task"}, summary: $s, description: $d,
+    assignee: {accountId: $me}, customfield_13543: [{id: $p}], customfield_10007: $sprint,
+    labels: ["mr-propper", "triage", "repo-cf-farm-frontend"]}}')
+  local KEY=$(jira POST /rest/api/2/issue "$BODY" | jq -r '.key // empty')
+  [[ -n "$KEY" ]] || { echo "Jira create failed"; exit 1; }
+  echo $KEY >$DIR/filed
+  echo "🎫 https://cleverfarm.atlassian.net/browse/$KEY"
+  printf '**mr-propper**\n• [%s](https://cleverfarm.atlassian.net/browse/%s) %s (queued for triage)\n' $KEY $KEY "$SUMMARY" \
+    | ~/.claude/scripts/slack-post.sh "mr-propper"
+}
+
+if [[ "${1:-}" == --file ]]; then
+  file_ticket ${2:-$(ls -d $STATE/2*/ | tail -1)}
+  exit
+fi
+
+mkdir -p $OUT
 
 cd $REPO
 [[ $(git branch --show-current) == develop ]] || { echo "$REPO not on develop"; exit 1; }
