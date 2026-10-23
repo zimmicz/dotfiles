@@ -1,0 +1,35 @@
+#!/bin/zsh
+set -uo pipefail
+
+REPO=~/work/cleverfarm/repos/cf-farm-frontend
+STATE=~/.local/state/mr-propper
+OUT=$STATE/$(date +%F)
+MODEL=${MODEL:-opus}
+mkdir -p $OUT
+
+[[ "${PROPPER_LOCKED:-}" == 1 ]] || exec env PROPPER_LOCKED=1 flock -n $STATE/.lock $0 "$@"
+
+cd $REPO
+[[ $(git branch --show-current) == develop ]] || { echo "$REPO not on develop"; exit 1; }
+
+echo "🔍 knip"
+node_modules/.bin/knip --reporter json 2>/dev/null | grep '^{' >$OUT/knip.json
+
+echo "🔍 jscpd"
+pnpm dlx jscpd@4.0.5 app --min-lines 15 --ignore "app/generated/**,**/*.json,**/*.test.*,**/*.stories.*" \
+  --formats-exts "tsx:tsx,jsx;typescript:ts,js" --reporters json --output $OUT/jscpd --silent >/dev/null 2>&1
+
+git log --since=7.days --name-only --pretty=format: develop -- app | grep . | sort -u >$OUT/recent.txt
+touch $STATE/ignored.txt
+ln -sf $STATE/ignored.txt $OUT/ignored.txt
+
+echo "🧹 claude ($MODEL)"
+claude -p "/mr-propper $OUT" \
+  --model $MODEL \
+  --allowedTools "Read Skill Write(/$OUT/ticket.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Bash(git grep:*) Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(jira GET:*) Bash(jq:*)" \
+  --output-format stream-json --verbose </dev/null 2>>$OUT/claude.err \
+  | tee $OUT/claude.jsonl \
+  | jq --unbuffered -r 'if .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
+      elif .type == "result" then "✅ exit error=\(.is_error) cost=$\(.total_cost_usd)" else empty end'
+
+[[ -f $OUT/ticket.md ]] && { echo; cat $OUT/ticket.md; echo; echo "📄 $OUT/ticket.md"; } || { echo "no ticket.md, see $OUT"; exit 1; }
