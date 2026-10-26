@@ -118,6 +118,6 @@ create ticket ~$0.45 · analysis ~$0.65 · reply ~$0.4 · implement ~$1.6 (opus)
 ## Known gaps
 
 - editing an old non-AI comment counts as a new reply if it's the last one
-- MCP login expiry → runs fail, visible only as `*-failed` labels / Slack / logs
+- MCP login expiry → runs fail. sentry-triage without `TRIAGE_DONE` → one Slack note per day (`sentry-failed-noted` stamp) with the `TRIAGE_FAILED` reason; fix Sentry auth via `/mcp` → claude.ai Sentry. Worker failures → `*-failed` labels / logs
 - Persistent catch-up can fire once on Saturday if the laptop was off at Friday's last slot (daily stamp keeps it to one ticket)
 - a `triage-failed` / `ai-fix-failed` ticket blocks new issues until I close or relabel it
