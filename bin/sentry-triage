@@ -53,9 +53,10 @@ Jira: use the shell wrapper \`jira <METHOD> <endpoint> [json]\` (REST, base http
 
 1. ONLY Sentry projects fe-monitoring and can-frontend, ignore all others. search_issues twice (projectSlugOrId fe-monitoring, then can-frontend), query 'is:unresolved is:unassigned', sort freq, period 90d, limit 100. Merge both lists, order by event count desc.
 SHORTID = the full Sentry short id incl. project prefix, e.g. CAN-FRONTEND-JS or FE-MONITORING-6DN (never just the suffix).
+PROD release per project: execute_sentry_tool find_releases (projectSlug fe-monitoring query 'cf-farm-frontend-', projectSlug can-frontend query 'can-frontend-'); highest semver version with a firstEvent. Commit-SHA and HEAD releases are nightly/preview builds, never PROD.
 
-2. Walk the list in order. Dedup each issue: \`jira GET \"/rest/api/3/search/jql?jql=labels%3Dsentry-<SHORTID>&fields=key\"\`. Already ticketed -> no new ticket, just do step 5 with the existing key. Stop after $MAX NEW tickets.
-3. Issues in this batch with the same title in the same project = one ticket carrying every sentry-<SHORTID> label.
+2. Walk the list in order. Dedup each issue: \`jira GET \"/rest/api/3/search/jql?jql=labels%3Dsentry-<SHORTID>&fields=key\"\`. Already ticketed -> no new ticket, just do step 5 with the existing key. Not ticketed and lastSeen < PROD firstEvent (no event since current prod release went live; compare exact ISO timestamps from get_sentry_resource, never estimate from relative 'N days ago'; unsure -> not stale) -> stale, already fixed: no ticket, update_issue status 'resolved', reason 'no events since <PROD version>'. Stop after $MAX NEW tickets (stale ones don't count).
+3. Non-stale issues in this batch with the same title in the same project = one ticket carrying every sentry-<SHORTID> label. Run the stale check on each sibling too.
 4. For each new ticket: get_sentry_resource on the issue (details + latest event). Create via \`jira POST /rest/api/2/issue '<json>'\`:
    - project key DEV, issuetype name Bug
    - summary: '[Sentry] <title>' (max 200 chars)
@@ -67,7 +68,7 @@ SHORTID = the full Sentry short id incl. project prefix, e.g. CAN-FRONTEND-JS or
    - fe-monitoring -> repo cf-farm-frontend; product by route: /telematics 11714, /sensors or /irrigation 11712, /actions /parcels /catalogues /stores 11711, satellite/biomonitoring/prescription 11713, else 11710
    - can-frontend -> repo can-frontend, product 11707
 5. update_issue assignedTo 'user:3546621', reason 'Jira: https://cleverfarm.atlassian.net/browse/<KEY>'.
-6. Final answer: one line per Sentry issue: '<SHORTID> -> <KEY> (new|existing) [sentry: yes|no]' or '<SHORTID> -> error: <why>'. Last line, alone: 'TRIAGE_DONE' only if both search_issues calls succeeded, else 'TRIAGE_FAILED: <why>'."
+6. Final answer: one line per Sentry issue: '<SHORTID> -> <KEY> (new|existing) [sentry: yes|no]', '<SHORTID> -> stale (last seen <date>, PROD <version>)' or '<SHORTID> -> error: <why>'. Last line, alone: 'TRIAGE_DONE' only if both search_issues calls succeeded, else 'TRIAGE_FAILED: <why>'."
 
 claude -p "$PROMPT" \
   --model sonnet \
@@ -88,3 +89,4 @@ date +%F >$STAMP
 grep -oE '^[A-Z0-9-]+ -> DEV-[0-9]+ \(new.*' $LOG_DIR/sentry-last.txt \
   | awk '{ ids[$3] = ids[$3] (ids[$3] ? ", " : "") $1 ($0 ~ /sentry: no/ ? " (noise)" : "") }
          END { for (k in ids) print "new ticket [" k "](https://cleverfarm.atlassian.net/browse/" k ") from Sentry " ids[k] }' >>$NOTES || true
+grep -oE '^[A-Z0-9-]+ -> stale.*' $LOG_DIR/sentry-last.txt | sed 's/ -> stale/ resolved as stale/' >>$NOTES || true

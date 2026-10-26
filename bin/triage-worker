@@ -114,7 +114,7 @@ else
   IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' ${IMPL_MAX:-1} | jq -r "$ROWS_JQ")
   REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory = "To Do"' 20 | awaiting_reply)
   MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done ORDER BY updated ASC' 20 | awaiting_reply | head -${IMPL_MAX:-1})
-  DONE=$(search 'project = DEV AND labels in (triaged, ai-mr) AND labels not in (ai-done) AND status = Done' 5 \
+  DONE=$(search 'project = DEV AND labels in (triaged, ai-mr, triage-failed, ai-fix-failed) AND labels not in (ai-done) AND status = Done' 5 \
     | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
 fi
 
@@ -131,7 +131,7 @@ done <<<"$REPLIES"
 
 while read -r KEY REPO; do
   [[ -z "$KEY" ]] && continue
-  if implement $KEY $REPO; then relabel $KEY ai-fix ai-mr; note $KEY "draft MR: $(cat $LOG_DIR/$KEY.mr)"; else relabel $KEY ai-fix ai-fix-failed; note $KEY "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$KEY.log\`"; fi
+  if implement $KEY $REPO; then relabel $KEY ai-fix ai-mr; note $KEY "draft MR: $(cat $LOG_DIR/$KEY.mr)"; elif search "key = $KEY AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $KEY ai-fix triaged; note $KEY "already fixed, closed as duplicate, Sentry resolves next run"; else relabel $KEY ai-fix ai-fix-failed; note $KEY "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$KEY.log\`"; fi
 done <<<"$IMPL"
 
 while read -r KEY REPO; do

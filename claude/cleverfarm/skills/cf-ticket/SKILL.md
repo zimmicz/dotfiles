@@ -7,6 +7,7 @@ description: |
   unattended, verifies (tests, lint, typecheck, visual check via /verify-ui for UI
   changes), self-reviews, opens a draft MR without reviewers. On a ticket labelled
   ai-mr: answers new human Jira comments by pushing fixes to the existing MR.
+  Plan says already fixed elsewhere: links Duplicate, moves ticket to Done, no MR.
 ---
 
 # Full ticket lifecycle
@@ -78,7 +79,9 @@ No user present — never ask, never wait, no STOP gates. The user approved `PLA
 4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix. UI diff → `/verify-ui` against Storybook (Playwright, headless); routes needing auth can't be checked — list them in the MR description and Jira comment as unverified.
 5. Phase 5: `/code-review` + `/simplify` on the diff, apply fixes, re-run phase 4.
 6. Phase 6: `/cf-mr --headless`.
-7. Post ONE Jira comment (`jira add-comment`, Czech, my voice, Jira wiki markup, first line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`): MR link, what changed, how to verify (preview/screen URL for FE), anything deviating from the plan. After-release step: resolve EVERY Sentry issue from the ticket's `sentry-*` labels (list them all by short id).
+7. Post ONE Jira comment (`jira add-comment`, Czech, my voice, Jira wiki markup, first line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`): MR link, what changed, how to verify (preview/screen URL for FE), anything deviating from the plan. Sentry issues from the ticket's `sentry-*` labels resolve automatically once the ticket is Done (list them by short id).
+
+**No code change** — `PLAN.md` concludes the bug is already fixed elsewhere (duplicate of ticket `<FIX>`) and you verified the fix in code (commit in a released tag): skip phases 3–6. Link `jira POST /rest/api/3/issueLink '{"type":{"name":"Duplicate"},"inwardIssue":{"key":"<KEY>"},"outwardIssue":{"key":"<FIX>"}}'`, then move to Done (transition named `Done` from `jira GET /rest/api/3/issue/<KEY>/transitions`). Post ONE Jira comment, same first line as step 7: evidence (commit, tag), closed as duplicate of `<FIX>`, Sentry resolves automatically. Not a bail out.
 
 **MR follow-up** — MR for this branch already exists (ticket labelled `ai-mr`, triage-worker re-runs on a human Jira comment newer than the last 🤖 one): skip phases 3–6 above. Read every human comment in `TICKET.md` after the last 🤖 comment, plus unresolved MR threads (`glab api`). Apply what they ask on the existing branch (scope = those comments), run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). Then post ONE Jira comment, same first line as step 7: what changed per comment, or why not.
 
