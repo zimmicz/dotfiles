@@ -6,7 +6,8 @@ REPOS=~/work/cleverfarm/repos
 LOG_DIR=~/.local/state/cf-triage
 AI_MARK="AI triage (Claude, headless)"
 NOTES=$LOG_DIR/notes.txt
-mkdir -p $LOG_DIR
+HOLDOUT=$LOG_DIR/holdout
+mkdir -p $LOG_DIR $HOLDOUT
 
 [[ "${TRIAGE_LOCKED:-}" == 1 ]] || exec env TRIAGE_LOCKED=1 flock -n $LOG_DIR/.lock $0 "$@"
 
@@ -60,7 +61,7 @@ analyze() {
   local PANE=$(wm_window $WT $LOG)
   (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work $KEY --headless" \
     --model $TIER \
-    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
+    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) && [[ -f $WT/PLAN.md ]] \
     && echo "  ok -> $WT/PLAN.md" | tee -a $LOG
 }
@@ -84,13 +85,47 @@ implement() {
   local TIER=$(grep -oP 'claude --model \K\w+' <<<"$SETUP" || echo sonnet)
   [[ -n "$WT" && -f $WT/PLAN.md ]] || { echo "  no worktree/PLAN.md" | tee -a $LOG; return 1; }
   local PANE=$(wm_window $WT $LOG)
-  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-ticket $KEY --headless" \
+  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-ticket $KEY --headless ${3:-}" \
     --model $TIER \
     --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
-    --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*)" \
+    --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null | jq -r '.[0].web_url // empty')
   [[ -n "$MR" ]] && echo "  mr -> $MR" | tee -a $LOG && echo "$MR" >$LOG_DIR/$KEY.mr
+}
+
+verify() {
+  local KEY=$1 REPO=$2 LOG=$LOG_DIR/$1.log OUT=$LOG_DIR/$1.verify.md
+  [[ -f $HOLDOUT/$KEY.md ]] || return 2
+  local WT=($REPOS/$REPO/.worktrees/${KEY}-*(N/[1]))
+  [[ -n "$WT" ]] || return 2
+  local MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null | jq -c '.[0] // empty')
+  [[ -n "$MR" ]] || return 2
+  local PID=$(jq -r .project_id <<<$MR) IID=$(jq -r .iid <<<$MR)
+  local PIPE=$(glab api "projects/$PID/merge_requests/$IID/pipelines" | jq -c '.[0] // empty')
+  [[ "$(jq -r .status <<<$PIPE)" == success ]] || return 2
+  local SHA=$(jq -r .sha <<<$PIPE) PIPE_ID=$(jq -r .id <<<$PIPE)
+  if [[ $REPO == cf-farm-frontend ]]; then
+    glab api "projects/$PID/merge_requests/$IID/notes?per_page=100" \
+      | jq -e --arg s "${SHA[1,8]}" 'any(.[]; (.body | contains("amplify-preview-url")) and (.body | contains("@ " + $s)))' >/dev/null || return 2
+  fi
+  echo "=== verify $KEY ($REPO @ ${SHA[1,8]}) $(date -Iseconds)" | tee -a $LOG
+  rm -f $OUT
+  local CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-env/*' 2>/dev/null | sort -V | tail -1)
+  local PANE=$(wm_window $WT $LOG)
+  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-verify $KEY repo=$REPO mr=$IID pipeline=$PIPE_ID sha=${SHA[1,8]} branch=${WT:t}" \
+    --model sonnet \
+    --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*)" \
+    --disallowedTools "Edit Bash(git:*)" \
+    --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
+  local VERDICT=$(head -1 $OUT 2>/dev/null)
+  echo "  ${VERDICT:-no report}" | tee -a $LOG
+  case $VERDICT in
+    "VERDICT: pass"*) return 0 ;;
+    "VERDICT: fail"*) return 1 ;;
+    "VERDICT: blocked"*) return 4 ;;
+    *) return 3 ;;
+  esac
 }
 
 ROWS_JQ='.issues[] | "\(.key) \((.fields.labels | map(select(startswith("repo-"))) | first // "repo-") | ltrimstr("repo-"))"'
@@ -100,10 +135,13 @@ if [[ -n "${1:-}" ]]; then
   IMPL=""
   REPLIES=""
   MR_REPLIES=""
+  VERIFY=""
   DONE=""
   LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
   if [[ " $LABELS " == *" ai-fix "* ]]; then
     IMPL=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
+  elif [[ " $LABELS " == *" ai-mr "* && "${2:-}" == --verify ]]; then
+    VERIFY=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
   elif [[ " $LABELS " == *" ai-mr "* ]]; then
     MR_REPLIES=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
   else
@@ -114,6 +152,7 @@ else
   IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' ${IMPL_MAX:-1} | jq -r "$ROWS_JQ")
   REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory = "To Do"' 20 | awaiting_reply)
   MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done ORDER BY updated ASC' 20 | awaiting_reply | head -${IMPL_MAX:-1})
+  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed) AND statusCategory != Done ORDER BY updated ASC' 20 | jq -r "$ROWS_JQ")
   DONE=$(search 'project = DEV AND labels in (triaged, ai-mr, triage-failed, ai-fix-failed) AND labels not in (ai-done) AND status = Done' 5 \
     | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
 fi
@@ -140,6 +179,29 @@ while read -r KEY REPO; do
   implement $KEY $REPO
   if search "key = $KEY" 1 | awaiting_reply | grep -q .; then relabel $KEY ai-mr ai-fix-failed; note $KEY "MR follow-up failed, see \`$LOG_DIR/$KEY.log\`"; else note $KEY "your reply answered on MR: $(cat $LOG_DIR/$KEY.mr)"; fi
 done <<<"$MR_REPLIES"
+
+VERIFIED=0
+while read -r KEY REPO; do
+  [[ -z "$KEY" ]] && continue
+  (( VERIFIED >= ${VERIFY_MAX:-1} )) && break
+  verify $KEY $REPO
+  RC=$?
+  (( RC == 2 )) && continue
+  (( VERIFIED++ ))
+  if (( RC == 0 )); then
+    relabel $KEY ai-verify-retry ai-verified; note $KEY "holdout scenarios pass: $(cat $LOG_DIR/$KEY.mr)"
+  elif (( RC == 3 )); then
+    relabel $KEY "" ai-verify-failed; note $KEY "verifier crashed, see \`$LOG_DIR/$KEY.log\`"
+  elif (( RC == 4 )); then
+    relabel $KEY "" ai-verify-failed; note $KEY "verify blocked (env/data), see \`$LOG_DIR/$KEY.verify.md\`"
+  elif search "key = $KEY AND labels = ai-verify-retry" 1 | jq -e '.issues | length > 0' >/dev/null; then
+    relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios still fail after retry, see \`$LOG_DIR/$KEY.verify.md\`"
+  else
+    relabel $KEY "" ai-verify-retry
+    implement $KEY $REPO "--verify-fix $LOG_DIR/$KEY.verify.md"
+    note $KEY "holdout scenarios failed, fix pushed, re-verify next run"
+  fi
+done <<<"$VERIFY"
 
 while read -r KEY IDS; do
   [[ -z "$KEY" ]] && continue

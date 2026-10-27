@@ -7,6 +7,7 @@ description: |
   unattended, verifies (tests, lint, typecheck, visual check via /verify-ui for UI
   changes), self-reviews, opens a draft MR without reviewers. On a ticket labelled
   ai-mr: answers new human Jira comments by pushing fixes to the existing MR.
+  With `--verify-fix <report>`: fixes failed holdout scenarios on the existing MR.
   Plan says already fixed elsewhere: links Duplicate, moves ticket to Done, no MR.
 ---
 
@@ -74,7 +75,7 @@ Orchestrates the entire workflow for a ticket. Each phase has a STOP gate — wa
 No user present — never ask, never wait, no STOP gates. The user approved `PLAN.md` by adding label `ai-fix`.
 
 1. Phases 0–1: skip. Goal = `TICKET.md` + `PLAN.md`. Worktree already exists.
-2. Phase 2: no new plan, no Jira comment. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win.
+2. Phase 2: no new plan, no Jira comment. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win. `~/.local/state/cf-triage/holdout/<KEY>.md` = acceptance scenarios an independent verifier runs against the preview after the MR exists. Read them, make the change satisfy them; never edit that file.
 3. Phase 3: implement all plan steps in one go. Stay strictly in plan scope.
 4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix. UI diff → `/verify-ui` against Storybook (Playwright, headless); routes needing auth can't be checked — list them in the MR description and Jira comment as unverified.
 5. Phase 5: `/code-review` + `/simplify` on the diff, apply fixes, re-run phase 4.
@@ -84,5 +85,7 @@ No user present — never ask, never wait, no STOP gates. The user approved `PLA
 **No code change** — `PLAN.md` concludes the bug is already fixed elsewhere (duplicate of ticket `<FIX>`) and you verified the fix in code (commit in a released tag): skip phases 3–6. Link `jira POST /rest/api/3/issueLink '{"type":{"name":"Duplicate"},"inwardIssue":{"key":"<KEY>"},"outwardIssue":{"key":"<FIX>"}}'`, then move to Done (transition named `Done` from `jira GET /rest/api/3/issue/<KEY>/transitions`). Post ONE Jira comment, same first line as step 7: evidence (commit, tag), closed as duplicate of `<FIX>`, Sentry resolves automatically (if `sentry-*` labels). Not a bail out.
 
 **MR follow-up** — MR for this branch already exists (ticket labelled `ai-mr`, triage-worker re-runs on a human Jira comment newer than the last 🤖 one): skip phases 3–6 above. Read every human comment in `TICKET.md` after the last 🤖 comment, plus unresolved MR threads (`glab api`). Apply what they ask on the existing branch (scope = those comments), run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). Then post ONE Jira comment, same first line as step 7: what changed per comment, or why not.
+
+**Verify fix** — `--verify-fix <report>` in arguments (MR exists, the holdout verifier failed): skip phases 3–6 above. Read the report (failed scenarios, observed vs expected, screenshots) and the scenarios file. Fix the code on the existing branch so the failed scenarios pass — never edit the scenarios. Run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). Post ONE Jira comment, same first line as step 7: which scenarios failed, what you changed. Scenario itself looks wrong (contradicts `PLAN.md` / ticket) → no code change, say so in the comment.
 
 **Bail out** — no MR, just the Jira comment explaining why — when: root cause in `PLAN.md` doesn't hold in the code, the fix needs scope beyond the plan, or phase 4 can't go green. Never push to develop/staging/production, never force-push, never merge or approve.

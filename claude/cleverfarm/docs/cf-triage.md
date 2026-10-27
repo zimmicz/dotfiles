@@ -11,11 +11,16 @@ Sentry (fe-monitoring, can-frontend)
 DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentry; description ends with "Belongs in Sentry?" verdict
   │  triage-worker          every 5 min: cf-work --no-claim → claude -p "/cf-work KEY --headless"
   ▼
-[triaged]  worktree + PLAN.md (first section: Belongs in Sentry? → filter fix if no) + Czech Jira comment (🤖 + "AI triage" marker)
-  │  I reply in Jira  →  next run (≤5 min) answers, updates PLAN.md   (To Do only, any age)
-  │  I add label ai-fix
+[triaged]  worktree + PLAN.md (first section: Belongs in Sentry? → filter fix if no) + holdout scenarios + Czech Jira comment (🤖 + "AI triage" marker)
+  │  I reply in Jira  →  next run (≤5 min) answers, updates PLAN.md + scenarios   (To Do only, any age)
+  │  I add label ai-fix  (= approves plan AND scenarios)
   ▼  triage-worker          max 1/run: cf-work (claims) → claude -p "/cf-ticket KEY --headless"
 [ai-mr]  draft MR, no reviewers, assigned to me + Jira comment with MR link
+  │  triage-worker          preview built for MR head sha (FE: Amplify bot note; BE: MR pipeline green)
+  ▼                         → fresh claude -p "/cf-verify" runs holdout scenarios in Playwright (BE: throwaway dyn-env)
+[ai-verified]  MR note with per-scenario verdicts
+  │  fail → 1 retry: "/cf-ticket KEY --headless --verify-fix <report>" pushes fix [ai-verify-retry] → re-verify
+  │  fail again / blocked / crash → [ai-verify-failed]
   │  I review, mark ready, add reviewers, merge; release moves ticket to Done
   ▼  triage-worker          ticket Done → resolves every sentry-* issue (haiku + Sentry MCP)
 [ai-done]  → next morning sentry-triage picks the next issue
@@ -39,6 +44,9 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | `ai-fix` | **my approval** to implement PLAN.md | me |
 | `ai-mr` | draft MR exists | triage-worker |
 | `ai-fix-failed` | agent bailed out (see its Jira comment) or no MR | triage-worker |
+| `ai-verify-retry` | holdout failed once, fix pushed, waiting for re-verify | triage-worker |
+| `ai-verified` | holdout scenarios pass on the preview | triage-worker |
+| `ai-verify-failed` | holdout failed after retry, blocked, or verifier crashed | triage-worker |
 | `ai-done` | ticket Done, Sentry issues resolved | triage-worker |
 
 ## Files
@@ -47,14 +55,15 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 |---|---|
 | `~/dotfiles/bin/sentry-triage` | stage 1: open-ticket gate + daily stamp, then claude -p (sonnet) + Sentry MCP + `jira` → ticket. `--dry-run` (ignores gate + stamp), `MAX=` (default 1) |
 | `~/dotfiles/bin/sentry-triage-now` | force a Sentry run today: drop `sentry-today` stamp + start `cf-triage.service` (no block) |
-| `~/dotfiles/bin/triage-worker` | stages 2–5: triage, reply follow-up, implement, resolve Sentry on Done; Slack summary. flock'd (manual run while timer runs = exits). `triage-worker DEV-X` = one ticket (implements if it has `ai-fix`). `MAX=`, `IMPL_MAX=`. Analyze + implement open a detached window per worktree in tmux session `cf-triage` (`tail -f <KEY>.log`) and run claude with that `TMUX_PANE`, so workmux status hooks show 🤖/✅ in the dashboard. Plain `tmux new-window -d`, not `workmux open` (that one `switch-client`s your attached client). No tmux server = skipped |
+| `~/dotfiles/bin/triage-worker` | stages 2–6: triage, reply follow-up, implement, holdout verify (+1 retry), resolve Sentry on Done; Slack summary. flock'd (manual run while timer runs = exits). `triage-worker DEV-X` = one ticket (implements if it has `ai-fix`; `triage-worker DEV-X --verify` = verify its MR now). `MAX=`, `IMPL_MAX=`, `VERIFY_MAX=` (default 1; not-ready previews don't count). Holdout verify of a BE ticket blocks the run ~30 min (dyn-env create). Analyze + implement open a detached window per worktree in tmux session `cf-triage` (`tail -f <KEY>.log`) and run claude with that `TMUX_PANE`, so workmux status hooks show 🤖/✅ in the dashboard. Plain `tmux new-window -d`, not `workmux open` (that one `switch-client`s your attached client). No tmux server = skipped |
 | `~/dotfiles/bin/cf-work` | worktree setup, one per repo (`--repos a,b` > `repo-*` labels > mapped labels `frontend`/`agroevidence`/… > cwd); same branch everywhere, claude in primary worktree + `--add-dir` siblings; `--no-launch`, `--no-claim` (skip assign + In Progress) |
 | `~/dotfiles/claude/skills/cf-work` | `--headless`: root-cause analysis → PLAN.md + comment; follow-up mode on replies |
 | `~/dotfiles/claude/skills/cf-ticket` | `--headless`: implement PLAN.md, verify, self-review, `/cf-mr --headless` |
 | `~/dotfiles/claude/skills/cf-mr` | `--headless`: `glab mr create --draft`, no reviewers, stays In Progress, FE plays Nightly preview |
+| `~/dotfiles/claude/cleverfarm/skills/cf-verify` | holdout verifier: Playwright login as `fe-automation@cleverfarm.cz` (password from cf-farm-frontend `.env`), runs scenarios, writes `<KEY>.verify.md` (`VERDICT: pass/fail/blocked`), MR note. Never edits code. BE: creates + destroys `<key>-verify` dyn-env |
 | `~/dotfiles/claude/systemd/cf-triage.{service,timer}` | symlinked to `~/.config/systemd/user/`; Mon–Fri every 5 min 07–18 (idle run = 4 Jira queries, no LLM), `Persistent=true`, 110 min timeout |
 | `~/.config/cf-triage.env` | `JIRA_EMAIL`, `JIRA_TOKEN` (0600, not in git) |
-| `~/.local/state/cf-triage/` | `<KEY>.log`, `sentry-*.json`, `sentry-last.txt`, `sentry-today` (daily stamp), `notes.txt` (pending Slack lines), `.lock` |
+| `~/.local/state/cf-triage/` | `<KEY>.log`, `<KEY>.verify.md`, `holdout/<KEY>.md` (scenarios; analysis may write, implementer denied), `sentry-*.json`, `sentry-last.txt`, `sentry-today` (daily stamp), `notes.txt` (pending Slack lines), `.lock` |
 | `~/.config/claude/slack-webhook` | incoming webhook URL for `#zimmi-claude` (0600, not in git) |
 | `~/dotfiles/gitignore` | ignores `PLAN.md`, `TICKET.md`, `install.log`, `.codegraph/` so MRs don't pick them up |
 
