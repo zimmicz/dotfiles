@@ -9,6 +9,7 @@
 
 ## Tools
 
+- Shell = zsh (Bash tool too), not bash. Unquoted `$var` no word-split (use arrays / `${=var}`), unmatched glob errors (`nomatch`; quote or `setopt nonomatch`), arrays 1-indexed, `read -p` invalid (`read "x?prompt"`), `=cmd` expands to path. Scripts needing bash → `bash -c` or `#!/usr/bin/env bash`.
 - Use `glab` CLI (not `gh`) for all GitLab operations (MRs, issues, pipelines).
 - Screenshots/images you take to look at yourself: ≤1280px wide, jpeg. Never Read the same image twice; reuse what you saw.
 - `npm run` is aliased to `nr` for all NPM operations. When you try to run a command with `npm run` it returns non zero exit code as a hint to run `nr` instead.
