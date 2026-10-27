@@ -18,7 +18,7 @@ description: |
 5. `git push -u origin <branch>`
 6. Detect repo path from `git remote get-url origin`. Determine reviewers:
    - Only if repo is `cleverfarm/cleverfarm/cf-farm-frontend`:
-     - Always: @vaclav.skorpil (ID 11273826), @jaroslav.tesarik (ID 3757192)
+     - Always: @jaroslav.tesarik (ID 3757192)
      - If E2E tests touched (`.feature`, step definitions, page objects): also add @barbora.kovarova (ID 13281885)
    - Other repos: no default reviewers
 7. Create MR via `mcp__GitLab__create_merge_request`:
