@@ -11,7 +11,8 @@ mkdir -p $LOG_DIR $HOLDOUT
 
 [[ "${TRIAGE_LOCKED:-}" == 1 ]] || exec env TRIAGE_LOCKED=1 flock -n $LOG_DIR/.lock $0 "$@"
 
-STREAM_JQ='if .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
+STREAM_JQ='if .type == "system" and .subtype == "init" then "🆔 session \(.session_id) — reopen: cd \(.cwd) && claude --resume \(.session_id)"
+  elif .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
   elif .type == "result" then "✅ exit error=\(.is_error) cost=$\(.total_cost_usd)\n\(.result // "")" else empty end'
 
 stream() { jq --unbuffered -r "$STREAM_JQ" }
