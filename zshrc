@@ -99,17 +99,6 @@ eval "`fnm env --use-on-cd`"
 export FLYCTL_INSTALL="/home/zimmi/.fly"
 export PATH="$FLYCTL_INSTALL/bin:$PATH"
 
-if [[ -n "$TMUX" ]]; then
-  precmd_tmux_title() {
-    local toplevel
-    toplevel=$(git rev-parse --show-toplevel 2>/dev/null)
-    if [[ "$toplevel" == */.worktrees/* ]]; then
-      tmux rename-window "$(basename "$toplevel")"
-    fi
-  }
-  precmd_functions+=(precmd_tmux_title)
-fi
-
 #THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
 export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
