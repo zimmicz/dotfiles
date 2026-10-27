@@ -1,5 +1,7 @@
 worktree_dir: .worktrees
 nerdfont: true
+sidebar:
+  enter_action: select
 panes:
   - command: <agent>
     focus: true
