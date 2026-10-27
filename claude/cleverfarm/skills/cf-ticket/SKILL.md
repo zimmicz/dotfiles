@@ -5,7 +5,7 @@ description: |
   "cf-ticket", or provides a ticket ID (e.g. DEV-XXXX) to work on end-to-end.
   With `--headless` (triage-worker, ticket labelled ai-fix): implements PLAN.md
   unattended, verifies (tests, lint, typecheck, visual check via /verify-ui for UI
-  changes), self-reviews, opens a draft MR without reviewers. On a ticket labelled
+  changes), independent review vs standards + PLAN.md, opens a draft MR without reviewers. On a ticket labelled
   ai-mr: answers new human Jira comments by pushing fixes to the existing MR.
   With `--verify-fix <report>`: fixes failed holdout scenarios on the existing MR.
   Plan says already fixed elsewhere: links Duplicate, moves ticket to Done, no MR.
@@ -52,10 +52,10 @@ Orchestrates the entire workflow for a ticket. Each phase has a STOP gate — wa
 14a. If diff touches UI files (`*.tsx`, `*.css`, stories), run `/verify-ui` — screenshots at desktop + mobile, all states. UI is not verified until this passes. Include the verdict table in the MR description; if something couldn't be checked (auth wall), say so there.
 15. **STOP** if any test/lint failures or visual fixes required non-trivial changes — show what changed
 
-## Phase 5: Self-review
+## Phase 5: Independent review
 
-16. Run `/code-review` on changed files — correctness bugs
-17. Run `/simplify` on changed files — cleanup/reuse
+16. Run `/code-review` on the diff — correctness bugs
+17. Run `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = repo `CLAUDE.md` "Coding Rules" + `~/dotfiles/claude/cleverfarm/standards/common.md` + `~/dotfiles/claude/cleverfarm/standards/<repo dir>.md` if it exists. Its Standards + Spec sub-agents see only the diff and those files, not your reasoning — don't pass them your own justification.
 18. Fix issues found from both passes
 19. **STOP** — ask "Ready to create MR?"
 
@@ -78,7 +78,7 @@ No user present — never ask, never wait, no STOP gates. The user approved `PLA
 2. Phase 2: no new plan, no Jira comment. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win. `~/.local/state/cf-triage/holdout/<KEY>.md` = acceptance scenarios an independent verifier runs against the preview after the MR exists. Read them, make the change satisfy them; never edit that file.
 3. Phase 3: implement all plan steps in one go. Stay strictly in plan scope.
 4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix. UI diff → `/verify-ui` against Storybook (Playwright, headless); routes needing auth can't be checked — list them in the MR description and Jira comment as unverified.
-5. Phase 5: `/code-review` + `/simplify` on the diff, apply fixes, re-run phase 4.
+5. Phase 5: steps 16–17 on the diff, apply fixes, re-run phase 4.
 6. Phase 6: `/cf-mr --headless`.
 7. Post ONE Jira comment (`jira add-comment`, Czech, my voice, Jira wiki markup, first line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`): MR link, what changed, how to verify (preview/screen URL for FE), anything deviating from the plan. If the ticket has `sentry-*` labels: those Sentry issues resolve automatically once the ticket is Done (list them by short id).
 

@@ -44,7 +44,8 @@ echo "sessions found: ${#FILES[@]} (truncated: $TRUNCATED)"
 echo "digest: $DIGEST_FILE ($(wc -c < "$DIGEST_FILE") bytes)"
 
 mapfile -t REPOS < <(grep '^repo: /' "$DIGEST_FILE" | cut -d' ' -f2- | sort -u)
-ADD_DIRS=(--add-dir "$HOME/.claude")
+STANDARDS_DIR="$HOME/dotfiles/claude/cleverfarm/standards"
+ADD_DIRS=(--add-dir "$HOME/.claude" --add-dir "$STANDARDS_DIR")
 for r in "${REPOS[@]}"; do ADD_DIRS+=(--add-dir "$r"); done
 
 TRUNC_NOTE=""
@@ -57,7 +58,8 @@ if [ "$(date +%u)" = 7 ]; then
   COMPACT_NOTE=" Today is compaction day: after appending, rewrite the '## Learned' list in $LEARNED_FILE in place - merge duplicate or overlapping bullets into one, drop bullets that are obsolete or already covered by $CLAUDE_MD, keep the terse style and the 'User: ...' quotes, cap at $MAX_LEARNED bullets (keep the most recurring / most costly-to-get-wrong). Do not touch anything above the '## Learned' heading. Report how many bullets before/after."
 fi
 
-PROMPT="Read $LEARNED_FILE and $CLAUDE_MD first, so you know what rules already exist. Then read $DIGEST_FILE - a digest of yesterday's Claude Code sessions ('### session' blocks with cwd + repo, then [user] prompts and [claude] replies, tool output stripped). Look for explicit corrections the user gave Claude, or preferences the user confirmed without pushback. Classify each lesson:
+PROMPT="Read $LEARNED_FILE, $CLAUDE_MD and every file in $STANDARDS_DIR first, so you know what rules already exist. Then read $DIGEST_FILE - a digest of yesterday's Claude Code sessions ('### session' blocks with cwd + repo, then [user] prompts and [claude] replies, tool output stripped). Look for explicit corrections the user gave Claude, or preferences the user confirmed without pushback. Classify each lesson:
+- CODE STANDARD (how code itself should be written, i.e. something a reviewer reading only the diff would flag: structure, naming, types, components, styling, tests): append to $STANDARDS_DIR/<repo dir name>.md, or $STANDARDS_DIR/common.md if it holds across repos, under the matching category heading (create file/heading if missing), format '- <rule> — evidence: session <date> — lint: <eslint rule|no>'. Skip duplicates of those files and of <repo>/CLAUDE.md. Never put these in $LEARNED_FILE.
 - GLOBAL (tool choice, communication style, workflow habits, cross-project): append one terse bullet (fragments OK, sacrifice grammar for concision, matching existing style) under '## Learned' in $LEARNED_FILE. Skip duplicates of what's already there or in $CLAUDE_MD.
 - REPO-SPECIFIC (conventions, gotchas, commands, structure of one codebase): append to <repo>/CLAUDE.local.md under a '## Learned' heading (create the file with that heading if missing), where <repo> is the 'repo:' path of the session. Skip duplicates of what's already in that file or in <repo>/CLAUDE.md. Skip if repo is 'none'.
 - Ticket details, one-off facts, things Claude got right: skip.
