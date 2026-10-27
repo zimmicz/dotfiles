@@ -79,7 +79,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "sonnet",
+  "model": "opus",
   "deniedMcpServers": [
     {
       "serverName": "claude.ai Atlassian MCP"
@@ -332,9 +332,10 @@
     "cf-vault-db@cleverfarm": true,
     "mempalace@mempalace": false,
     "ponytail@ponytail": true,
-    "ralph-loop@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": false,
     "slack@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true
+    "typescript-lsp@claude-plugins-official": true,
+    "cf-dyn-env@cleverfarm": true
   },
   "extraKnownMarketplaces": {
     "caveman": {
