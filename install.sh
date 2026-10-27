@@ -97,3 +97,14 @@ if ! ~/.local/bin/workmux --version 2>/dev/null | grep -q "${WORKMUX_VERSION#v}"
     && install -m 755 ${WM_TMP}/workmux ~/.local/bin/workmux
   rm -rf ${WM_TMP}
 fi
+
+TMUX_VERSION=3.7b
+TMUX_SHA256=92ac102a1f9b33b21d891a836b4b5b5c8c5d2eeac4bae4dfd34d565bbed598bf
+if ! ~/.local/bin/tmux -V 2>/dev/null | grep -q "${TMUX_VERSION}"; then
+  TM_TMP=$(mktemp -d)
+  curl -fsSL -o ${TM_TMP}/tmux.gz https://github.com/mjakob-gh/build-static-tmux/releases/download/v${TMUX_VERSION}/tmux.linux-amd64.stripped.gz \
+    && [ "$(sha256sum ${TM_TMP}/tmux.gz | cut -d' ' -f1)" = "${TMUX_SHA256}" ] \
+    && gunzip ${TM_TMP}/tmux.gz \
+    && install -m 755 ${TM_TMP}/tmux ~/.local/bin/tmux
+  rm -rf ${TM_TMP}
+fi
