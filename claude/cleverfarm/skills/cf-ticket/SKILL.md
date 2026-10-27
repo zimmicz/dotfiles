@@ -57,7 +57,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 ## Phase 6: MR → CHECKPOINT 2
 
 15. Run `/cf-mr --headless` — draft MR, no reviewers, FE preview on Nightly.
-16. Holdout verify: wait for the preview (cf-farm-frontend: latest MR pipeline green + bot note `<!-- amplify-preview-url -->` showing `@ <its short sha>`; BE: pipeline green), then run `/cf-verify <KEY> repo=… mr=… pipeline=… sha=… branch=…` in a fresh `Agent` sub-agent (pass only those args, no context from this session). Fail → fix once (same rules as headless `--verify-fix`), push, verify again.
+16. Holdout verify: wait for the preview (every repo's latest MR pipeline green; FE-only also the bot note `<!-- amplify-preview-url -->` showing `@ <its short sha>`), then run `/cf-verify <KEY> repos=<repo>:<project id>:<mr iid>:<pipeline id>:<short sha>,… branch=…` in a fresh `Agent` sub-agent (pass only those args, no context from this session). Fail → fix once (same rules as headless `--verify-fix`), push, verify again.
 17. **CHECKPOINT 2** — MR link, review findings fixed, verify verdict, anything deviating from the plan. Only on the user's explicit OK: `glab mr update <iid> --ready` + reviewers per `/cf-mr` step 6, ticket to review per `/cf-mr` step 8, then `/cf-mr` steps 11–12 (time log, retro). Then: "Come back after merge and run `/cf-feedback`."
 
 ## Stop rules (between checkpoints)

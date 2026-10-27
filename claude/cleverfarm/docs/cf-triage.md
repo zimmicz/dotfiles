@@ -16,8 +16,8 @@ DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentr
   │  I add label ai-fix  (= approves plan AND scenarios)
   ▼  triage-worker          max 1/run: cf-work (claims) → claude -p "/cf-ticket KEY --headless"
 [ai-mr]  draft MR, no reviewers, assigned to me + Jira comment with MR link
-  │  triage-worker          preview built for MR head sha (FE: Amplify bot note; BE: MR pipeline green)
-  ▼                         → fresh claude -p "/cf-verify" runs holdout scenarios in Playwright (BE: throwaway dyn-env)
+  │  triage-worker          every repo-* MR's latest pipeline green (FE-only: + Amplify bot note for that sha)
+  ▼                         → fresh claude -p "/cf-verify" runs holdout scenarios in Playwright (any BE repo / cross-repo: one throwaway dyn-env, all BE MR images + FE branch)
 [ai-verified]  MR note with per-scenario verdicts
   │  fail → 1 retry: "/cf-ticket KEY --headless --verify-fix <report>" pushes fix [ai-verify-retry] → re-verify
   │  fail again / blocked / crash → [ai-verify-failed]
