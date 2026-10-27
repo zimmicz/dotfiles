@@ -40,7 +40,7 @@ Run inside a worktree created by the launcher script or `/cf-worktree`.
 No user present — never ask, never wait. Replaces step 5:
 
 1. Steps 1–4 as above. Ticket is usually a Sentry bug: stack frames + culprit are in `TICKET.md`.
-2. Explore code (ctx_* / codegraph / `git log|blame`) to find root cause. Sentry `get_sentry_resource` / `search_events` for more events if the ticket lacks detail. Read-only — no code changes.
+2. Explore code (ctx_* / codegraph / `git log|blame`) to find root cause. Sentry tools are deferred: `ToolSearch select:mcp__claude_ai_Sentry__get_sentry_resource,mcp__claude_ai_Sentry__search_errors` first, then call. Never claim Sentry "not authorized" without a real tool call returning an auth error. Use it for event counts / more events if the ticket lacks detail. Read-only — no code changes.
 3. Write `PLAN.md` in worktree root:
    - **Belongs in Sentry?** — ALWAYS first, mandatory, yes/no + evidence. "No" = not our bug: browser extension, bot/crawler, user offline / cancelled request, ChunkLoadError after deploy, third-party script, unsupported browser, expected 4xx, dev/localhost env. Then the fix plan is a client-side filter at the Sentry init — `app/shared/services/SentryLogger.service.ts` (cf-farm-frontend) or `src/common/services/logger.ts` (can-frontend): `ignoreErrors`, `denyUrls` or `beforeSend`. Read the existing rules first; if one should already match, explain why it slipped through and fix that rule instead of adding another.
    - **Root cause** — hypothesis + evidence (file:line, frames, git history). Say plainly if unconfirmed.
