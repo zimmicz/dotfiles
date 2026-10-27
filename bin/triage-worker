@@ -142,7 +142,8 @@ while read -r KEY REPO; do
 done <<<"$MR_REPLIES"
 
 while read -r KEY IDS; do
-  [[ -z "$KEY" || -z "$IDS" ]] && continue
+  [[ -z "$KEY" ]] && continue
+  if [[ -z "$IDS" ]]; then relabel $KEY "" ai-done; note $KEY "released"; continue; fi
   if resolve_sentry $KEY ${=IDS}; then relabel $KEY "" ai-done; note $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
 done <<<"$DONE"
 

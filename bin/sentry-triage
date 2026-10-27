@@ -23,7 +23,7 @@ done
 
 RAW=$(jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "project = DEV AND labels in ($PIPELINE_LABELS) AND statusCategory != Done" '$q|@uri')&fields=key,labels,status") \
   || { echo "jira lookup failed"; exit 1; }
-ISSUES=$(jq -r '.issues[] | "\(.key) \(.fields.status.name | gsub(" "; "_")) \(.fields.labels | map(select(startswith("repo-"))) | first // "" | ltrimstr("repo-"))"' <<<"$RAW") \
+ISSUES=$(jq -r '.issues[] | select(.fields.labels | any(startswith("sentry-"))) | "\(.key) \(.fields.status.name | gsub(" "; "_")) \(.fields.labels | map(select(startswith("repo-"))) | first // "" | ltrimstr("repo-"))"' <<<"$RAW") \
   || { echo "jira lookup failed: $RAW"; exit 1; }
 
 OPEN=()

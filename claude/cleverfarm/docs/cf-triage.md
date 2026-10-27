@@ -21,7 +21,9 @@ DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentr
 [ai-done]  → next morning sentry-triage picks the next issue
 ```
 
-One issue at a time: `sentry-triage` skips the day (Slack note) while any ticket labelled `triage|triaged|triage-failed|ai-fix|ai-mr|ai-fix-failed` is not Done AND its MR is not merged/closed (`glab mr list --all --search KEY` in the `repo-*` repo; no MR at all = blocking, so failed/unfixed tickets block until closed). Jira status doesn't matter — `On nightly` with a merged MR is fine. Sentry resolve waits for status `Done` (prod release), not Release candidate. Stamp `~/.local/state/cf-triage/sentry-today` = already ran today (delete to re-run).
+Any other ticket (feature, chore, manual bug): I add labels `triage` + `repo-<dir>` → same flow from `[triaged]` on; PLAN.md starts with Requirements instead of "Belongs in Sentry?". On Done it just gets `ai-done`.
+
+One Sentry issue at a time: `sentry-triage` skips the day (Slack note) while any ticket with a `sentry-*` label and labelled `triage|triaged|triage-failed|ai-fix|ai-mr|ai-fix-failed` is not Done AND its MR is not merged/closed (`glab mr list --all --search KEY` in the `repo-*` repo; no MR at all = blocking, so failed/unfixed tickets block until closed). Jira status doesn't matter — `On nightly` with a merged MR is fine. Sentry resolve waits for status `Done` (prod release), not Release candidate. Stamp `~/.local/state/cf-triage/sentry-today` = already ran today (delete to re-run).
 
 Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts a summary to Slack `#zimmi-claude` via `~/.claude/scripts/slack-post.sh` (incoming webhook, no LLM).
 
@@ -29,7 +31,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 
 | label | meaning | set by |
 |---|---|---|
-| `triage` | new, waiting for analysis | sentry-triage |
+| `triage` | new, waiting for analysis | sentry-triage, or me on any ticket |
 | `sentry-<SHORTID>` | linked Sentry issue(s), full short id (dedup key) | sentry-triage |
 | `repo-<dir>` | repo under `~/work/cleverfarm/repos` | sentry-triage |
 | `triaged` | PLAN.md + comment done | triage-worker |
