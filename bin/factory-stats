@@ -1,0 +1,73 @@
+#!/bin/zsh
+set -uo pipefail
+export LC_NUMERIC=C
+
+DAYS=${1:-7}
+LOG_DIR=~/.local/state/cf-triage
+ME=michal.zimmermann1
+LABELS='triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-verify-retry, ai-verified, ai-verify-failed, ai-done'
+
+RAW=$(jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "project = DEV AND labels in ($LABELS) AND updated >= -${DAYS}d ORDER BY key ASC" '$q|@uri')&fields=labels,created&maxResults=100") \
+  || { echo "jira lookup failed"; exit 1; }
+
+ROWS=()
+typeset -A COUNT
+TOTAL_COST=0 MERGED=0 MERGED_COST=0 NOTES_SUM=0 VERIFY_RUNS=0 VERIFY_PASS=0 TICKETS=0 SENTRY=0
+DAYS_TO_MERGE=()
+
+while IFS=$'\t' read -r KEY CREATED LABELSTR; do
+  [[ -z "$KEY" ]] && continue
+  (( TICKETS++ ))
+  L=" $LABELSTR "
+  [[ "$L" == *" sentry-"* ]] && (( SENTRY++ ))
+  if [[ "$L" == *" triage-failed "* ]]; then STAGE=analysis-failed
+  elif [[ "$L" == *" ai-fix-failed "* ]]; then STAGE=bailed
+  elif [[ "$L" == *" ai-done "* ]]; then STAGE=done
+  elif [[ "$L" == *" ai-mr "* ]]; then STAGE=mr
+  elif [[ "$L" == *" ai-fix "* ]]; then STAGE=implementing
+  elif [[ "$L" == *" triaged "* ]]; then STAGE=awaiting-ai-fix
+  else STAGE=new
+  fi
+  LOG=$LOG_DIR/$KEY.log
+  COST=$( (grep -ho 'cost=\$[0-9.]*' $LOG 2>/dev/null || true) | cut -d'$' -f2 | awk '{s+=$1} END {printf "%.2f", s}')
+  TOTAL_COST=$(( TOTAL_COST + COST ))
+  RUNS=$(grep -c '^  VERDICT: ' $LOG 2>/dev/null)
+  PASS=$(grep -c '^  VERDICT: pass' $LOG 2>/dev/null)
+  (( VERIFY_RUNS += RUNS, VERIFY_PASS += PASS ))
+
+  MRSTATE=- NOTES=- TTM=-
+  if [[ -f $LOG_DIR/$KEY.mr ]]; then
+    URL=$(<$LOG_DIR/$KEY.mr)
+    PROJ=${${URL#https://gitlab.com/}%%/-/*}
+    IID=${URL##*/}
+    ENC=$(jq -rn --arg p "$PROJ" '$p|@uri')
+    MR=$(glab api "projects/$ENC/merge_requests/$IID" 2>/dev/null)
+    MRSTATE=$(jq -r '.state // "?"' <<<$MR)
+    NOTES=$(glab api "projects/$ENC/merge_requests/$IID/notes?per_page=100" 2>/dev/null \
+      | jq --arg me $ME '[.[] | select(.system | not) | select(.author.username != $me) | select(.author.username | test("bot|GitLabDuo") | not)] | length')
+    if [[ $MRSTATE == merged ]]; then
+      TTM=$(printf '%.1f' $(( ($(date -d "$(jq -r .merged_at <<<$MR)" +%s) - $(date -d "$CREATED" +%s)) / 86400.0 )))
+      DAYS_TO_MERGE+=($TTM)
+      [[ $STAGE == mr ]] && STAGE=merged
+      (( MERGED++, NOTES_SUM += NOTES ))
+      MERGED_COST=$(( MERGED_COST + COST ))
+    fi
+  fi
+  (( COUNT[$STAGE]++ ))
+  [[ "$L" == *" ai-verified "* ]] && STAGE+="+verified"
+  [[ "$L" == *" ai-verify-failed "* ]] && STAGE+="+verify-failed"
+  ROWS+=("| $KEY | $STAGE | \$$COST | ${RUNS}/${PASS} | $MRSTATE | $NOTES | $TTM |")
+done < <(jq -r '.issues[] | [.key, .fields.created, (.fields.labels | join(" "))] | @tsv' <<<"$RAW")
+
+ATTEMPTS=$(( ${COUNT[mr]:-0} + ${COUNT[merged]:-0} + ${COUNT[done]:-0} + ${COUNT[bailed]:-0} ))
+pct() { (( $2 )) && printf '%d%%' $(( 100 * $1 / $2 )) || printf -- '-' }
+MEDIAN=$(printf '%s\n' $DAYS_TO_MERGE | sort -n | awk '{a[NR]=$1} END {print NR ? a[int((NR+1)/2)] : "-"}')
+
+printf '*Factory yield, last %s days* (%d tickets, %d Sentry / %d other)\n' $DAYS $TICKETS $SENTRY $(( TICKETS - SENTRY ))
+printf '• stages: new %d · awaiting ai-fix %d · analysis failed %d · implementing %d · MR open %d · merged %d · bailed %d · done %d\n' \
+  ${COUNT[new]:-0} ${COUNT[awaiting-ai-fix]:-0} ${COUNT[analysis-failed]:-0} ${COUNT[implementing]:-0} ${COUNT[mr]:-0} ${COUNT[merged]:-0} ${COUNT[bailed]:-0} ${COUNT[done]:-0}
+printf '• bail rate %s (%d of %d implement attempts) · verify pass %s (%d/%d runs)\n' "$(pct ${COUNT[bailed]:-0} $ATTEMPTS)" ${COUNT[bailed]:-0} $ATTEMPTS "$(pct $VERIFY_PASS $VERIFY_RUNS)" $VERIFY_PASS $VERIFY_RUNS
+printf '• merged %d · reviewer notes/MR %s · median days ticket→merge %s\n' $MERGED "$( (( MERGED )) && printf '%.1f' $(( 1.0 * NOTES_SUM / MERGED )) || echo -)" $MEDIAN
+printf '• cost $%.2f total · $%s per merged MR\n' $TOTAL_COST "$( (( MERGED )) && printf '%.2f' $(( MERGED_COST / MERGED )) || echo -)"
+printf '\n| ticket | stage | cost | verify runs/pass | MR | reviewer notes | days→merge |\n|---|---|---|---|---|---|---|\n'
+printf '%s\n' $ROWS

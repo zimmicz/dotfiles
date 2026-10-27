@@ -43,6 +43,17 @@ if [ "$DRY_RUN" = 0 ] && [ -s "$USAGE_TXT" ]; then
   echo "slack exit: $?"
 fi
 
+if [ "$DRY_RUN" = 0 ] && [ "$(date +%u)" = 1 ]; then
+  echo "--- factory stats"
+  if STATS=$("$HOME/bin/factory-stats" 7); then
+    printf '%s\n' "$STATS"
+    printf '%s\n' "$STATS" | "$SCRIPTS/slack-post.sh" "Factory yield"
+    echo "slack exit: $?"
+  else
+    echo "factory-stats failed"
+  fi
+fi
+
 find "$USAGE_DIR" -name 'report-*.md' -mtime +30 -delete 2>/dev/null
 find "$LOG_DIR" -name 'usage-*.txt' -mtime +30 -delete 2>/dev/null
 find "$LOG_DIR" -name 'nightly-*.log' -mtime +30 -delete 2>/dev/null
