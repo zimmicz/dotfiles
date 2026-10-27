@@ -14,4 +14,4 @@ Needed only to **first-connect the branch** or to **switch backend**. Once a bac
   JOB=$(glab api "projects/$PROJECT/pipelines/$PIPE/jobs" | jq --arg n "$JOBNAME" '.[] | select(.name==$n) | .id')
   glab api --method POST "projects/$PROJECT/jobs/$JOB/play"
   ```
-- Report the deploy job URL + the preview URL. Build takes a few min; commit status `amplify` + an MR comment with the URL land when done.
+- Report the deploy job URL + the preview URL. Build takes a few min; when done a bot MR note `<!-- amplify-preview-url -->` with the URL and `@ <pipeline short sha>` is upserted.
