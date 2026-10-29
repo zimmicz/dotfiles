@@ -136,6 +136,90 @@ verify() {
   esac
 }
 
+conflicts() {
+  glab api "merge_requests?scope=created_by_me&state=opened&per_page=100" | jq -r '.[] | "\(.project_id) \(.iid)"' \
+    | while read -r PID IID; do
+        glab api "projects/$PID/merge_requests/$IID?with_merge_status_recheck=true" </dev/null \
+          | jq -r 'select(.has_conflicts) | "\(.project_id) \(.iid) \(.references.full | sub("!.*"; "") | split("/") | last) \(.source_branch) \(.target_branch) \(.draft) \(.labels | index("ai-rebase") != null) \(.web_url)"'
+      done
+}
+
+rebasing() { (cd $1 && [[ -d $(git rev-parse --git-path rebase-merge) ]]) }
+
+lock_resolve() {
+  local WT=$1 U
+  while rebasing $WT; do
+    U=(${(f)"$(git -C $WT diff --name-only --diff-filter=U)"})
+    (( ${#U} )) && [[ -z "${U:#*pnpm-lock.yaml}" ]] || return 1
+    git -C $WT checkout -q --ours -- $U
+    (cd $WT && pnpm install --lockfile-only </dev/null >/dev/null 2>&1) || return 1
+    git -C $WT add -- $U
+    GIT_EDITOR=true git -C $WT rebase --continue >/dev/null 2>&1
+  done
+  return 0
+}
+
+resolve_conflict() {
+  local PID=$1 IID=$2 R=$3 BR=$4 TGT=$5 DRAFT=$6 GO=$7 URL=$8
+  local GIT=$REPOS/$R KEY=${$(grep -oiP '^dev-\d+' <<<$BR):u} MARK=$LOG_DIR/conflicts/$1-$2
+  local LOG=$LOG_DIR/${KEY:-$BR}.log REPORT=$MARK.md WHO="$URL (${KEY:-$BR})"
+  [[ -d $GIT/.git ]] || { echo "$WHO conflicts, no local repo $R" >>$NOTES; return }
+  git -C $GIT fetch -q origin $TGT $BR || return
+  local OLD=$(git -C $GIT rev-parse origin/$BR)
+  local STATE="$OLD $DRAFT $GO"
+  [[ "$(cat $MARK 2>/dev/null)" == "$STATE" ]] && return
+  echo $STATE >$MARK
+  echo "=== conflict $URL onto $TGT $(date -Iseconds)" | tee -a $LOG
+  if [[ $DRAFT != true || -n "$(glab api projects/$PID/merge_requests/$IID/approvals | jq -r '.approved_by[]?')" ]] && [[ $GO != true ]]; then
+    echo "$WHO conflicts with $TGT, under review → add MR label \`ai-rebase\` to resolve" >>$NOTES; return
+  fi
+  if git -C $GIT log --format=%ae origin/$TGT..origin/$BR | grep -qvxF "$(git -C $GIT config user.email)"; then
+    echo "$WHO conflicts with $TGT, has others' commits → resolve by hand" >>$NOTES; return
+  fi
+  local BOTH=$(comm -12 <(git -C $GIT diff --name-only origin/$TGT...origin/$BR | sort) <(git -C $GIT diff --name-only origin/$BR...origin/$TGT | sort) | wc -l)
+  if (( BOTH > ${CONFLICT_MAX_FILES:-10} )); then
+    echo "$WHO conflicts with $TGT, $BOTH files changed on both sides → resolve interactively" >>$NOTES; return
+  fi
+  local WT=$(git -C $GIT worktree list --porcelain | awk -v b="branch refs/heads/$BR" '/^worktree /{p=substr($0,10)} $0==b{print p}')
+  if [[ -z "$WT" ]]; then
+    WT=$GIT/.worktrees/$BR
+    git -C $GIT worktree add -q $WT $BR 2>/dev/null || git -C $GIT worktree add -q -b $BR $WT origin/$BR || return
+  fi
+  if [[ -n "$(git -C $WT status --porcelain -uno)" || "$(git -C $WT rev-parse HEAD)" != $OLD ]]; then
+    echo "$WHO conflicts with $TGT, worktree \`$WT\` dirty or differs from origin → resolve by hand" >>$NOTES; return
+  fi
+  rm -f $REPORT
+  local HOW="clean rebase"
+  git -C $WT rebase -q origin/$TGT >>$LOG 2>&1 || HOW="lockfile regenerated"
+  if [[ $HOW != "clean rebase" ]] && ! lock_resolve $WT; then
+    local PANE=$(wm_window $WT $LOG)
+    (cd $WT && TMUX_PANE=$PANE claude -p "Rebase of branch $BR onto origin/$TGT is in progress in this worktree and stopped on conflicts. No human present, never ask. Run /mattpocock-skills:resolving-merge-conflicts. Intent of this branch: its MR $URL + PLAN.md / TICKET.md here if present. Intent of the other side: the commits on origin/$TGT touching each conflicted file (git log origin/$TGT -- <file>) and their MRs (glab api). Keep both intents. pnpm-lock.yaml: never hand-merge, git checkout --ours it, then pnpm install --lockfile-only. Continue with GIT_EDITOR=true git rebase --continue until the rebase is finished. Then run the repo's lint, typecheck and the tests touching the conflicted files (per its CLAUDE.md), fix only what the resolution broke, amend into the rebased commits. Never push, never skip or drop commits. Not confident about a hunk → stop. Write $REPORT: first line exactly RESOLVED or FAILED: <reason>, then one line per conflicted file: how you resolved it and why." \
+      --model opus \
+      --allowedTools "Read Edit Write Skill mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Bash(git:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Bash(glab api:*) Bash(glab mr view:*) Bash(jq:*)" \
+      --disallowedTools "Bash(git push:*) Bash(git reset --hard:*) Bash(git rebase --skip:*) Bash(git rebase --abort:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**)" \
+      --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
+    if rebasing $WT || [[ "$(head -1 $REPORT 2>/dev/null)" != RESOLVED ]]; then
+      rebasing $WT && git -C $WT rebase --abort
+      echo "  conflict resolve failed: $(head -1 $REPORT 2>/dev/null)" | tee -a $LOG
+      echo "$WHO conflict resolve failed: $(head -1 $REPORT 2>/dev/null || echo 'no report'), see \`$LOG\`" >>$NOTES; return
+    fi
+    HOW=$(tail -n +2 $REPORT)
+  fi
+  git -C $WT push -q --force-with-lease=$BR:$OLD origin HEAD:$BR >>$LOG 2>&1 || { echo "$WHO resolved but push rejected, see \`$LOG\`" >>$NOTES; return }
+  [[ $GO == true ]] && glab api -X PUT projects/$PID/merge_requests/$IID -f remove_labels=ai-rebase >/dev/null
+  glab api -X POST projects/$PID/merge_requests/$IID/notes -f body="🤖 _I'm writing on Michal's behalf. If you don't like it, please let me know._
+
+Rebased onto \`$TGT\`, conflicts resolved:
+$HOW" >/dev/null
+  echo "  rebased + pushed" | tee -a $LOG
+  if [[ $HOW != (clean\ rebase|lockfile\ regenerated) && -n "$KEY" ]] && search "key = $KEY AND labels = ai-verified" 1 | jq -e '.issues | length > 0' >/dev/null; then
+    jira PUT "/rest/api/2/issue/$KEY" '{"update":{"labels":[{"remove":"ai-verified"}]}}' >/dev/null
+    echo "$WHO rebased, conflicts resolved by agent, holdout re-verify queued" >>$NOTES
+  else
+    echo "$WHO rebased onto $TGT (${${(f)HOW}[1]})" >>$NOTES
+  fi
+}
+
 ROWS_JQ='.issues[] | "\(.key) \((.fields.labels | map(select(startswith("repo-"))) | sort_by(. != "repo-cf-farm-frontend") | first // "repo-") | ltrimstr("repo-"))"'
 REPOS_JQ='.issues[] | "\(.key) \(.fields.labels | map(select(startswith("repo-")) | ltrimstr("repo-")) | sort_by(. != "cf-farm-frontend") | join(","))"'
 
@@ -217,6 +301,13 @@ while read -r KEY IDS; do
   if [[ -z "$IDS" ]]; then relabel $KEY "" ai-done; note $KEY "released"; continue; fi
   if resolve_sentry $KEY ${=IDS}; then relabel $KEY "" ai-done; note $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
 done <<<"$DONE"
+
+if [[ -z "${1:-}" ]]; then
+  mkdir -p $LOG_DIR/conflicts
+  while read -r ARGS; do
+    [[ -n "$ARGS" ]] && resolve_conflict ${=ARGS} </dev/null
+  done <<<"$(conflicts)"
+fi
 
 if [[ -s $NOTES ]]; then
   printf '**cf-triage run %s**\n%s\n' "$(date '+%H:%M')" "$(sed 's/^/• /' $NOTES)" \
