@@ -29,7 +29,7 @@ My job = intent in, decisions at gates, judge results. Agents do the rest.
 | ready or approved | Slack only. Add MR label `ai-rebase` = my OK → resolved next run, label removed (approvals don't reset on push here) |
 | others' commits / dirty or diverged worktree / >10 files changed on both sides (`CONFLICT_MAX_FILES`) | Slack only → resolve by hand |
 
-Failed resolve → rebase aborted, Slack line. One Slack line per MR head; retry same head = `rm ~/.local/state/cf-triage/conflicts/<project id>-<iid>`.
+Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also "no local repo"); retry same head = `rm ~/.local/state/cf-triage/conflicts/<project id>-<iid>`.
 
 **Interactive `/cf-ticket`**: checkpoint 1 = approve plan + scenarios (ExitPlanMode), checkpoint 2 = verified draft MR → I say "ready" → it adds reviewers + logs time. `--step` for risky work.
 
@@ -81,7 +81,7 @@ Any other ticket (feature, chore, manual bug): I add labels `triage` + `repo-<di
 
 One Sentry issue at a time: `sentry-triage` skips the day (Slack note) while any ticket with a `sentry-*` label and labelled `triage|triaged|triage-failed|ai-fix|ai-mr|ai-fix-failed` is not Done AND its MR is not merged/closed (`glab mr list --all --search KEY` in the `repo-*` repo; no MR at all = blocking, so failed/unfixed tickets block until closed). Jira status doesn't matter — `On nightly` with a merged MR is fine. Sentry resolve waits for status `Done` (prod release), not Release candidate. Stamp `~/.local/state/cf-triage/sentry-today` = already ran today (delete to re-run).
 
-Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts a summary to Slack `#zimmi-claude` via `~/.claude/scripts/slack-post.sh` (incoming webhook, no LLM).
+Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts a summary to Slack `#zimmi-claude` via `~/.claude/scripts/slack-post.sh` (incoming webhook, no LLM). Quiet timer runs → no post, but if nothing posted for 3 h a "cf-triage alive — N quiet runs since X" heartbeat goes out (state `.posted` mtime + `.quiet` in `~/.local/state/cf-triage`). No heartbeat for >3 h during 07–19 weekdays = worker dead → `systemctl --user status cf-triage`.
 
 ## Labels
 

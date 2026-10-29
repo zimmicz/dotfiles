@@ -164,12 +164,15 @@ resolve_conflict() {
   local PID=$1 IID=$2 R=$3 BR=$4 TGT=$5 DRAFT=$6 GO=$7 URL=$8
   local GIT=$REPOS/$R KEY=${$(grep -oiP '^dev-\d+' <<<$BR):u} MARK=$LOG_DIR/conflicts/$1-$2
   local LOG=$LOG_DIR/${KEY:-$BR}.log REPORT=$MARK.md WHO="$URL (${KEY:-$BR})"
-  [[ -d $GIT/.git ]] || { echo "$WHO conflicts, no local repo $R" >>$NOTES; return }
-  git -C $GIT fetch -q origin $TGT $BR || return
-  local OLD=$(git -C $GIT rev-parse origin/$BR)
-  local STATE="$OLD $DRAFT $GO"
+  local OLD STATE=norepo
+  if [[ -d $GIT/.git ]]; then
+    git -C $GIT fetch -q origin $TGT $BR || return
+    OLD=$(git -C $GIT rev-parse origin/$BR)
+    STATE="$OLD $DRAFT $GO"
+  fi
   [[ "$(cat $MARK 2>/dev/null)" == "$STATE" ]] && return
   echo $STATE >$MARK
+  [[ $STATE == norepo ]] && { echo "$WHO conflicts, no local repo $R" >>$NOTES; return }
   echo "=== conflict $URL onto $TGT $(date -Iseconds)" | tee -a $LOG
   if [[ $DRAFT != true || -n "$(glab api projects/$PID/merge_requests/$IID/approvals | jq -r '.approved_by[]?')" ]] && [[ $GO != true ]]; then
     echo "$WHO conflicts with $TGT, under review → add MR label \`ai-rebase\` to resolve" >>$NOTES; return
@@ -314,7 +317,15 @@ if [[ -z "${1:-}" ]]; then
   done <<<"$(conflicts)"
 fi
 
+POSTED=$LOG_DIR/.posted QUIET=$LOG_DIR/.quiet
 if [[ -s $NOTES ]]; then
   printf '**cf-triage run %s**\n%s\n' "$(date '+%H:%M')" "$(sed 's/^/• /' $NOTES)" \
-    | ~/.claude/scripts/slack-post.sh "cf-triage" && rm -f $NOTES
+    | ~/.claude/scripts/slack-post.sh "cf-triage" && rm -f $NOTES $QUIET && touch $POSTED
+elif [[ -z "${1:-}" ]]; then
+  date '+%a %H:%M' >>$QUIET
+  RECENT=($POSTED(Nmh-3))
+  if (( ! ${#RECENT} )); then
+    printf '**cf-triage alive** — %s quiet runs since %s, nothing picked up\n' "$(wc -l <$QUIET)" "$(head -1 $QUIET)" \
+      | ~/.claude/scripts/slack-post.sh "cf-triage" && rm -f $QUIET && touch $POSTED
+  fi
 fi
