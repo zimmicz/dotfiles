@@ -31,3 +31,20 @@ func TestParseLog(t *testing.T) {
 		t.Errorf("got %+v", r)
 	}
 }
+
+func TestRetryAction(t *testing.T) {
+	cases := []struct {
+		labels      []string
+		remove, add string
+	}{
+		{[]string{"repo-x", "triage-failed"}, "triage-failed", "triage"},
+		{[]string{"triaged", "ai-fix-failed"}, "ai-fix-failed", "ai-fix"},
+		{[]string{"ai-mr", "ai-verify-failed"}, "ai-verify-failed", ""},
+		{[]string{"triaged"}, "", ""},
+	}
+	for _, c := range cases {
+		if rm, add := retryAction(c.labels); rm != c.remove || add != c.add {
+			t.Errorf("retryAction(%v) = %q,%q", c.labels, rm, add)
+		}
+	}
+}
