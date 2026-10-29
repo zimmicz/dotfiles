@@ -9,7 +9,7 @@ NOTES=$LOG_DIR/notes.txt
 HOLDOUT=$LOG_DIR/holdout
 mkdir -p $LOG_DIR $HOLDOUT
 
-[[ "${TRIAGE_LOCKED:-}" == 1 ]] || exec env TRIAGE_LOCKED=1 flock -n $LOG_DIR/.lock $0 "$@"
+[[ "${TRIAGE_LOCKED:-}" == 1 ]] || exec env TRIAGE_LOCKED=1 flock -n -E 0 $LOG_DIR/.lock $0 "$@"
 
 STREAM_JQ='if .type == "system" and .subtype == "init" then "🆔 session \(.session_id) — reopen: cd \(.cwd) && claude --resume \(.session_id)"
   elif .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
@@ -174,9 +174,8 @@ resolve_conflict() {
   echo $STATE >$MARK
   [[ $STATE == norepo ]] && { echo "$WHO conflicts, no local repo $R" >>$NOTES; return }
   echo "=== conflict $URL onto $TGT $(date -Iseconds)" | tee -a $LOG
-  if [[ $DRAFT != true || -n "$(glab api projects/$PID/merge_requests/$IID/approvals | jq -r '.approved_by[]?')" ]] && [[ $GO != true ]]; then
-    echo "$WHO conflicts with $TGT, under review → add MR label \`ai-rebase\` to resolve" >>$NOTES; return
-  fi
+  local GATED=false
+  [[ $DRAFT != true || -n "$(glab api projects/$PID/merge_requests/$IID/approvals | jq -r '.approved_by[]?')" ]] && [[ $GO != true ]] && GATED=true
   if git -C $GIT log --format=%ae origin/$TGT..origin/$BR | grep -qvxF "$(git -C $GIT config user.email)"; then
     echo "$WHO conflicts with $TGT, has others' commits → resolve by hand" >>$NOTES; return
   fi
@@ -196,6 +195,11 @@ resolve_conflict() {
   local HOW="clean rebase"
   git -C $WT rebase -q origin/$TGT >>$LOG 2>&1 || HOW="lockfile regenerated"
   if [[ $HOW != "clean rebase" ]] && ! lock_resolve $WT; then
+    if [[ $GATED == true ]]; then
+      git -C $WT rebase --abort
+      echo "  code conflict, MR under review → waiting for ai-rebase" | tee -a $LOG
+      echo "$WHO conflicts with $TGT in code, under review → add MR label \`ai-rebase\` to resolve" >>$NOTES; return
+    fi
     local PANE=$(wm_window $WT $LOG)
     (cd $WT && TMUX_PANE=$PANE claude -p "Rebase of branch $BR onto origin/$TGT is in progress in this worktree and stopped on conflicts. No human present, never ask. Run /mattpocock-skills:resolving-merge-conflicts. Intent of this branch: its MR $URL + PLAN.md / TICKET.md here if present. Intent of the other side: the commits on origin/$TGT touching each conflicted file (git log origin/$TGT -- <file>) and their MRs (glab api). Keep both intents. pnpm-lock.yaml: never hand-merge, git checkout --ours it, then pnpm install --lockfile-only. Continue with GIT_EDITOR=true git rebase --continue until the rebase is finished. Then run the repo's lint, typecheck and the tests touching the conflicted files (per its CLAUDE.md), fix only what the resolution broke, amend into the rebased commits. Never push, never skip or drop commits. Not confident about a hunk → stop. Write $REPORT: first line exactly RESOLVED or FAILED: <reason>, then one line per conflicted file: how you resolved it and why." \
       --model opus \
@@ -218,7 +222,9 @@ resolve_conflict() {
   glab api -X POST projects/$PID/merge_requests/$IID/notes -f body="🤖 _I'm writing on Michal's behalf. If you don't like it, please let me know._
 
 Rebased onto \`$TGT\`, conflicts resolved:
-$HOW" >/dev/null
+$HOW${${GATED:#false}:+
+
+No code changed: git applied every commit as is, only \`pnpm-lock.yaml\` was regenerated if it conflicted. Existing approvals stay valid.}" >/dev/null
   echo "  rebased + pushed" | tee -a $LOG
   if [[ $HOW != (clean\ rebase|lockfile\ regenerated) && -n "$KEY" ]] && search "key = $KEY AND labels = ai-verified" 1 | jq -e '.issues | length > 0' >/dev/null; then
     jira PUT "/rest/api/2/issue/$KEY" '{"update":{"labels":[{"remove":"ai-verified"}]}}' >/dev/null

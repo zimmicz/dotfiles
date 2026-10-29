@@ -16,6 +16,11 @@ if (( ! DRY )) && [[ "$(cat $STAMP 2>/dev/null)" == "$(date +%F)" ]]; then
   echo "already ran today"
   exit 0
 fi
+RECENT=($LOG_DIR/sentry-last.txt(Nmm-15))
+if (( ! DRY && ${#RECENT} )); then
+  echo "last attempt failed <15 min ago, waiting"
+  exit 0
+fi
 
 for H in cleverfarm.atlassian.net us.sentry.io claude.ai; do
   getent hosts $H >/dev/null || { echo "no network ($H), retry next tick"; exit 0; }
@@ -80,7 +85,7 @@ claude -p "$PROMPT" \
 if ! grep -qx TRIAGE_DONE $LOG_DIR/sentry-last.txt; then
   echo "triage incomplete, not stamping"
   if [[ "$(cat $LOG_DIR/sentry-failed-noted 2>/dev/null)" != "$(date +%F)" ]]; then
-    echo "sentry-triage failing, retrying every 5 min: $(grep -m1 '^TRIAGE_FAILED' $LOG_DIR/sentry-last.txt || echo 'no TRIAGE_DONE'). If MCP auth: /mcp → claude.ai Sentry" >>$NOTES
+    echo "sentry-triage failing, retrying every 15 min: $(grep -m1 '^TRIAGE_FAILED' $LOG_DIR/sentry-last.txt || echo 'no TRIAGE_DONE'). If MCP auth: /mcp → claude.ai Sentry" >>$NOTES
     date +%F >$LOG_DIR/sentry-failed-noted
   fi
   exit 1

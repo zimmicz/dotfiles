@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -173,6 +174,98 @@ func repos() []string {
 func feed(key, repo string) error {
 	ops := []map[string]string{{"add": "triage"}, {"add": "repo-" + repo}}
 	return jiraReq("PUT", "/rest/api/2/issue/"+key, map[string]any{"update": map[string]any{"labels": ops}}, nil)
+}
+
+type mrRaw struct {
+	State                       string
+	Draft                       bool
+	DetailedMergeStatus         string `json:"detailed_merge_status"`
+	HasConflicts                bool   `json:"has_conflicts"`
+	BlockingDiscussionsResolved bool   `json:"blocking_discussions_resolved"`
+	Reviewers                   []struct{ Username string }
+	HeadPipeline                *struct{ Status string } `json:"head_pipeline"`
+	Approved                    bool
+	ApprovalsLeft               int                                        `json:"approvals_left"`
+	ApprovedBy                  []struct{ User struct{ Username string } } `json:"approved_by"`
+}
+
+type mrInfo struct {
+	label, icon, color, detail string
+	final                      bool
+}
+
+var mrURLRe = regexp.MustCompile(`gitlab\.com/(.+)/-/merge_requests/(\d+)`)
+
+func mrStatus(r mrRaw) mrInfo {
+	pipe := ""
+	if r.HeadPipeline != nil {
+		pipe = r.HeadPipeline.Status
+	}
+	var reviewers []string
+	for _, u := range r.Reviewers {
+		reviewers = append(reviewers, u.Username)
+	}
+	detail := fmt.Sprintf("ci %s · approvals %d, %d left", or(pipe, "none"), len(r.ApprovedBy), r.ApprovalsLeft)
+	if len(reviewers) > 0 {
+		detail += " · reviewers " + strings.Join(reviewers, ", ")
+	}
+	in := mrInfo{detail: detail}
+	switch {
+	case r.State == "merged":
+		in.label, in.icon, in.color, in.final = "merged", "🟣", "35", true
+	case r.State == "closed":
+		in.label, in.icon, in.color, in.final = "closed", "⛔", "2", true
+	case r.HasConflicts || r.DetailedMergeStatus == "conflict" || r.DetailedMergeStatus == "need_rebase":
+		in.label, in.icon, in.color = "conflict", "💥", "31"
+	case pipe == "failed":
+		in.label, in.icon, in.color = "ci failed", "🔴", "31"
+	case r.DetailedMergeStatus == "requested_changes":
+		in.label, in.icon, in.color = "changes asked", "🔁", "31"
+	case !r.BlockingDiscussionsResolved:
+		in.label, in.icon, in.color = "open threads", "💬", "33"
+	case r.Draft:
+		in.label, in.icon, in.color = "draft", "🚧", "33"
+	case pipe == "running" || pipe == "pending" || pipe == "created":
+		in.label, in.icon, in.color = "ci running", "⏳", "36"
+	case r.Approved && r.ApprovalsLeft == 0:
+		in.label, in.icon, in.color = "approved", "👍", "32"
+	case len(reviewers) > 0:
+		in.label, in.icon, in.color = "in review", "👀", "36"
+	default:
+		in.label, in.icon, in.color = "no reviewer", "📭", "33"
+	}
+	return in
+}
+
+func addMRLabel(u, label string) error {
+	m := mrURLRe.FindStringSubmatch(u)
+	if m == nil {
+		return fmt.Errorf("not a gitlab MR url: %s", u)
+	}
+	out, err := exec.Command("glab", "api", "-X", "PUT", "projects/"+url.PathEscape(m[1])+"/merge_requests/"+m[2], "-f", "add_labels="+label).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("glab: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func fetchMR(u string) (mrInfo, error) {
+	m := mrURLRe.FindStringSubmatch(u)
+	if m == nil {
+		return mrInfo{}, fmt.Errorf("not a gitlab MR url: %s", u)
+	}
+	base := "projects/" + url.PathEscape(m[1]) + "/merge_requests/" + m[2]
+	var r mrRaw
+	for _, p := range []string{base, base + "/approvals"} {
+		out, err := exec.Command("glab", "api", p).Output()
+		if err != nil {
+			return mrInfo{}, err
+		}
+		if err := json.Unmarshal(out, &r); err != nil {
+			return mrInfo{}, err
+		}
+	}
+	return mrStatus(r), nil
 }
 
 func jiraReq(method, path string, body, out any) error {
@@ -459,8 +552,34 @@ type commentsMsg struct {
 type doneMsg struct {
 	status string
 	err    error
+	kick   bool
 }
 type editedMsg struct{ key, path string }
+type mrMsg map[string]mrInfo
+
+func loadMRs(urls []string) tea.Cmd {
+	if len(urls) == 0 {
+		return nil
+	}
+	return func() tea.Msg {
+		out := mrMsg{}
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		for _, u := range urls {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if in, err := fetchMR(u); err == nil {
+					mu.Lock()
+					out[u] = in
+					mu.Unlock()
+				}
+			}()
+		}
+		wg.Wait()
+		return out
+	}
+}
 
 type sideLine struct {
 	text string
@@ -477,7 +596,7 @@ type helpSection struct {
 var helpCols = [][]helpSection{
 	{
 		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log / plan / comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}}},
-		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}}},
+		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}}},
 	},
 	{
 		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"l", "log in less"}, {"c", "resume session"}}},
@@ -530,7 +649,17 @@ func helpLines() []string {
 			row = "  "
 		}
 	}
-	out = append(out, row+fit("\033[32m●\033[0m  running", 22), "", "\033[2many key closes\033[0m")
+	out = append(out, row+fit("\033[32m●\033[0m  running", 22), "", "\033[1;33mMR\033[0m")
+	mrs := [][2]string{{"🚧", "draft"}, {"⏳", "ci running"}, {"🔴", "ci failed"}, {"💥", "conflict"}, {"💬", "open threads"}, {"🔁", "changes asked"}, {"📭", "no reviewer"}, {"👀", "in review"}, {"👍", "approved"}, {"🟣", "merged"}, {"⛔", "closed"}}
+	row = "  "
+	for i, s := range mrs {
+		row += fit(s[0]+" "+s[1], 22)
+		if i%3 == 2 || i == len(mrs)-1 {
+			out = append(out, row)
+			row = "  "
+		}
+	}
+	out = append(out, "", "\033[2many key closes\033[0m")
 	return out
 }
 
@@ -554,6 +683,7 @@ type model struct {
 	pending       tea.Cmd
 	jiraErr       error
 	jiraAt        time.Time
+	mrs           map[string]mrInfo
 }
 
 func tick() tea.Cmd {
@@ -573,7 +703,7 @@ func loadComments(key string) tea.Cmd {
 }
 
 func do(status string, f func() error) tea.Cmd {
-	return func() tea.Msg { return doneMsg{status, f()} }
+	return func() tea.Msg { return doneMsg{status, f(), true} }
 }
 
 func (m *model) reload() {
@@ -770,6 +900,11 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 			m.issues, m.todos = msg.issues, msg.todos
 		}
 		m.reload()
+		return m, loadMRs(m.mrURLs())
+	case mrMsg:
+		for u, in := range msg {
+			m.mrs[u] = in
+		}
 	case commentsMsg:
 		m.comments[msg.key] = msg.md
 		if msg.err != nil {
@@ -778,8 +913,14 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		m.loadBody()
 	case doneMsg:
 		m.status = "\033[32m" + msg.status + "\033[0m"
-		if msg.err != nil {
+		switch {
+		case msg.err != nil:
 			m.status = "\033[31m" + msg.err.Error() + "\033[0m"
+		case msg.kick && workerBusy():
+			m.status += "\033[2m, worker busy, picked up on next tick\033[0m"
+		case msg.kick:
+			exec.Command("systemctl", "--user", "start", "--no-block", "cf-triage.service").Run()
+			m.status += "\033[2m, worker kicked\033[0m"
 		}
 		delete(m.comments, m.sel().key)
 		m.jiraAt = time.Now()
@@ -938,6 +1079,13 @@ func (m model) key(k string) (model, tea.Cmd) {
 		}
 		f.Close()
 		return m, tea.ExecProcess(exec.Command("zsh", "-ic", `eval "${EDITOR:-vim} ${(q)1}"`, "zsh", f.Name()), func(error) tea.Msg { return editedMsg{r.key, f.Name()} })
+	case "b":
+		if in, ok := m.mrs[r.mr]; !ok || in.label != "conflict" {
+			m.status = "b only works on an MR in conflict"
+			break
+		}
+		iid := mrIIDRe.FindStringSubmatch(r.mr)[1]
+		m.confirm("let the agent resolve the code conflict in !"+iid+" (adds MR label ai-rebase)?", do("ai-rebase added to !"+iid, func() error { return addMRLabel(r.mr, "ai-rebase") }))
 	case "f":
 		if !r.todo {
 			m.status = "f feeds a TODO ticket"
@@ -954,9 +1102,10 @@ func (m model) key(k string) (model, tea.Cmd) {
 			m.status = "w needs tmux"
 			break
 		}
-		m.confirm("run triage-worker "+r.key+" now (new tmux window)?", do("worker started for "+r.key, func() error {
-			return exec.Command("tmux", "new-window", "-d", "-n", "w:"+r.key, "~/bin/triage-worker "+r.key+"; echo; read '?done, enter closes'").Run()
-		}))
+		m.confirm("run triage-worker "+r.key+" now (new tmux window)?", func() tea.Msg {
+			err := exec.Command("tmux", "new-window", "-d", "-n", "w:"+r.key, "~/bin/triage-worker "+r.key+"; echo; read '?done, enter closes'").Run()
+			return doneMsg{"worker started for " + r.key, err, false}
+		})
 	}
 	return m, nil
 }
@@ -1017,18 +1166,36 @@ func (m model) pickLines() []string {
 	return append(out, "", "\033[2mtype to filter  ↑↓ move  enter pick  esc cancel\033[0m")
 }
 
+func (m model) mrURLs() []string {
+	var out []string
+	for _, r := range m.rows {
+		if in, ok := m.mrs[r.mr]; r.mr != "" && !r.parked && !(ok && in.final) {
+			out = append(out, r.mr)
+		}
+	}
+	return out
+}
+
+func (m model) look(r row) (icon, color, label string) {
+	st := stageStyle[r.stage]
+	if in, ok := m.mrs[r.mr]; ok && r.stage == "mr" {
+		return in.icon, in.color, in.label
+	}
+	return st.icon, st.color, r.stage
+}
+
 func (m model) rowLine(i int) string {
 	r := m.rows[i]
-	st := stageStyle[r.stage]
-	icon := or(st.icon, "  ")
+	icon, color, label := m.look(r)
+	icon = or(icon, "  ")
 	if r.running {
 		icon = "\033[32m●\033[0m "
 	}
-	key, stg, age := fmt.Sprintf("%-9s", r.key), fmt.Sprintf("%-15s", ansi.Truncate(r.stage, 15, "…")), fmt.Sprintf("%4s", ago(r.seen))
+	key, stg, age := fmt.Sprintf("%-9s", r.key), fmt.Sprintf("%-15s", ansi.Truncate(label, 15, "…")), fmt.Sprintf("%4s", ago(r.seen))
 	if i == m.cur {
 		return " " + icon + " \033[7m " + key + " " + stg + age + "\033[0m"
 	}
-	return fit(" "+icon+"  "+key+" \033["+or(st.color, "0")+"m"+stg+"\033[0m\033[2m"+age+"\033[0m", sideW)
+	return fit(" "+icon+"  "+key+" \033["+or(color, "0")+"m"+stg+"\033[0m\033[2m"+age+"\033[0m", sideW)
 }
 
 func (m model) sidebar() []string {
@@ -1049,14 +1216,21 @@ func (m model) sidebar() []string {
 
 func (m model) pane() []string {
 	r := m.sel()
-	st := stageStyle[r.stage]
-	meta := []string{or(st.icon, "") + " \033[" + or(st.color, "0") + "m" + r.stage + "\033[0m", fmt.Sprintf("$%.2f", r.cost)}
+	icon, color, label := m.look(r)
+	meta := []string{icon + " \033[" + or(color, "0") + "m" + label + "\033[0m", fmt.Sprintf("$%.2f", r.cost)}
 	if r.verdict != "" {
 		meta = append(meta, "verify "+r.verdict)
 	}
 	meta = append(meta, ago(r.seen)+" ago")
 	if mm := mrIIDRe.FindStringSubmatch(r.mr); mm != nil {
-		meta = append(meta, "\033[4m!"+mm[1]+"\033[0m")
+		mr := "\033[4m!" + mm[1] + "\033[0m"
+		if in, ok := m.mrs[r.mr]; ok {
+			if r.stage != "mr" {
+				mr += " " + in.icon + " \033[" + in.color + "m" + in.label + "\033[0m"
+			}
+			mr += " \033[2m(" + in.detail + ")\033[0m"
+		}
+		meta = append(meta, mr)
 	}
 	tabBar := ""
 	for i, t := range tabs {
@@ -1157,7 +1331,7 @@ func (m model) View() string {
 }
 
 func main() {
-	if _, err := tea.NewProgram(model{comments: map[string]string{}}, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
+	if _, err := tea.NewProgram(model{comments: map[string]string{}, mrs: map[string]mrInfo{}}, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

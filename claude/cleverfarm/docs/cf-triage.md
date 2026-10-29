@@ -17,7 +17,7 @@ My job = intent in, decisions at gates, judge results. Agents do the rest.
 
 **My gates in the background flow** (Slack `#zimmi-claude` tells me when each is due)
 
-1. **Plan gate** — Jira comment with PLAN + Given/When/Then scenarios. Wrong/unclear → reply in Jira (answered ≤5 min, PLAN + scenarios updated). Good → add `ai-fix`. The label approves plan AND scenarios — scenarios are what "done" means, read them.
+1. **Plan gate** — Jira comment with PLAN + Given/When/Then scenarios. Wrong/unclear → reply in Jira (answered ≤2 min, instantly if replied via `triage-dash`, PLAN + scenarios updated). Good → add `ai-fix`. The label approves plan AND scenarios — scenarios are what "done" means, read them.
 2. **MR gate** — draft MR with verify verdict note. `ai-verified` → review diff, mark ready, add reviewers, merge. Want changes → comment in Jira, agent pushes to the same MR.
 3. **Failures** — `triage-failed` / `ai-fix-failed` / `ai-verify-failed`: read the 🤖 Jira comment or `<KEY>.verify.md`; fix the plan/scenario and re-label (`triage` or `ai-fix`), take it over with `cf-work DEV-X`, or close the ticket.
 
@@ -26,7 +26,7 @@ My job = intent in, decisions at gates, judge results. Agents do the rest.
 | MR | what happens |
 |---|---|
 | draft, not approved, only my commits | `pnpm-lock.yaml`-only → `--ours` + `pnpm install --lockfile-only` (no LLM); code → headless opus `/mattpocock-skills:resolving-merge-conflicts` (intent from PLAN.md + the develop commits' MRs), lint/typecheck/tests, `push --force-with-lease`, 🤖 MR note. Agent-resolved + `ai-verified` → label dropped → holdout re-verify |
-| ready or approved | Slack only. Add MR label `ai-rebase` = my OK → resolved next run, label removed (approvals don't reset on push here) |
+| ready or approved, only my commits | clean rebase or `pnpm-lock.yaml`-only → resolved + pushed like a draft, MR note says no code changed (approval stays valid). Code conflict → rebase aborted, Slack only. Add MR label `ai-rebase` (or `b` in `triage-dash`) = my OK → agent resolves next run, label removed. Why the gate: approvals don't reset on push here, so an agent-written resolution would keep an approval nobody gave it |
 | others' commits / dirty or diverged worktree / >10 files changed on both sides (`CONFLICT_MAX_FILES`) | Slack only → resolve by hand |
 
 Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also "no local repo"); retry same head = `rm ~/.local/state/cf-triage/conflicts/<project id>-<iid>`.
@@ -61,10 +61,10 @@ Sentry (fe-monitoring, can-frontend)
   │  sentry-triage          first run of each workday, 1 new ticket, ONLY if no pipeline ticket is open
   ▼
 DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentry; description ends with "Belongs in Sentry?" verdict
-  │  triage-worker          every 5 min: cf-work --no-claim → claude -p "/cf-work KEY --headless"
+  │  triage-worker          every minute: cf-work --no-claim → claude -p "/cf-work KEY --headless"
   ▼
 [triaged]  worktree + PLAN.md (first section: Belongs in Sentry? → filter fix if no) + holdout scenarios + Czech Jira comment (🤖 + "AI triage" marker)
-  │  I reply in Jira  →  next run (≤5 min) answers, updates PLAN.md + scenarios   (To Do only, any age)
+  │  I reply in Jira  →  next run (≤2 min) answers, updates PLAN.md + scenarios   (To Do only, any age)
   │  I add label ai-fix  (= approves plan AND scenarios)
   ▼  triage-worker          max 1/run: cf-work (claims) → claude -p "/cf-ticket KEY --headless"
 [ai-mr]  draft MR, no reviewers, assigned to me + Jira comment with MR link
@@ -114,7 +114,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | `~/dotfiles/claude/skills/cf-ticket` | `--headless`: implement PLAN.md, verify, self-review, `/cf-mr --headless` |
 | `~/dotfiles/claude/skills/cf-mr` | `--headless`: `glab mr create --draft`, no reviewers, stays In Progress, FE plays Nightly preview |
 | `~/dotfiles/claude/cleverfarm/skills/cf-verify` | holdout verifier: Playwright login as `fe-automation@cleverfarm.cz` (password from cf-farm-frontend `.env`), runs scenarios, writes `<KEY>.verify.md` (`VERDICT: pass/fail/blocked`), MR note. Never edits code. BE: creates + destroys `<key>-verify` dyn-env |
-| `~/dotfiles/claude/systemd/cf-triage.{service,timer}` | symlinked to `~/.config/systemd/user/`; Mon–Fri every 5 min 07–18 (idle run = 4 Jira queries, no LLM), `Persistent=true`, 110 min timeout |
+| `~/dotfiles/claude/systemd/cf-triage.{service,timer}` | symlinked to `~/.config/systemd/user/`; Mon–Fri every minute 07–18 (idle run = 4 Jira queries, no LLM; overlapping ticks skipped, lock conflict exits 0; failed Sentry triage retries ≤ every 15 min). `triage-dash` actions start the service right away, `Persistent=true`, 110 min timeout |
 | `~/.config/cf-triage.env` | `JIRA_EMAIL`, `JIRA_TOKEN` (0600, not in git) |
 | `~/.local/state/cf-triage/` | `<KEY>.log`, `<KEY>.verify.md`, `holdout/<KEY>.md` (scenarios; analysis may write, implementer denied), `sentry-*.json`, `sentry-last.txt`, `sentry-today` (daily stamp), `notes.txt` (pending Slack lines), `conflicts/<project id>-<iid>` (last handled MR head) + `.md` (resolver report), `.lock` |
 | `~/.config/claude/slack-webhook` | incoming webhook URL for `#zimmi-claude` (0600, not in git) |

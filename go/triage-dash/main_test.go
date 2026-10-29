@@ -78,3 +78,24 @@ func TestWikiToMD(t *testing.T) {
 		t.Errorf("got %q\nwant %q", got, want)
 	}
 }
+
+func TestMRStatus(t *testing.T) {
+	pipe := func(s string) *struct{ Status string } { return &struct{ Status string }{s} }
+	cases := map[string]mrRaw{
+		"merged":        {State: "merged", BlockingDiscussionsResolved: true},
+		"conflict":      {State: "opened", Draft: true, HasConflicts: true, BlockingDiscussionsResolved: true},
+		"ci failed":     {State: "opened", HeadPipeline: pipe("failed"), BlockingDiscussionsResolved: true},
+		"open threads":  {State: "opened"},
+		"draft":         {State: "opened", Draft: true, BlockingDiscussionsResolved: true, HeadPipeline: pipe("success")},
+		"ci running":    {State: "opened", BlockingDiscussionsResolved: true, HeadPipeline: pipe("running")},
+		"approved":      {State: "opened", BlockingDiscussionsResolved: true, Approved: true},
+		"in review":     {State: "opened", BlockingDiscussionsResolved: true, ApprovalsLeft: 1, Reviewers: []struct{ Username string }{{"x"}}},
+		"no reviewer":   {State: "opened", BlockingDiscussionsResolved: true, ApprovalsLeft: 1},
+		"changes asked": {State: "opened", BlockingDiscussionsResolved: true, DetailedMergeStatus: "requested_changes"},
+	}
+	for want, r := range cases {
+		if got := mrStatus(r).label; got != want {
+			t.Errorf("mrStatus(%+v) = %q, want %q", r, got, want)
+		}
+	}
+}
