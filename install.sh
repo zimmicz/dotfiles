@@ -34,6 +34,7 @@ mkdir -p ~/bin
 for f in ${DOTFILES_DIR}/bin/*; do
   ln -sf ${f} ~/bin/$(basename ${f})
 done
+(cd ${DOTFILES_DIR}/go/triage-dash && go build -o ~/bin/triage-dash .)
 
 claude mcp get playwright > /dev/null 2>&1 || claude mcp add -s user playwright -- npx -y @playwright/mcp@latest --headless
 

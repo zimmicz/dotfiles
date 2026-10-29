@@ -43,6 +43,7 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 
 | want | how |
 |---|---|
+| all tickets at a glance (stage, cost, MR, live last tool call) | `triage-dash` TUI: j/k, enter opens MR (else Jira), `J`/`m` Jira/MR, `l` log, `c` resume session interactively (new tmux window named `<KEY>`); click KEY/MR (tmux mouse on: `prefix m`) |
 | is something running now | `workmux dashboard` — headless runs show as their `cf-triage` window (working → done) while active; finished ones drop off |
 | watch it live | `tmux switch-client -t cf-triage` (one window per worktree, `tail -f` of the log) or `tail -f ~/.local/state/cf-triage/<KEY>.log` (🔧 tool calls, 💬 agent text, ✅ exit + cost) |
 | ask the agent why it did X | log line `🆔 session <id> — reopen: cd <wt> && claude --resume <id>` → full transcript, interactive, can continue |
