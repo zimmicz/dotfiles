@@ -44,7 +44,7 @@ resolve_sentry() {
 }
 
 analyze() {
-  local KEY=$1 REPO=$2 LOG=$LOG_DIR/$1.log
+  local KEY=$1 REPO=${2-} LOG=$LOG_DIR/$1.log
   echo "=== $KEY ($REPO) $(date -Iseconds)" | tee -a $LOG
   if [[ -z "$REPO" || ! -d $REPOS/$REPO/.git ]]; then
     echo "  no repo '$REPO'" | tee -a $LOG
@@ -78,7 +78,7 @@ wm_window() {
 }
 
 implement() {
-  local KEY=$1 REPO=$2 LOG=$LOG_DIR/$1.log
+  local KEY=$1 REPO=${2-} LOG=$LOG_DIR/$1.log
   echo "=== implement $KEY ($REPO) $(date -Iseconds)" | tee -a $LOG
   [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] || { echo "  no repo '$REPO'" | tee -a $LOG; return 1; }
   local SETUP=$(cd $REPOS/$REPO && cf-work $KEY --no-launch 2>&1)
