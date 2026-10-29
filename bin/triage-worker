@@ -147,10 +147,11 @@ conflicts() {
 rebasing() { (cd $1 && [[ -d $(git rev-parse --git-path rebase-merge) ]]) }
 
 lock_resolve() {
-  local WT=$1 U
+  local WT=$1 U REST
   while rebasing $WT; do
     U=(${(f)"$(git -C $WT diff --name-only --diff-filter=U)"})
-    (( ${#U} )) && [[ -z "${U:#*pnpm-lock.yaml}" ]] || return 1
+    REST=(${U:#*pnpm-lock.yaml})
+    (( ${#U} && ! ${#REST} )) || return 1
     git -C $WT checkout -q --ours -- $U
     (cd $WT && pnpm install --lockfile-only </dev/null >/dev/null 2>&1) || return 1
     git -C $WT add -- $U
@@ -205,6 +206,10 @@ resolve_conflict() {
     fi
     HOW=$(tail -n +2 $REPORT)
   fi
+  if [[ $(git -C $WT rev-list --count origin/$TGT..HEAD) != $(git -C $GIT rev-list --count origin/$TGT..$OLD) ]]; then
+    git -C $WT reset -q --hard $OLD
+    echo "$WHO rebase dropped commits, not pushed, reset to $OLD → resolve by hand" >>$NOTES; return
+  fi
   git -C $WT push -q --force-with-lease=$BR:$OLD origin HEAD:$BR >>$LOG 2>&1 || { echo "$WHO resolved but push rejected, see \`$LOG\`" >>$NOTES; return }
   [[ $GO == true ]] && glab api -X PUT projects/$PID/merge_requests/$IID -f remove_labels=ai-rebase >/dev/null
   glab api -X POST projects/$PID/merge_requests/$IID/notes -f body="🤖 _I'm writing on Michal's behalf. If you don't like it, please let me know._
@@ -216,7 +221,7 @@ $HOW" >/dev/null
     jira PUT "/rest/api/2/issue/$KEY" '{"update":{"labels":[{"remove":"ai-verified"}]}}' >/dev/null
     echo "$WHO rebased, conflicts resolved by agent, holdout re-verify queued" >>$NOTES
   else
-    echo "$WHO rebased onto $TGT (${${(f)HOW}[1]})" >>$NOTES
+    echo "$WHO rebased onto $TGT (${HOW%%$'\n'*})" >>$NOTES
   fi
 }
 
