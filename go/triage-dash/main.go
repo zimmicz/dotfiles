@@ -18,6 +18,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -143,7 +144,7 @@ func relabel(key, remove, add string) error {
 	return jiraReq("PUT", "/rest/api/2/issue/"+key, map[string]any{"update": map[string]any{"labels": ops}}, nil)
 }
 
-func fetchComments(key string) ([]string, error) {
+func fetchComments(key string) (string, error) {
 	var out struct {
 		Comments []struct {
 			Author  struct{ DisplayName string }
@@ -152,14 +153,86 @@ func fetchComments(key string) ([]string, error) {
 		}
 	}
 	if err := jiraReq("GET", "/rest/api/2/issue/"+key+"/comment?orderBy=created&maxResults=100", nil, &out); err != nil {
-		return nil, err
+		return "", err
 	}
-	var lines []string
+	var b strings.Builder
 	for _, c := range out.Comments {
-		lines = append(lines, "", "\033[1m── "+c.Author.DisplayName+" · "+strings.Replace(c.Created[:min(16, len(c.Created))], "T", " ", 1)+"\033[0m")
-		lines = append(lines, strings.Split(strings.ReplaceAll(c.Body, "\r", ""), "\n")...)
+		fmt.Fprintf(&b, "\n---\n\n**%s · %s**\n\n%s\n", c.Author.DisplayName, strings.Replace(c.Created[:min(16, len(c.Created))], "T", " ", 1), wikiToMD(strings.ReplaceAll(c.Body, "\r", "")))
 	}
-	return lines, nil
+	return b.String(), nil
+}
+
+var wikiRules = []struct {
+	re  *regexp.Regexp
+	rep string
+}{
+	{regexp.MustCompile(`\{\{(.+?)\}\}`), "`$1`"},
+	{regexp.MustCompile(`\{(code|noformat)(:[^}]*)?\}`), "\n```\n"},
+	{regexp.MustCompile(`\[([^|\]\n]+)\|([^\]\n]+)\]`), "[$1]($2)"},
+	{regexp.MustCompile(`(?m)^# `), "1. "},
+	{regexp.MustCompile(`(?m)^\*\* `), "  - "},
+	{regexp.MustCompile(`(^|[\s(])\*([^*\s][^*\n]*?)\*`), "$1**$2**"},
+	{regexp.MustCompile(`(?m)^h([1-6])\. *`), "\x00$1"},
+}
+
+var headRe = regexp.MustCompile(`(?m)^\x00([1-6])`)
+
+func wikiToMD(s string) string {
+	for _, r := range wikiRules {
+		s = r.re.ReplaceAllString(s, r.rep)
+	}
+	return headRe.ReplaceAllStringFunc(s, func(h string) string {
+		return strings.Repeat("#", int(h[1]-'0')) + " "
+	})
+}
+
+func renderMD(src string, w int) []string {
+	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"), glamour.WithWordWrap(max(w-4, 20)))
+	if err != nil {
+		return strings.Split(src, "\n")
+	}
+	out, err := r.Render(src)
+	if err != nil {
+		return strings.Split(src, "\n")
+	}
+	return strings.Split(strings.Trim(out, "\n"), "\n")
+}
+
+func isMarker(l string) bool {
+	for _, p := range []string{"🔧", "✅", "🆔", "💬", "==="} {
+		if strings.HasPrefix(l, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func renderLog(lines []string, w int) []string {
+	var out, md []string
+	flush := func() {
+		if len(md) > 0 {
+			out = append(out, renderMD(strings.Join(md, "\n"), w)...)
+		}
+		md = nil
+	}
+	for _, l := range lines {
+		if isMarker(l) {
+			flush()
+		}
+		switch {
+		case strings.HasPrefix(l, "💬"), md != nil && !isMarker(l):
+			md = append(md, l)
+		case strings.HasPrefix(l, "🔧"):
+			out = append(out, "\033[2m"+l+"\033[0m")
+		case strings.HasPrefix(l, "✅"):
+			out = append(out, l)
+			md = []string{}
+		default:
+			out = append(out, l)
+		}
+	}
+	flush()
+	return out
 }
 
 func planPath(key string) string {
@@ -310,9 +383,9 @@ type jiraMsg struct {
 	err    error
 }
 type commentsMsg struct {
-	key   string
-	lines []string
-	err   error
+	key string
+	md  string
+	err error
 }
 type doneMsg struct {
 	status string
@@ -326,7 +399,8 @@ type model struct {
 	issues      []issue
 	rows        []row
 	body        []string
-	comments    map[string][]string
+	bodySrc     string
+	comments    map[string]string
 	cur, off    int
 	tab, scroll int
 	w, h        int
@@ -373,22 +447,30 @@ func (m *model) reload() {
 }
 
 func (m *model) loadBody() {
-	key := m.sel().key
+	key, w := m.sel().key, m.paneW()
+	var src string
 	switch tabs[m.tab] {
 	case "log":
 		b, _ := os.ReadFile(filepath.Join(stateDir, key+".log"))
-		m.body = strings.Split(strings.TrimRight(ansi.Strip(string(b)), "\n"), "\n")
+		src = ansi.Strip(string(b))
 	case "plan":
-		m.body = []string{"(no PLAN.md in a worktree for " + key + ")"}
+		src = "_(no PLAN.md in a worktree for " + key + ")_"
 		if p := planPath(key); p != "" {
 			b, _ := os.ReadFile(p)
-			m.body = append([]string{"\033[2m" + p + "\033[0m", ""}, strings.Split(string(b), "\n")...)
+			src = "`" + p + "`\n\n" + string(b)
 		}
 	case "comments":
-		m.body = []string{"loading…"}
-		if c, ok := m.comments[key]; ok {
-			m.body = c
-		}
+		src = or(m.comments[key], "_loading…_")
+	}
+	cache := fmt.Sprint(m.tab, w, src)
+	if cache == m.bodySrc {
+		return
+	}
+	m.bodySrc = cache
+	if tabs[m.tab] == "log" {
+		m.body = renderLog(strings.Split(strings.TrimRight(src, "\n"), "\n"), w)
+	} else {
+		m.body = renderMD(src, w)
 	}
 }
 
@@ -466,7 +548,7 @@ func (m model) needComments() tea.Cmd {
 	if _, ok := m.comments[key]; ok {
 		return nil
 	}
-	m.comments[key] = []string{"loading…"}
+	m.comments[key] = "_loading…_"
 	return loadComments(key)
 }
 
@@ -476,7 +558,7 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.comments == nil {
-		m.comments = map[string][]string{}
+		m.comments = map[string]string{}
 	}
 	m, cmd := m.update(msg)
 	return m, tea.Batch(cmd, m.needComments())
@@ -501,9 +583,9 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		}
 		m.reload()
 	case commentsMsg:
-		m.comments[msg.key] = msg.lines
+		m.comments[msg.key] = msg.md
 		if msg.err != nil {
-			m.comments[msg.key] = []string{"\033[31m" + msg.err.Error() + "\033[0m"}
+			m.comments[msg.key] = "**error:** " + msg.err.Error()
 		}
 		m.loadBody()
 	case doneMsg:
@@ -772,7 +854,7 @@ func (m model) View() string {
 }
 
 func main() {
-	if _, err := tea.NewProgram(model{comments: map[string][]string{}}, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
+	if _, err := tea.NewProgram(model{comments: map[string]string{}}, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

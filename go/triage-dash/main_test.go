@@ -48,3 +48,11 @@ func TestRetryAction(t *testing.T) {
 		}
 	}
 }
+
+func TestWikiToMD(t *testing.T) {
+	in := "h3. Poznámka\n{{code}} {{a-b}} je *tučně*, [MR|https://x/1]\n# první\n* odrážka\n{code:js}x(){code}"
+	want := "### Poznámka\n`code` `a-b` je **tučně**, [MR](https://x/1)\n1. první\n* odrážka\n\n```\nx()\n```\n"
+	if got := wikiToMD(in); got != want {
+		t.Errorf("got %q\nwant %q", got, want)
+	}
+}
