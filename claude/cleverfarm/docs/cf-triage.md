@@ -43,13 +43,24 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 
 | want | how |
 |---|---|
-| all tickets at a glance + act on gates | `triage-dash` TUI: sidebar grouped running / needs you / todo (my sprint To Do, not in factory) / in flight / parked, pane with log / PLAN.md / Jira comments (`tab`, markdown rendered). Gates without Jira: `a` approve, `R` reply, `t` retry, `w` run worker, `f` feed a todo (pick repo → `triage` + `repo-<x>`) (all y/n). `c` resumes the session in a tmux window. `?` lists all keys. Mouse: tmux `prefix m` |
+| all tickets at a glance + act on gates | `triage-dash` TUI: sidebar grouped running / needs you / todo (my sprint To Do, not in factory) / in flight / parked, pane with log / PLAN.md / Jira description / Jira comments (`tab`, markdown rendered). Gates without Jira: `a` approve, `R` reply, `t` retry, `w` run worker, `f` feed a todo (pick repo → `triage` + `repo-<x>`) (all y/n). `c` resumes the session in a tmux window. `?` lists all keys. Mouse: tmux `prefix m` |
 | is something running now | `workmux dashboard` — headless runs show as their `cf-triage` window (working → done) while active; finished ones drop off |
 | watch it live | `tmux switch-client -t cf-triage` (one window per worktree, `tail -f` of the log) or `tail -f ~/.local/state/cf-triage/<KEY>.log` (🔧 tool calls, 💬 agent text, ✅ exit + cost) |
 | ask the agent why it did X | log line `🆔 session <id> — reopen: cd <wt> && claude --resume <id>` → full transcript, interactive, can continue |
 | verify result | `~/.local/state/cf-triage/<KEY>.verify.md` (+ screenshot paths), MR note |
-| did the timer run / crash | `journalctl --user -u cf-triage --since today` |
-| re-run one stage | `triage-worker DEV-X` (analyze / implement if `ai-fix`), `triage-worker DEV-X --verify` |
+| did the timer run / crash | `journalctl --user -u cf-triage -u cf-triage-light --since today` |
+| re-run one stage | `triage-worker DEV-X` (analyze / implement if `ai-fix`), `triage-worker DEV-X --verify`. Its lane busy → prints `… lane busy`, exit 75; ticket busy in the other lane → `skipped` |
+| why wasn't X picked up | lanes + locks below: heavy lane busy (one long implement) only blocks heavy work; a ticket locked by the other lane is skipped and retried next tick |
+
+**Lanes and locks** (two oneshot units, each on its own every-minute timer):
+
+| lock | holder | work |
+|---|---|---|
+| `.lock` heavy lane | `cf-triage.service` → `triage-worker` | implement (skips tickets with an unanswered reply), MR follow-ups, holdout verify, release / Sentry resolve, my MR conflicts. One at a time: two builds at once choke the laptop |
+| `.lock-light` light lane | `cf-triage-light.service` → `sentry-triage`, `triage-worker --light` | analysis of new `triage` tickets + answers to plan-gate replies. Runs next to the heavy lane, so a reply is answered within ~1 min even during a long implement |
+| `locks/<KEY>` ticket | every stage, via `run_stage` | one ticket is never worked on by both lanes at once (e.g. `ai-fix` added while its reply is being answered). Busy → skipped, retried next tick |
+
+All locks are `flock -n -o`: `-o` keeps the lock fd out of claude / pnpm / MCP children, so a leftover background process can't hold a lane forever.
 | interactive sub-agents (`/cf-ticket` verify, `/cf-epic` slices) | inside that session only (agent panel / transcript), not in the dashboard |
 
 **Don't**: merge anything not `ai-verified` without reading why; edit holdout files after `ai-fix` (they're the contract); feed the factory tickets without a `repo-*` label.
@@ -106,17 +117,17 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | path | what |
 |---|---|
 | `~/dotfiles/bin/sentry-triage` | stage 1: open-ticket gate + daily stamp, then claude -p (sonnet) + Sentry MCP + `jira` → ticket. `--dry-run` (ignores gate + stamp), `MAX=` (default 1) |
-| `~/dotfiles/bin/sentry-triage-now` | force a Sentry run today: drop `sentry-today` stamp + start `cf-triage.service` (no block) |
-| `~/dotfiles/bin/triage-worker` | stages 2–7: triage, reply follow-up, implement, holdout verify (+1 retry), resolve Sentry on Done, rebase my conflicting MRs (timer runs only); Slack summary. flock'd (manual run while timer runs = exits). `triage-worker DEV-X` = one ticket (implements if it has `ai-fix`; `triage-worker DEV-X --verify` = verify its MR now). `MAX=`, `IMPL_MAX=`, `VERIFY_MAX=` (default 1; not-ready previews don't count). Holdout verify of a BE ticket blocks the run ~30 min (dyn-env create). Analyze + implement open a detached window per worktree in tmux session `cf-triage` (`tail -f <KEY>.log`) and run claude with that `TMUX_PANE`, so workmux status hooks show 🤖/✅ in the dashboard. Plain `tmux new-window -d`, not `workmux open` (that one `switch-client`s your attached client). No tmux server = skipped |
+| `~/dotfiles/bin/sentry-triage-now` | force a Sentry run today: drop `sentry-today` stamp + start `cf-triage-light.service` (no block) |
+| `~/dotfiles/bin/triage-worker` | stages 2–7: triage, reply follow-up, implement, holdout verify (+1 retry), resolve Sentry on Done, rebase my conflicting MRs (timer runs only); Slack summary (notes moved away atomically before posting, so both lanes can append). No args = heavy lane, `--light` = light lane, see Lanes and locks. `triage-worker DEV-X` = one ticket (implements if it has `ai-fix`; `triage-worker DEV-X --verify` = verify its MR now). `MAX=`, `IMPL_MAX=`, `VERIFY_MAX=` (default 1; not-ready previews don't count). Holdout verify of a BE ticket blocks the run ~30 min (dyn-env create). Analyze + implement open a detached window per worktree in tmux session `cf-triage` (`tail -f <KEY>.log`) and run claude with that `TMUX_PANE`, so workmux status hooks show 🤖/✅ in the dashboard. Plain `tmux new-window -d`, not `workmux open` (that one `switch-client`s your attached client). No tmux server = skipped |
 | `~/dotfiles/bin/factory-stats` | `factory-stats [days=7]`: yield per ticket touched in window — stages, bail rate, verify pass rate, reviewer notes per merged MR, days ticket→merge, $ total + per merged MR (from `cost=$` in `<KEY>.log`). Posted to Slack every Monday by `nightly-claude.sh` |
 | `~/dotfiles/bin/cf-work` | worktree setup, one per repo (`--repos a,b` > `repo-*` labels > mapped labels `frontend`/`agroevidence`/… > cwd); same branch everywhere, claude in primary worktree + `--add-dir` siblings; `--no-launch`, `--no-claim` (skip assign + In Progress) |
 | `~/dotfiles/claude/skills/cf-work` | `--headless`: root-cause analysis → PLAN.md + comment; follow-up mode on replies |
 | `~/dotfiles/claude/skills/cf-ticket` | `--headless`: implement PLAN.md, verify, self-review, `/cf-mr --headless` |
 | `~/dotfiles/claude/skills/cf-mr` | `--headless`: `glab mr create --draft`, no reviewers, stays In Progress, FE plays Nightly preview |
 | `~/dotfiles/claude/cleverfarm/skills/cf-verify` | holdout verifier: Playwright login as `fe-automation@cleverfarm.cz` (password from cf-farm-frontend `.env`), runs scenarios, writes `<KEY>.verify.md` (`VERDICT: pass/fail/blocked`), MR note. Never edits code. BE: creates + destroys `<key>-verify` dyn-env |
-| `~/dotfiles/claude/systemd/cf-triage.{service,timer}` | symlinked to `~/.config/systemd/user/`; Mon–Fri every minute 07–18 (idle run = 4 Jira queries, no LLM; overlapping ticks skipped, lock conflict exits 0; failed Sentry triage retries ≤ every 15 min). `triage-dash` actions start the service right away, `Persistent=true`, 110 min timeout |
+| `~/dotfiles/claude/cleverfarm/systemd/cf-triage{,-light}.{service,timer}` | symlinked to `~/.config/systemd/user/`; heavy + light lane, each Mon–Fri every minute 07–18 (idle run = a few Jira queries, no LLM; overlapping ticks skipped, lock conflict exits 0; failed Sentry triage retries ≤ every 15 min). `triage-dash` actions start both lanes right away, `Persistent=true`, timeout heavy 110 min / light 60 min |
 | `~/.config/cf-triage.env` | `JIRA_EMAIL`, `JIRA_TOKEN` (0600, not in git) |
-| `~/.local/state/cf-triage/` | `<KEY>.log`, `<KEY>.verify.md`, `holdout/<KEY>.md` (scenarios; analysis may write, implementer denied), `sentry-*.json`, `sentry-last.txt`, `sentry-today` (daily stamp), `notes.txt` (pending Slack lines), `conflicts/<project id>-<iid>` (last handled MR head) + `.md` (resolver report), `.lock` |
+| `~/.local/state/cf-triage/` | `<KEY>.log`, `<KEY>.verify.md`, `holdout/<KEY>.md` (scenarios; analysis may write, implementer denied), `sentry-*.json`, `sentry-last.txt`, `sentry-today` (daily stamp), `notes.txt` (pending Slack lines), `conflicts/<project id>-<iid>` (last handled MR head) + `.md` (resolver report), `.lock` / `.lock-light` (lanes), `locks/<KEY>` (tickets) |
 | `~/.config/claude/slack-webhook` | incoming webhook URL for `#zimmi-claude` (0600, not in git) |
 | `~/dotfiles/gitignore` | ignores `PLAN.md`, `TICKET.md`, `install.log`, `.codegraph/` so MRs don't pick them up |
 
@@ -124,7 +135,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 
 ```
 systemctl --user daemon-reload
-systemctl --user enable --now cf-triage.timer
+systemctl --user enable --now cf-triage.timer cf-triage-light.timer
 ```
 
 Prereqs (already done):
@@ -136,10 +147,10 @@ Prereqs (already done):
 
 | command | what |
 |---|---|
-| `systemctl --user list-timers cf-triage.timer` | last/next run |
-| `systemctl --user status cf-triage.service` | running? last exit |
-| `journalctl --user -u cf-triage --since today` | run output |
-| `systemctl --user start cf-triage.service` | run now |
+| `systemctl --user list-timers 'cf-triage*'` | last/next run, both lanes |
+| `systemctl --user status cf-triage.service cf-triage-light.service` | running? last exit |
+| `journalctl --user -u cf-triage -u cf-triage-light --since today` | run output |
+| `systemctl --user start cf-triage.service cf-triage-light.service` | run now |
 | `systemctl --user disable --now cf-triage.timer` | turn off |
 | `tail -f ~/.local/state/cf-triage/DEV-XXXX.log` | live per-ticket progress: 🔧 tool calls, 💬 agent text, ✅ exit + cost |
 

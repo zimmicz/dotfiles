@@ -83,7 +83,9 @@ func TestMRStatus(t *testing.T) {
 	pipe := func(s string) *struct{ Status string } { return &struct{ Status string }{s} }
 	cases := map[string]mrRaw{
 		"merged":        {State: "merged", BlockingDiscussionsResolved: true},
-		"conflict":      {State: "opened", Draft: true, HasConflicts: true, BlockingDiscussionsResolved: true},
+		"conflict":      {State: "opened", HasConflicts: true, BlockingDiscussionsResolved: true},
+		"auto-rebase":   {State: "opened", Draft: true, HasConflicts: true, BlockingDiscussionsResolved: true},
+		"rebase queued": {State: "opened", HasConflicts: true, Labels: []string{"ai-rebase"}, BlockingDiscussionsResolved: true},
 		"ci failed":     {State: "opened", HeadPipeline: pipe("failed"), BlockingDiscussionsResolved: true},
 		"open threads":  {State: "opened"},
 		"draft":         {State: "opened", Draft: true, BlockingDiscussionsResolved: true, HeadPipeline: pipe("success")},
@@ -96,6 +98,16 @@ func TestMRStatus(t *testing.T) {
 	for want, r := range cases {
 		if got := mrStatus(r).label; got != want {
 			t.Errorf("mrStatus(%+v) = %q, want %q", r, got, want)
+		}
+	}
+}
+
+func TestLookConflict(t *testing.T) {
+	m := model{mrs: map[string]mrInfo{"u": {label: "conflict", icon: "💥", color: "31"}}}
+	cases := map[string]string{"waiting": "conflict: b", "failed": "rebase failed", "pending": "rebase pending", "": "rebase pending"}
+	for state, want := range cases {
+		if _, _, got := m.look(row{stage: "mr", mr: "u", conflict: state}); got != want {
+			t.Errorf("conflict %q: got %q, want %q", state, got, want)
 		}
 	}
 }

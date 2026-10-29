@@ -7,9 +7,8 @@ LOG_DIR=~/.local/state/cf-triage
 AI_MARK="AI triage (Claude, headless)"
 NOTES=$LOG_DIR/notes.txt
 HOLDOUT=$LOG_DIR/holdout
-mkdir -p $LOG_DIR $HOLDOUT
-
-[[ "${TRIAGE_LOCKED:-}" == 1 ]] || exec env TRIAGE_LOCKED=1 flock -n -E 0 $LOG_DIR/.lock $0 "$@"
+LOCKS=$LOG_DIR/locks
+mkdir -p $LOG_DIR $HOLDOUT $LOCKS
 
 STREAM_JQ='if .type == "system" and .subtype == "init" then "🆔 session \(.session_id) — reopen: cd \(.cwd) && claude --resume \(.session_id)"
   elif .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
@@ -21,10 +20,13 @@ search() {
   jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=labels,comment&maxResults=$2"
 }
 
-awaiting_reply() {
-  jq -r --arg m "$AI_MARK" '.issues[] | select((.fields.comment.comments | length > 0) and ((.fields.comment.comments | last | .body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not))' \
+reply_filter() {
+  jq -r --arg m "$AI_MARK" --argjson w $1 '.issues[] | select(((.fields.comment.comments | length > 0) and ((.fields.comment.comments | last | .body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not)) == $w)' \
     | jq -rs "{issues: .} | $ROWS_JQ"
 }
+
+awaiting_reply() { reply_filter true }
+not_awaiting() { reply_filter false }
 
 note() {
   echo "[$1](https://cleverfarm.atlassian.net/browse/$1) $2" >>$NOTES
@@ -237,64 +239,30 @@ No code changed: git applied every commit as is, only \`pnpm-lock.yaml\` was reg
 ROWS_JQ='.issues[] | "\(.key) \((.fields.labels | map(select(startswith("repo-"))) | sort_by(. != "repo-cf-farm-frontend") | first // "repo-") | ltrimstr("repo-"))"'
 REPOS_JQ='.issues[] | "\(.key) \(.fields.labels | map(select(startswith("repo-")) | ltrimstr("repo-")) | sort_by(. != "cf-farm-frontend") | join(","))"'
 
-if [[ -n "${1:-}" ]]; then
-  NEW=""
-  IMPL=""
-  REPLIES=""
-  MR_REPLIES=""
-  VERIFY=""
-  DONE=""
-  LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
-  if [[ " $LABELS " == *" ai-fix "* ]]; then
-    IMPL=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
-  elif [[ " $LABELS " == *" ai-mr "* && "${2:-}" == --verify ]]; then
-    VERIFY=$(search "key = ${1:u}" 1 | jq -r "$REPOS_JQ")
-  elif [[ " $LABELS " == *" ai-mr "* ]]; then
-    MR_REPLIES=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
-  else
-    NEW=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
-  fi
-else
-  NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
-  IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' ${IMPL_MAX:-1} | jq -r "$ROWS_JQ")
-  REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory = "To Do"' 20 | awaiting_reply)
-  MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done ORDER BY updated ASC' 20 | awaiting_reply | head -${IMPL_MAX:-1})
-  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed) AND statusCategory != Done ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ")
-  DONE=$(search 'project = DEV AND labels in (triaged, ai-mr, triage-failed, ai-fix-failed) AND labels not in (ai-done) AND status = Done' 5 \
-    | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
-fi
+stage_new() {
+  if analyze $1 $2; then relabel $1 triage triaged; note $1 "triaged, PLAN.md ready (add \`ai-fix\` to implement)"; else relabel $1 triage triage-failed; note $1 "triage failed, see \`$LOG_DIR/$1.log\`"; fi
+}
 
-while read -r KEY REPO; do
-  [[ -z "$KEY" ]] && continue
-  if analyze $KEY $REPO; then relabel $KEY triage triaged; note $KEY "triaged, PLAN.md ready (add \`ai-fix\` to implement)"; else relabel $KEY triage triage-failed; note $KEY "triage failed, see \`$LOG_DIR/$KEY.log\`"; fi
-done <<<"$NEW"
+stage_reply() {
+  echo "--- follow-up $1"
+  if analyze $1 $2; then note $1 "your reply answered"; else note $1 "reply follow-up failed, see \`$LOG_DIR/$1.log\`"; fi
+}
 
-while read -r KEY REPO; do
-  [[ -z "$KEY" ]] && continue
-  echo "--- follow-up $KEY"
-  if analyze $KEY $REPO; then note $KEY "your reply answered"; else note $KEY "reply follow-up failed, see \`$LOG_DIR/$KEY.log\`"; fi
-done <<<"$REPLIES"
+stage_impl() {
+  if implement $1 $2; then relabel $1 ai-fix ai-mr; note $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; note $1 "already fixed, closed as duplicate, Sentry resolves next run"; else relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
+}
 
-while read -r KEY REPO; do
-  [[ -z "$KEY" ]] && continue
-  if implement $KEY $REPO; then relabel $KEY ai-fix ai-mr; note $KEY "draft MR: $(cat $LOG_DIR/$KEY.mr)"; elif search "key = $KEY AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $KEY ai-fix triaged; note $KEY "already fixed, closed as duplicate, Sentry resolves next run"; else relabel $KEY ai-fix ai-fix-failed; note $KEY "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$KEY.log\`"; fi
-done <<<"$IMPL"
+stage_mr() {
+  echo "--- MR follow-up $1"
+  implement $1 $2
+  if search "key = $1" 1 | awaiting_reply | grep -q .; then relabel $1 ai-mr ai-fix-failed; note $1 "MR follow-up failed, see \`$LOG_DIR/$1.log\`"; else note $1 "your reply answered on MR: $(cat $LOG_DIR/$1.mr)"; fi
+}
 
-while read -r KEY REPO; do
-  [[ -z "$KEY" ]] && continue
-  echo "--- MR follow-up $KEY"
-  implement $KEY $REPO
-  if search "key = $KEY" 1 | awaiting_reply | grep -q .; then relabel $KEY ai-mr ai-fix-failed; note $KEY "MR follow-up failed, see \`$LOG_DIR/$KEY.log\`"; else note $KEY "your reply answered on MR: $(cat $LOG_DIR/$KEY.mr)"; fi
-done <<<"$MR_REPLIES"
-
-VERIFIED=0
-while read -r KEY REPO; do
-  [[ -z "$KEY" ]] && continue
-  (( VERIFIED >= ${VERIFY_MAX:-1} )) && break
+stage_verify() {
+  local KEY=$1 REPO=$2 RC
   verify $KEY $REPO
   RC=$?
-  (( RC == 2 )) && continue
-  (( VERIFIED++ ))
+  (( RC == 2 )) && return 2
   if (( RC == 0 )); then
     relabel $KEY ai-verify-retry ai-verified; note $KEY "holdout scenarios pass: $(cat $LOG_DIR/$KEY.mr)"
   elif (( RC == 3 )); then
@@ -308,25 +276,112 @@ while read -r KEY REPO; do
     implement $KEY ${REPO%%,*} "--verify-fix $LOG_DIR/$KEY.verify.md"
     note $KEY "holdout scenarios failed, fix pushed, re-verify next run"
   fi
+  return 0
+}
+
+stage_done() {
+  local KEY=$1 IDS="${*:2}"
+  if [[ -z "$IDS" ]]; then relabel $KEY "" ai-done; note $KEY "released"; return; fi
+  if resolve_sentry $KEY ${=IDS}; then relabel $KEY "" ai-done; note $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
+}
+
+stage_conflict() {
+  resolve_conflict "${@:2}"
+}
+
+run_stage() {
+  flock -n -o -E 75 $LOCKS/$2 $0 --stage "$@" </dev/null
+  local RC=$?
+  (( RC == 75 )) && echo "  $2 busy in the other lane, skipped"
+  return $RC
+}
+
+if [[ "${1:-}" == --stage ]]; then
+  stage_$2 "${@:3}"
+  exit $?
+fi
+
+if [[ -n "${1:-}" && "$1" != --light ]]; then
+  LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
+  LANE=light
+  [[ " $LABELS " == *" ai-fix "* || " $LABELS " == *" ai-mr "* ]] && LANE=heavy
+  BUSY_RC=75
+else
+  LANE=heavy
+  [[ "${1:-}" == --light ]] && LANE=light
+  BUSY_RC=0
+fi
+
+if [[ "${TRIAGE_LOCKED:-}" != 1 ]]; then
+  LANE_LOCK=$LOG_DIR/.lock
+  [[ $LANE == light ]] && LANE_LOCK=$LOG_DIR/.lock-light
+  TRIAGE_LOCKED=1 flock -n -o -E 75 $LANE_LOCK $0 "$@"
+  RC=$?
+  if (( RC == 75 )); then
+    (( BUSY_RC )) && echo "$LANE lane busy, run again when its current run finishes" >&2
+    exit $BUSY_RC
+  fi
+  exit $RC
+fi
+export TRIAGE_LOCKED
+
+NEW="" IMPL="" REPLIES="" MR_REPLIES="" VERIFY="" DONE=""
+if [[ -n "${1:-}" && "$1" != --light ]]; then
+  if [[ " $LABELS " == *" ai-fix "* ]]; then
+    IMPL=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
+  elif [[ " $LABELS " == *" ai-mr "* && "${2:-}" == --verify ]]; then
+    VERIFY=$(search "key = ${1:u}" 1 | jq -r "$REPOS_JQ")
+  elif [[ " $LABELS " == *" ai-mr "* ]]; then
+    MR_REPLIES=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
+  else
+    NEW=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
+  fi
+elif [[ $LANE == light ]]; then
+  NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
+  REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory = "To Do"' 20 | awaiting_reply)
+else
+  IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' 20 | not_awaiting | head -${IMPL_MAX:-1})
+  MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done ORDER BY updated ASC' 20 | awaiting_reply | head -${IMPL_MAX:-1})
+  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed) AND statusCategory != Done ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ")
+  DONE=$(search 'project = DEV AND labels in (triaged, ai-mr, triage-failed, ai-fix-failed) AND labels not in (ai-done) AND status = Done' 5 \
+    | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
+fi
+
+for S L in new "$NEW" reply "$REPLIES" impl "$IMPL" mr "$MR_REPLIES"; do
+  while read -r KEY REPO; do
+    [[ -n "$KEY" ]] && run_stage $S $KEY $REPO
+  done <<<"$L"
+done
+
+VERIFIED=0
+while read -r KEY REPO; do
+  [[ -z "$KEY" ]] && continue
+  (( VERIFIED >= ${VERIFY_MAX:-1} )) && break
+  run_stage verify $KEY $REPO
+  (( $? == 0 )) && (( VERIFIED++ ))
 done <<<"$VERIFY"
 
 while read -r KEY IDS; do
-  [[ -z "$KEY" ]] && continue
-  if [[ -z "$IDS" ]]; then relabel $KEY "" ai-done; note $KEY "released"; continue; fi
-  if resolve_sentry $KEY ${=IDS}; then relabel $KEY "" ai-done; note $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
+  [[ -n "$KEY" ]] && run_stage done $KEY ${=IDS}
 done <<<"$DONE"
 
 if [[ -z "${1:-}" ]]; then
   mkdir -p $LOG_DIR/conflicts
   while read -r ARGS; do
-    [[ -n "$ARGS" ]] && resolve_conflict ${=ARGS} </dev/null
+    [[ -z "$ARGS" ]] && continue
+    A=(${=ARGS})
+    K=${$(grep -oiP '^dev-\d+' <<<${A[4]}):u}
+    run_stage conflict ${K:-${A[4]//\//-}} ${=ARGS}
   done <<<"$(conflicts)"
 fi
 
-POSTED=$LOG_DIR/.posted QUIET=$LOG_DIR/.quiet
-if [[ -s $NOTES ]]; then
-  printf '**cf-triage run %s**\n%s\n' "$(date '+%H:%M')" "$(sed 's/^/• /' $NOTES)" \
-    | ~/.claude/scripts/slack-post.sh "cf-triage" && rm -f $NOTES $QUIET && touch $POSTED
+POSTED=$LOG_DIR/.posted QUIET=$LOG_DIR/.quiet SEND=$NOTES.$$
+if [[ -s $NOTES ]] && mv $NOTES $SEND; then
+  if printf '**cf-triage %s run %s**\n%s\n' $LANE "$(date '+%H:%M')" "$(sed 's/^/• /' $SEND)" | ~/.claude/scripts/slack-post.sh "cf-triage"; then
+    rm -f $SEND $QUIET && touch $POSTED
+  else
+    cat $SEND >>$NOTES && rm -f $SEND
+  fi
 elif [[ -z "${1:-}" ]]; then
   date '+%a %H:%M' >>$QUIET
   RECENT=($POSTED(Nmh-3))

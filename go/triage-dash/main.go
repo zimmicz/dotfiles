@@ -56,7 +56,8 @@ type row struct {
 	key, stage, summary, verdict, mr, last, resume string
 	cost                                           float64
 	seen                                           time.Time
-	running, parked, jira, todo                    bool
+	running, parked, jira, todo, mrNeeds           bool
+	conflict                                       string
 	labels                                         []string
 }
 
@@ -136,6 +137,8 @@ func group(r row) int {
 	switch {
 	case r.running:
 		return gRunning
+	case r.mrNeeds:
+		return gNeeds
 	case !r.jira:
 		return gOther
 	case r.todo:
@@ -187,6 +190,7 @@ type mrRaw struct {
 	Approved                    bool
 	ApprovalsLeft               int                                        `json:"approvals_left"`
 	ApprovedBy                  []struct{ User struct{ Username string } } `json:"approved_by"`
+	Labels                      []string
 }
 
 type mrInfo struct {
@@ -217,6 +221,11 @@ func mrStatus(r mrRaw) mrInfo {
 		in.label, in.icon, in.color, in.final = "closed", "⛔", "2", true
 	case r.HasConflicts || r.DetailedMergeStatus == "conflict" || r.DetailedMergeStatus == "need_rebase":
 		in.label, in.icon, in.color = "conflict", "💥", "31"
+		if slices.Contains(r.Labels, "ai-rebase") {
+			in.label, in.icon, in.color = "rebase queued", "🔧", "36"
+		} else if r.Draft && len(r.ApprovedBy) == 0 {
+			in.label, in.icon, in.color = "auto-rebase", "🔧", "36"
+		}
 	case pipe == "failed":
 		in.label, in.icon, in.color = "ci failed", "🔴", "31"
 	case r.DetailedMergeStatus == "requested_changes":
@@ -304,22 +313,27 @@ func relabel(key, remove, add string) error {
 	return jiraReq("PUT", "/rest/api/2/issue/"+key, map[string]any{"update": map[string]any{"labels": ops}}, nil)
 }
 
-func fetchComments(key string) (string, error) {
+func fetchIssue(key string) (string, string, error) {
 	var out struct {
-		Comments []struct {
-			Author  struct{ DisplayName string }
-			Created string
-			Body    string
+		Fields struct {
+			Description string
+			Comment     struct {
+				Comments []struct {
+					Author  struct{ DisplayName string }
+					Created string
+					Body    string
+				}
+			}
 		}
 	}
-	if err := jiraReq("GET", "/rest/api/2/issue/"+key+"/comment?orderBy=created&maxResults=100", nil, &out); err != nil {
-		return "", err
+	if err := jiraReq("GET", "/rest/api/2/issue/"+key+"?fields=description,comment", nil, &out); err != nil {
+		return "", "", err
 	}
 	var b strings.Builder
-	for _, c := range out.Comments {
+	for _, c := range out.Fields.Comment.Comments {
 		fmt.Fprintf(&b, "\n---\n\n**%s · %s**\n\n%s\n", c.Author.DisplayName, strings.Replace(c.Created[:min(16, len(c.Created))], "T", " ", 1), wikiToMD(strings.ReplaceAll(c.Body, "\r", "")))
 	}
-	return b.String(), nil
+	return wikiToMD(strings.ReplaceAll(out.Fields.Description, "\r", "")), b.String(), nil
 }
 
 var wikiRules = []struct {
@@ -347,7 +361,7 @@ func wikiToMD(s string) string {
 }
 
 func renderMD(src string, w int) []string {
-	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"), glamour.WithWordWrap(max(w-4, 20)))
+	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"), glamour.WithWordWrap(max(w-6, 20)))
 	if err != nil {
 		return strings.Split(src, "\n")
 	}
@@ -433,6 +447,16 @@ func parseLog(r *row, path string) {
 		}
 		if m := verdRe.FindStringSubmatch(t); m != nil {
 			r.verdict = m[1]
+		}
+		switch {
+		case strings.HasPrefix(t, "=== conflict "):
+			r.conflict = "pending"
+		case strings.Contains(t, "waiting for ai-rebase"):
+			r.conflict = "waiting"
+		case strings.Contains(t, "conflict resolve failed"):
+			r.conflict = "failed"
+		case strings.Contains(t, "rebased + pushed"):
+			r.conflict = ""
 		}
 		if strings.HasPrefix(t, "🔧") || strings.HasPrefix(t, "💬") || strings.HasPrefix(t, "✅") {
 			r.last = t
@@ -545,9 +569,8 @@ type jiraMsg struct {
 	err           error
 }
 type commentsMsg struct {
-	key string
-	md  string
-	err error
+	key, desc, md string
+	err           error
 }
 type doneMsg struct {
 	status string
@@ -586,7 +609,7 @@ type sideLine struct {
 	row  int
 }
 
-var tabs = []string{"log", "plan", "comments"}
+var tabs = []string{"log", "plan", "description", "comments"}
 
 type helpSection struct {
 	title string
@@ -595,7 +618,7 @@ type helpSection struct {
 
 var helpCols = [][]helpSection{
 	{
-		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log / plan / comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}}},
+		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log·plan·desc·comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}}},
 		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}}},
 	},
 	{
@@ -650,7 +673,7 @@ func helpLines() []string {
 		}
 	}
 	out = append(out, row+fit("\033[32m●\033[0m  running", 22), "", "\033[1;33mMR\033[0m")
-	mrs := [][2]string{{"🚧", "draft"}, {"⏳", "ci running"}, {"🔴", "ci failed"}, {"💥", "conflict"}, {"💬", "open threads"}, {"🔁", "changes asked"}, {"📭", "no reviewer"}, {"👀", "in review"}, {"👍", "approved"}, {"🟣", "merged"}, {"⛔", "closed"}}
+	mrs := [][2]string{{"🚧", "draft"}, {"⏳", "ci running"}, {"🔴", "ci failed"}, {"💥", "conflict: b"}, {"🔧", "auto / queued rebase"}, {"💬", "open threads"}, {"🔁", "changes asked"}, {"📭", "no reviewer"}, {"👀", "in review"}, {"👍", "approved"}, {"🟣", "merged"}, {"⛔", "closed"}}
 	row = "  "
 	for i, s := range mrs {
 		row += fit(s[0]+" "+s[1], 22)
@@ -664,26 +687,26 @@ func helpLines() []string {
 }
 
 type model struct {
-	issues, todos []issue
-	rows          []row
-	otherN        int
-	body          []string
-	bodySrc       string
-	comments      map[string]string
-	cur, off      int
-	tab, scroll   int
-	w, h          int
-	busy, help    bool
-	showOther     bool
-	pickKey       string
-	pickQ         string
-	pickCur       int
-	svc, status   string
-	ask           string
-	pending       tea.Cmd
-	jiraErr       error
-	jiraAt        time.Time
-	mrs           map[string]mrInfo
+	issues, todos   []issue
+	rows            []row
+	otherN          int
+	body            []string
+	bodySrc         string
+	comments, descs map[string]string
+	cur, off        int
+	tab, scroll     int
+	w, h            int
+	busy, help      bool
+	showOther       bool
+	pickKey         string
+	pickQ           string
+	pickCur         int
+	svc, status     string
+	ask             string
+	pending         tea.Cmd
+	jiraErr         error
+	jiraAt          time.Time
+	mrs             map[string]mrInfo
 }
 
 func tick() tea.Cmd {
@@ -697,8 +720,8 @@ func loadJira() tea.Msg {
 
 func loadComments(key string) tea.Cmd {
 	return func() tea.Msg {
-		ls, err := fetchComments(key)
-		return commentsMsg{key, ls, err}
+		desc, md, err := fetchIssue(key)
+		return commentsMsg{key, desc, md, err}
 	}
 }
 
@@ -708,7 +731,7 @@ func do(status string, f func() error) tea.Cmd {
 
 func (m *model) reload() {
 	m.busy = workerBusy()
-	out, _ := exec.Command("systemctl", "--user", "is-active", "cf-triage.service").Output()
+	out, _ := exec.Command("systemctl", "--user", "is-active", "cf-triage.service", "cf-triage-light.service").Output()
 	m.svc = strings.TrimSpace(string(out))
 	key := m.sel().key
 	m.rows, m.otherN = nil, 0
@@ -719,8 +742,11 @@ func (m *model) reload() {
 				continue
 			}
 		}
+		_, _, label := m.look(r)
+		r.mrNeeds = label == "conflict: b" || label == "rebase failed"
 		m.rows = append(m.rows, r)
 	}
+	sort.SliceStable(m.rows, func(a, b int) bool { return group(m.rows[a]) < group(m.rows[b]) })
 	for i, r := range m.rows {
 		if r.key == key {
 			m.cur = i
@@ -744,6 +770,8 @@ func (m *model) loadBody() {
 		}
 	case "comments":
 		src = or(m.comments[key], "_loading…_")
+	case "description":
+		src = or(m.descs[key], "_loading…_")
 	}
 	cache := fmt.Sprint(m.tab, w, src)
 	if cache == m.bodySrc {
@@ -836,7 +864,7 @@ func (m model) paneW() int {
 }
 
 func (m model) bottomAnchored() bool {
-	return tabs[m.tab] != "plan"
+	return tabs[m.tab] == "log" || tabs[m.tab] == "comments"
 }
 
 func (m model) wrapped() []string {
@@ -860,7 +888,7 @@ func (m *model) scrollBody(up int) {
 
 func (m model) needComments() tea.Cmd {
 	key := m.sel().key
-	if tabs[m.tab] != "comments" || !jiraKey.MatchString(key) {
+	if (tabs[m.tab] != "comments" && tabs[m.tab] != "description") || !jiraKey.MatchString(key) {
 		return nil
 	}
 	if _, ok := m.comments[key]; ok {
@@ -876,7 +904,7 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.comments == nil {
-		m.comments = map[string]string{}
+		m.comments, m.descs = map[string]string{}, map[string]string{}
 	}
 	m, cmd := m.update(msg)
 	return m, tea.Batch(cmd, m.needComments())
@@ -905,10 +933,11 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		for u, in := range msg {
 			m.mrs[u] = in
 		}
+		m.reload()
 	case commentsMsg:
-		m.comments[msg.key] = msg.md
+		m.comments[msg.key], m.descs[msg.key] = msg.md, or(msg.desc, "_(no description)_")
 		if msg.err != nil {
-			m.comments[msg.key] = "**error:** " + msg.err.Error()
+			m.comments[msg.key], m.descs[msg.key] = "**error:** "+msg.err.Error(), "**error:** "+msg.err.Error()
 		}
 		m.loadBody()
 	case doneMsg:
@@ -916,11 +945,9 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		switch {
 		case msg.err != nil:
 			m.status = "\033[31m" + msg.err.Error() + "\033[0m"
-		case msg.kick && workerBusy():
-			m.status += "\033[2m, worker busy, picked up on next tick\033[0m"
 		case msg.kick:
-			exec.Command("systemctl", "--user", "start", "--no-block", "cf-triage.service").Run()
-			m.status += "\033[2m, worker kicked\033[0m"
+			exec.Command("systemctl", "--user", "start", "--no-block", "cf-triage.service", "cf-triage-light.service").Run()
+			m.status += "\033[2m, both lanes kicked (a busy lane picks it up when free)\033[0m"
 		}
 		delete(m.comments, m.sel().key)
 		m.jiraAt = time.Now()
@@ -1178,7 +1205,16 @@ func (m model) mrURLs() []string {
 
 func (m model) look(r row) (icon, color, label string) {
 	st := stageStyle[r.stage]
-	if in, ok := m.mrs[r.mr]; ok && r.stage == "mr" {
+	if in, ok := m.mrs[r.mr]; ok && (r.stage == "mr" || r.stage == "todo" || r.stage == "-") {
+		if in.label == "conflict" {
+			switch r.conflict {
+			case "waiting":
+				return in.icon, in.color, "conflict: b"
+			case "failed":
+				return "🔴", "31", "rebase failed"
+			}
+			return "🔧", "36", "rebase pending"
+		}
 		return in.icon, in.color, in.label
 	}
 	return st.icon, st.color, r.stage
@@ -1295,8 +1331,10 @@ func (m model) View() string {
 		worker = "\033[32m● busy\033[0m"
 	}
 	head := fmt.Sprintf(" \033[1mcf-triage\033[0m   %s   \033[2m%d tickets   $%.2f\033[0m", worker, len(m.rows)+m.otherN, total)
-	if m.svc == "failed" {
-		head += "   \033[31mservice failed\033[0m"
+	for i, s := range strings.Fields(m.svc) {
+		if s == "failed" {
+			head += "   \033[31m" + []string{"heavy", "light"}[min(i, 1)] + " lane failed\033[0m"
+		}
 	}
 	switch {
 	case m.jiraErr != nil:
@@ -1331,7 +1369,7 @@ func (m model) View() string {
 }
 
 func main() {
-	if _, err := tea.NewProgram(model{comments: map[string]string{}, mrs: map[string]mrInfo{}}, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
+	if _, err := tea.NewProgram(model{comments: map[string]string{}, descs: map[string]string{}, mrs: map[string]mrInfo{}}, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

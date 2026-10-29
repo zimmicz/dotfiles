@@ -1,0 +1,10 @@
+[Unit]
+Description=cf-triage light lane: Sentry -> Jira tickets, analysis of new tickets, answers to plan-gate replies
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:%h/.fnm/aliases/default/bin:%h/bin:/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=%h/.config/cf-triage.env
+ExecStart=-%h/bin/sentry-triage
+ExecStart=%h/bin/triage-worker --light
+TimeoutStartSec=60min
