@@ -355,11 +355,16 @@ else
     | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
 fi
 
-for S L in new "$NEW" reply "$REPLIES" impl "$IMPL" mr "$MR_REPLIES"; do
+PAR=1
+[[ $LANE == light ]] && PAR=${LIGHT_PAR:-2}
+for S L in reply "$REPLIES" new "$NEW" impl "$IMPL" mr "$MR_REPLIES"; do
   while read -r KEY REPO; do
-    [[ -n "$KEY" ]] && run_stage $S $KEY $REPO
+    [[ -z "$KEY" ]] && continue
+    while (( ${#jobstates} >= PAR )); do sleep 1; done
+    run_stage $S $KEY $REPO &
   done <<<"$L"
 done
+wait
 
 VERIFIED=0
 while read -r KEY REPO; do
