@@ -25,11 +25,9 @@ import (
 const (
 	jiraBase = "https://cleverfarm.atlassian.net"
 	labels   = "triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-verify-retry, ai-verified, ai-verify-failed, ai-done"
-	sideW    = 44
+	sideW    = 34
 	top      = 2
-	jiraRow  = 4
-	mrRow    = 5
-	detailH  = 7
+	detailH  = 5
 )
 
 var (
@@ -64,7 +62,7 @@ type row struct {
 func parkedStage(status, category string) (string, bool) {
 	switch {
 	case status == "On nightly":
-		return "on nightly", true
+		return "nightly", true
 	case status == "Release candidate":
 		return "RC", true
 	case category == "done":
@@ -78,28 +76,62 @@ func stage(ls []string) string {
 	for _, l := range ls {
 		has[l] = true
 	}
-	s := "new"
 	switch {
 	case has["triage-failed"]:
-		s = "analysis-failed"
+		return "analysis failed"
 	case has["ai-fix-failed"]:
-		s = "bailed"
+		return "bailed"
+	case has["ai-verify-failed"]:
+		return "verify failed"
 	case has["ai-done"]:
-		s = "done"
+		return "done"
+	case has["ai-verified"]:
+		return "verified"
 	case has["ai-mr"]:
-		s = "mr"
+		return "mr"
 	case has["ai-fix"]:
-		s = "implementing"
+		return "implementing"
 	case has["triaged"]:
-		s = "awaiting-ai-fix"
+		return "plan gate"
 	}
-	if has["ai-verified"] {
-		s += "+verified"
+	return "new"
+}
+
+var stageStyle = map[string]struct{ icon, color string }{
+	"plan gate":       {"📋", "33"},
+	"verified":        {"✅", "32"},
+	"verify failed":   {"❗", "31"},
+	"analysis failed": {"❌", "31"},
+	"bailed":          {"❌", "31"},
+	"implementing":    {"🔨", "36"},
+	"mr":              {"🔍", "34"},
+	"new":             {"🆕", "36"},
+	"done":            {"🏁", "2"},
+	"RC":              {"📦", "2"},
+	"nightly":         {"🌙", "2"},
+	"-":               {"📄", "2"},
+}
+
+var groups = []struct{ name, color string }{
+	{"RUNNING", "1;32"},
+	{"NEEDS YOU", "1;33"},
+	{"IN FLIGHT", "1;34"},
+	{"PARKED", "2"},
+	{"OTHER LOGS", "2"},
+}
+
+func group(r row) int {
+	switch {
+	case r.running:
+		return 0
+	case r.labels == nil:
+		return 4
+	case r.parked:
+		return 3
+	case slices.Contains([]string{"plan gate", "verified", "verify failed", "analysis failed", "bailed"}, r.stage):
+		return 1
 	}
-	if has["ai-verify-failed"] {
-		s += "+verify-failed"
-	}
-	return s
+	return 2
 }
 
 func fetchJira() ([]issue, error) {
@@ -331,11 +363,8 @@ func collect(issues []issue, busy bool) []row {
 		out = append(out, *r)
 	}
 	sort.Slice(out, func(a, b int) bool {
-		if out[a].running != out[b].running {
-			return out[a].running
-		}
-		if out[a].parked != out[b].parked {
-			return out[b].parked
+		if ga, gb := group(out[a]), group(out[b]); ga != gb {
+			return ga < gb
 		}
 		return out[a].seen.After(out[b].seen)
 	})
@@ -393,18 +422,90 @@ type doneMsg struct {
 }
 type editedMsg struct{ key, path string }
 
+type sideLine struct {
+	text string
+	row  int
+}
+
 var tabs = []string{"log", "plan", "comments"}
+
+type helpSection struct {
+	title string
+	keys  [][2]string
+}
+
+var helpCols = [][]helpSection{
+	{
+		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log / plan / comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}}},
+		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}}},
+	},
+	{
+		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"l", "log in less"}, {"c", "resume session"}}},
+		{"Other", [][2]string{{"r", "refresh Jira"}, {"?", "this help"}, {"q", "quit"}}},
+	},
+}
+
+var legend = []string{"plan gate", "verified", "verify failed", "bailed", "implementing", "mr", "new", "done", "RC", "nightly", "-"}
+
+func helpLines() []string {
+	const keyW, colW = 9, 34
+	var cols [][]string
+	for _, col := range helpCols {
+		var ls []string
+		for i, s := range col {
+			if i > 0 {
+				ls = append(ls, "")
+			}
+			ls = append(ls, "\033[1;33m"+s.title+"\033[0m")
+			for _, k := range s.keys {
+				ls = append(ls, "  \033[1;36m"+fit(k[0], keyW)+"\033[0m"+k[1])
+			}
+		}
+		cols = append(cols, ls)
+	}
+	var out []string
+	for i := 0; i < max(len(cols[0]), len(cols[1])); i++ {
+		l, r := "", ""
+		if i < len(cols[0]) {
+			l = cols[0][i]
+		}
+		if i < len(cols[1]) {
+			r = cols[1][i]
+		}
+		out = append(out, fit(l, colW)+r)
+	}
+	out = append(out, "", "\033[1;33mLegend\033[0m")
+	row := "  "
+	for i, s := range legend {
+		name := s
+		if s == "-" {
+			name = "no ticket"
+		}
+		if s == "bailed" {
+			name = "failed / bailed"
+		}
+		row += fit(stageStyle[s].icon+" \033["+stageStyle[s].color+"m"+name+"\033[0m", 22)
+		if i%3 == 2 {
+			out = append(out, row)
+			row = "  "
+		}
+	}
+	out = append(out, row+fit("\033[32m●\033[0m  running", 22), "", "\033[2many key closes\033[0m")
+	return out
+}
 
 type model struct {
 	issues      []issue
 	rows        []row
+	otherN      int
 	body        []string
 	bodySrc     string
 	comments    map[string]string
 	cur, off    int
 	tab, scroll int
 	w, h        int
-	busy        bool
+	busy, help  bool
+	showOther   bool
 	svc, status string
 	ask         string
 	pending     tea.Cmd
@@ -437,7 +538,16 @@ func (m *model) reload() {
 	out, _ := exec.Command("systemctl", "--user", "is-active", "cf-triage.service").Output()
 	m.svc = strings.TrimSpace(string(out))
 	key := m.sel().key
-	m.rows = collect(m.issues, m.busy)
+	m.rows, m.otherN = nil, 0
+	for _, r := range collect(m.issues, m.busy) {
+		if group(r) == 4 {
+			m.otherN++
+			if !m.showOther {
+				continue
+			}
+		}
+		m.rows = append(m.rows, r)
+	}
 	for i, r := range m.rows {
 		if r.key == key {
 			m.cur = i
@@ -474,19 +584,54 @@ func (m *model) loadBody() {
 	}
 }
 
-func (m *model) listH() int {
+func (m model) listH() int {
 	return max(1, m.h-top-1)
+}
+
+func (m model) sideLines() []sideLine {
+	var out []sideLine
+	g := -1
+	for i, r := range m.rows {
+		if gr := group(r); gr != g {
+			if g != -1 {
+				out = append(out, sideLine{"", -1})
+			}
+			g = gr
+			name := groups[g].name
+			if g == 4 {
+				name = fmt.Sprintf("%s (%d)", name, m.otherN)
+			}
+			out = append(out, sideLine{" \033[" + groups[g].color + "m" + name + "\033[0m", -1})
+		}
+		out = append(out, sideLine{"", i})
+	}
+	if !m.showOther && m.otherN > 0 {
+		out = append(out, sideLine{"", -1}, sideLine{fmt.Sprintf(" \033[2m%s (%d)  z shows\033[0m", groups[4].name, m.otherN), -1})
+	}
+	return out
 }
 
 func (m *model) move(d int) {
 	prev := m.sel().key
 	m.cur = min(max(m.cur+d, 0), max(len(m.rows)-1, 0))
-	if m.cur < m.off {
-		m.off = m.cur
+	lines := m.sideLines()
+	at := 0
+	for i, l := range lines {
+		if l.row == m.cur {
+			at = i
+		}
 	}
-	if m.cur >= m.off+m.listH() {
-		m.off = m.cur - m.listH() + 1
+	first := at
+	if at > 0 && lines[at-1].row == -1 {
+		first = at - 1
 	}
+	if first < m.off {
+		m.off = first
+	}
+	if at >= m.off+m.listH() {
+		m.off = at - m.listH() + 1
+	}
+	m.off = max(min(m.off, len(lines)-m.listH()), 0)
 	if m.sel().key != prev {
 		m.scroll = 0
 	}
@@ -503,7 +648,7 @@ func (m *model) open(u, what string) {
 }
 
 func (m *model) confirm(q string, cmd tea.Cmd) {
-	m.ask, m.pending = q+" y/n", cmd
+	m.ask, m.pending = q+"  y/n", cmd
 }
 
 func (m model) sel() row {
@@ -514,7 +659,7 @@ func (m model) sel() row {
 }
 
 func (m model) paneW() int {
-	return max(m.w-sideW-1, 10)
+	return max(m.w-sideW-4, 10)
 }
 
 func (m model) bottomAnchored() bool {
@@ -530,7 +675,7 @@ func (m model) wrapped() []string {
 }
 
 func (m model) bodyH() int {
-	return max(1, m.h-top-1-detailH)
+	return max(1, m.listH()-detailH)
 }
 
 func (m *model) scrollBody(up int) {
@@ -623,15 +768,16 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 				m.scrollBody(-3)
 			}
 		case tea.MouseButtonLeft:
-			if msg.Action != tea.MouseActionPress {
+			if msg.Action != tea.MouseActionPress || m.help {
 				break
 			}
+			lines, i := m.sideLines(), m.off+msg.Y-top
 			switch {
-			case side && msg.Y >= top && m.off+msg.Y-top < len(m.rows):
-				m.move(m.off + msg.Y - top - m.cur)
-			case !side && msg.Y == jiraRow:
+			case side && msg.Y >= top && i < len(lines) && lines[i].row >= 0:
+				m.move(lines[i].row - m.cur)
+			case !side && msg.Y == top:
 				m.open(jiraURL(m.sel()), "jira ticket")
-			case !side && msg.Y == mrRow:
+			case !side && msg.Y == top+1:
 				m.open(m.sel().mr, "MR")
 			}
 		}
@@ -661,11 +807,20 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 }
 
 func (m model) key(k string) (model, tea.Cmd) {
+	if m.help {
+		m.help = false
+		return m, nil
+	}
 	r := m.sel()
 	isTicket := jiraKey.MatchString(r.key) && r.labels != nil
 	switch k {
 	case "q", "ctrl+c":
 		return m, tea.Quit
+	case "?":
+		m.help = true
+	case "z":
+		m.showOther = !m.showOther
+		m.reload()
 	case "j", "down":
 		m.move(1)
 	case "k", "up":
@@ -714,7 +869,7 @@ func (m model) key(k string) (model, tea.Cmd) {
 		return m, tea.ExecProcess(exec.Command("zsh", "-ic", r.resume), func(error) tea.Msg { return tickMsg{} })
 	case "a":
 		if !isTicket || !slices.Contains(r.labels, "triaged") || slices.Contains(r.labels, "ai-fix") || slices.Contains(r.labels, "ai-mr") {
-			m.status = "not waiting at plan gate (needs triaged, no ai-fix/ai-mr)"
+			m.status = "not waiting at plan gate"
 			break
 		}
 		m.confirm("approve plan + scenarios: add ai-fix to "+r.key+"?", do("ai-fix added to "+r.key, func() error { return relabel(r.key, "", "ai-fix") }))
@@ -753,52 +908,64 @@ func (m model) key(k string) (model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) rowLine(i int) string {
+	r := m.rows[i]
+	st := stageStyle[r.stage]
+	icon := or(st.icon, "  ")
+	if r.running {
+		icon = "\033[32m●\033[0m "
+	}
+	key, stg, age := fmt.Sprintf("%-9s", r.key), fmt.Sprintf("%-15s", ansi.Truncate(r.stage, 15, "…")), fmt.Sprintf("%4s", ago(r.seen))
+	if i == m.cur {
+		return " " + icon + " \033[7m " + key + " " + stg + age + "\033[0m"
+	}
+	return fit(" "+icon+"  "+key+" \033["+or(st.color, "0")+"m"+stg+"\033[0m\033[2m"+age+"\033[0m", sideW)
+}
+
 func (m model) sidebar() []string {
-	out := []string{fit("\033[2m  KEY        STAGE              AGE  MR\033[0m", sideW)}
+	lines := m.sideLines()
+	var out []string
 	for i := m.off; i < m.off+m.listH(); i++ {
-		if i >= len(m.rows) {
-			out = append(out, fit("", sideW))
-			continue
-		}
-		r := m.rows[i]
-		mark := "  "
-		if r.running {
-			mark = "\033[32m●\033[0m "
-		}
-		mr := ""
-		if mm := mrIIDRe.FindStringSubmatch(r.mr); mm != nil {
-			mr = "!" + mm[1]
-		}
-		line := fit(fmt.Sprintf("%-10s %-18s %4s %s", r.key, ansi.Truncate(r.stage, 18, "…"), ago(r.seen), mr), sideW-2)
 		switch {
-		case i == m.cur:
-			line = "\033[7m" + line + "\033[0m"
-		case r.parked:
-			line = "\033[2m" + line + "\033[0m"
+		case i >= len(lines):
+			out = append(out, "")
+		case lines[i].row >= 0:
+			out = append(out, m.rowLine(lines[i].row))
+		default:
+			out = append(out, lines[i].text)
 		}
-		out = append(out, mark+line)
 	}
 	return out
 }
 
 func (m model) pane() []string {
-	r, w := m.sel(), m.paneW()
+	r := m.sel()
+	st := stageStyle[r.stage]
+	meta := []string{or(st.icon, "") + " \033[" + or(st.color, "0") + "m" + r.stage + "\033[0m", fmt.Sprintf("$%.2f", r.cost)}
+	if r.verdict != "" {
+		meta = append(meta, "verify "+r.verdict)
+	}
+	meta = append(meta, ago(r.seen)+" ago")
+	if mm := mrIIDRe.FindStringSubmatch(r.mr); mm != nil {
+		meta = append(meta, "\033[4m!"+mm[1]+"\033[0m")
+	}
 	tabBar := ""
 	for i, t := range tabs {
 		if i == m.tab {
-			tabBar += "\033[7m " + t + " \033[0m"
+			tabBar += "\033[1;4;36m" + t + "\033[0m   "
 		} else {
-			tabBar += "\033[2m " + t + " \033[0m"
+			tabBar += "\033[2m" + t + "\033[0m   "
 		}
 	}
+	if m.scroll > 0 {
+		tabBar += fmt.Sprintf("\033[33m↑ %d\033[0m", m.scroll)
+	}
 	out := []string{
-		fit("\033[1m"+r.key+"\033[0m  "+or(r.summary, "(no jira ticket)"), w),
-		fit(fmt.Sprintf("%s · $%.2f · verify %s · %s ago", r.stage, r.cost, or(r.verdict, "-"), ago(r.seen)), w),
-		fit("labels   "+or(strings.Join(r.labels, ", "), "-"), w),
-		fit("jira     \033[4m"+or(jiraURL(r), "-")+"\033[0m", w),
-		fit("mr       \033[4m"+or(r.mr, "-")+"\033[0m", w),
-		fit("session  "+or(r.resume, "-"), w),
-		fit(tabBar+"\033[2m"+strings.Repeat("─", w)+"\033[0m", w),
+		"\033[1m" + r.key + "\033[0m  " + or(r.summary, "\033[2m(no jira ticket)\033[0m"),
+		strings.Join(meta, " \033[2m·\033[0m "),
+		"",
+		tabBar,
+		"\033[2m" + strings.Repeat("─", m.paneW()) + "\033[0m",
 	}
 	body, h := m.wrapped(), m.bodyH()
 	from, to := m.scroll, min(m.scroll+h, len(body))
@@ -806,51 +973,75 @@ func (m model) pane() []string {
 		to = len(body) - m.scroll
 		from = max(to-h, 0)
 	}
-	for i := from; i < to; i++ {
-		out = append(out, fit(body[i], w))
+	return append(out, body[from:to]...)
+}
+
+func (m model) overlay(base []string) []string {
+	lines := append(append([]string{""}, helpLines()...), "")
+	w := 0
+	for _, l := range lines {
+		w = max(w, ansi.StringWidth(l))
 	}
-	return out
+	w += 6
+	box := []string{"╭" + strings.Repeat("─", w) + "╮"}
+	for _, l := range lines {
+		box = append(box, "│   "+fit(l, w-3)+"│")
+	}
+	box = append(box, "╰"+strings.Repeat("─", w)+"╯")
+	x, y := max((m.w-w-2)/2, 0), max((len(base)-len(box))/2, 0)
+	for i, b := range box {
+		if y+i >= len(base) {
+			break
+		}
+		l := fit(base[y+i], m.w)
+		base[y+i] = ansi.Truncate(l, x, "") + "\033[0m" + b + ansi.TruncateLeft(l, x+w+2, "")
+	}
+	return base
 }
 
 func (m model) View() string {
 	if m.w == 0 {
 		return ""
 	}
-	var b strings.Builder
-	worker := "idle"
-	if m.busy {
-		worker = "\033[32mBUSY\033[0m"
-	}
-	jira := "jira " + ago(m.jiraAt) + " ago"
-	if m.jiraErr != nil {
-		jira = "\033[31mjira lookup failed: " + m.jiraErr.Error() + "\033[0m"
-	}
 	total := 0.0
 	for _, r := range m.rows {
 		total += r.cost
 	}
-	scrolled := ""
-	if m.scroll > 0 {
-		scrolled = fmt.Sprintf("  \033[33mscrolled %d\033[0m", m.scroll)
+	worker := "\033[2m○ idle\033[0m"
+	if m.busy {
+		worker = "\033[32m● busy\033[0m"
 	}
-	b.WriteString(fit(fmt.Sprintf("\033[1mcf-triage\033[0m  %s  worker %s  service %s  %s  %d tickets $%.2f%s", time.Now().Format("15:04:05"), worker, or(m.svc, "?"), jira, len(m.rows), total, scrolled), m.w) + "\n")
+	head := fmt.Sprintf(" \033[1mcf-triage\033[0m   %s   \033[2m%d tickets   $%.2f\033[0m", worker, len(m.rows)+m.otherN, total)
+	if m.svc == "failed" {
+		head += "   \033[31mservice failed\033[0m"
+	}
+	switch {
+	case m.jiraErr != nil:
+		head += "   \033[31mjira: " + m.jiraErr.Error() + "\033[0m"
+	case !m.jiraAt.IsZero() && time.Since(m.jiraAt) > 3*time.Minute:
+		head += "   \033[33mjira " + ago(m.jiraAt) + " old\033[0m"
+	}
+	view := []string{fit(head, m.w), ""}
 	side, pane := m.sidebar(), m.pane()
-	for i := 0; i < m.h-top; i++ {
-		s, p := fit("", sideW), ""
+	for i := 0; i < m.listH(); i++ {
+		s, p := "", ""
 		if i < len(side) {
 			s = side[i]
 		}
 		if i < len(pane) {
 			p = pane[i]
 		}
-		b.WriteString(s + "\033[2m│\033[0m" + p + "\n")
+		view = append(view, fit(s, sideW)+"\033[2m │\033[0m  "+fit(p, m.paneW()))
 	}
-	foot := "\033[2mj/k move  tab log|plan|comments  a approve  R reply  t retry  w run worker  c session  enter/J/m open  l less  ^u/^d scroll  r refresh  q quit\033[0m  " + m.status
+	foot := fit(" \033[2m? help   q quit\033[0m", 20) + m.status
 	if m.ask != "" {
-		foot = "\033[1;33m" + m.ask + "\033[0m"
+		foot = " \033[1;33m" + m.ask + "\033[0m"
 	}
-	b.WriteString(fit(foot, m.w))
-	return b.String()
+	view = append(view, fit(foot, m.w))
+	if m.help {
+		view = m.overlay(view)
+	}
+	return strings.Join(view, "\n")
 }
 
 func main() {

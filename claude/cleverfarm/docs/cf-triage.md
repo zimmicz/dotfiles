@@ -43,7 +43,7 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 
 | want | how |
 |---|---|
-| all tickets at a glance (stage, cost, MR, live last tool call) | `triage-dash` TUI: sidebar of tickets + pane with details and `tab` log / PLAN.md / Jira comments (`^u`/`^d` or wheel scrolls); gates without Jira: `a` approve (add `ai-fix`), `R` reply (vim → Jira comment), `t` retry failed label, `w` run worker now, all y/n confirmed; j/k, enter opens MR (else Jira), `J`/`m` Jira/MR, `l` log in less, `c` resume session interactively (new tmux window named `<KEY>`); click KEY/MR (tmux mouse on: `prefix m`) |
+| all tickets at a glance + act on gates | `triage-dash` TUI: sidebar grouped running / needs you / in flight / parked, pane with log / PLAN.md / Jira comments (`tab`, markdown rendered). Gates without Jira: `a` approve, `R` reply, `t` retry, `w` run worker (all y/n). `c` resumes the session in a tmux window. `?` lists all keys. Mouse: tmux `prefix m` |
 | is something running now | `workmux dashboard` — headless runs show as their `cf-triage` window (working → done) while active; finished ones drop off |
 | watch it live | `tmux switch-client -t cf-triage` (one window per worktree, `tail -f` of the log) or `tail -f ~/.local/state/cf-triage/<KEY>.log` (🔧 tool calls, 💬 agent text, ✅ exit + cost) |
 | ask the agent why it did X | log line `🆔 session <id> — reopen: cd <wt> && claude --resume <id>` → full transcript, interactive, can continue |

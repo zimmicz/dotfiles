@@ -8,16 +8,37 @@ import (
 
 func TestStage(t *testing.T) {
 	cases := map[string][]string{
-		"new":                {"triage"},
-		"awaiting-ai-fix":    {"triaged", "repo-x"},
-		"mr+verified":        {"triaged", "ai-mr", "ai-verified"},
-		"bailed":             {"ai-fix-failed", "ai-fix"},
-		"done+verify-failed": {"ai-done", "ai-mr", "ai-verify-failed"},
-		"analysis-failed":    {"triage-failed"},
+		"new":             {"triage"},
+		"plan gate":       {"triaged", "repo-x"},
+		"implementing":    {"triaged", "ai-fix"},
+		"mr":              {"triaged", "ai-mr"},
+		"verified":        {"triaged", "ai-mr", "ai-verified"},
+		"bailed":          {"ai-fix-failed", "ai-fix"},
+		"verify failed":   {"ai-done", "ai-mr", "ai-verify-failed"},
+		"analysis failed": {"triage-failed"},
 	}
 	for want, ls := range cases {
 		if got := stage(ls); got != want {
 			t.Errorf("stage(%v) = %q, want %q", ls, got, want)
+		}
+	}
+}
+
+func TestGroup(t *testing.T) {
+	cases := []struct {
+		r    row
+		want int
+	}{
+		{row{running: true, labels: []string{}}, 0},
+		{row{stage: "plan gate", labels: []string{}}, 1},
+		{row{stage: "bailed", labels: []string{}}, 1},
+		{row{stage: "mr", labels: []string{}}, 2},
+		{row{stage: "RC", parked: true, labels: []string{}}, 3},
+		{row{stage: "-"}, 4},
+	}
+	for _, c := range cases {
+		if got := group(c.r); got != c.want {
+			t.Errorf("group(%+v) = %d, want %d", c.r, got, c.want)
 		}
 	}
 }
