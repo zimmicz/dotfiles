@@ -121,11 +121,14 @@ verify() {
     TARGETS+=("$R:$PID:$IID:$(jq -r .id <<<$PIPE):${SHA[1,8]}")
   done
   echo "=== verify $KEY (${(j:, :)TARGETS}) $(date -Iseconds)" | tee -a $LOG
-  rm -f $OUT
+  local MEDIA=$LOG_DIR/$KEY.verify-media
+  rm -rf $OUT $MEDIA
   local CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-env/*' 2>/dev/null | sort -V | tail -1)
+  local MCP=$(jq -nc --arg d $MEDIA '{mcpServers:{playwright:{type:"stdio",command:"npx",args:["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--output-dir",$d]}}}')
   local PANE=$(wm_window $WT0 $LOG)
-  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-verify $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}" \
+  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-verify $KEY repos=${(j:,:)TARGETS} branch=${WT0:t} video=$MEDIA/$KEY.webm" \
     --model sonnet \
+    --strict-mcp-config --mcp-config "$MCP" \
     --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*)" \
     --disallowedTools "Edit Bash(git:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)

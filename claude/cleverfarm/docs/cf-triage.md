@@ -47,7 +47,7 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 | is something running now | `workmux dashboard` — headless runs show as their `cf-triage` window (working → done) while active; finished ones drop off |
 | watch it live | `tmux switch-client -t cf-triage` (one window per worktree, `tail -f` of the log) or `tail -f ~/.local/state/cf-triage/<KEY>.log` (🔧 tool calls, 💬 agent text, ✅ exit + cost) |
 | ask the agent why it did X | log line `🆔 session <id> — reopen: cd <wt> && claude --resume <id>` → full transcript, interactive, can continue |
-| verify result | `~/.local/state/cf-triage/<KEY>.verify.md` (+ screenshot paths), MR note |
+| verify result | `~/.local/state/cf-triage/<KEY>.verify.md` (+ screenshot paths), video `<KEY>.verify-media/<KEY>.webm` (one chapter per scenario), MR note with uploaded video link |
 | did the timer run / crash | `journalctl --user -u cf-triage -u cf-triage-light --since today` |
 | re-run one stage | `triage-worker DEV-X` (analyze / implement if `ai-fix`), `triage-worker DEV-X --verify`. Its lane busy → prints `… lane busy`, exit 75; ticket busy in the other lane → `skipped` |
 | why wasn't X picked up | lanes + locks below: heavy lane busy (one long implement) only blocks heavy work; a ticket locked by the other lane is skipped and retried next tick |
@@ -124,10 +124,10 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | `~/dotfiles/claude/skills/cf-work` | `--headless`: root-cause analysis → PLAN.md + comment; follow-up mode on replies |
 | `~/dotfiles/claude/skills/cf-ticket` | `--headless`: implement PLAN.md, verify, self-review, `/cf-mr --headless` |
 | `~/dotfiles/claude/skills/cf-mr` | `--headless`: `glab mr create --draft`, no reviewers, stays In Progress, FE plays Nightly preview |
-| `~/dotfiles/claude/cleverfarm/skills/cf-verify` | holdout verifier: Playwright login as `fe-automation@cleverfarm.cz` (password from cf-farm-frontend `.env`), runs scenarios, writes `<KEY>.verify.md` (`VERDICT: pass/fail/blocked`), MR note. Never edits code. BE: creates + destroys `<key>-verify` dyn-env |
+| `~/dotfiles/claude/cleverfarm/skills/cf-verify` | holdout verifier: Playwright login as `fe-automation@cleverfarm.cz` (password from cf-farm-frontend `.env`), runs scenarios, writes `<KEY>.verify.md` (`VERDICT: pass/fail/blocked`), records a video when triage-worker passes `video=` (own Playwright MCP `@0.0.83 --caps devtools --executable-path /usr/bin/chromium`, `--strict-mcp-config`; interactive runs don't record), MR note. Never edits code. BE: creates + destroys `<key>-verify` dyn-env |
 | `~/dotfiles/claude/cleverfarm/systemd/cf-triage{,-light}.{service,timer}` | symlinked to `~/.config/systemd/user/`; heavy + light lane, each Mon–Fri every minute 07–18 (idle run = a few Jira queries, no LLM; overlapping ticks skipped, lock conflict exits 0; failed Sentry triage retries ≤ every 15 min). `triage-dash` actions start both lanes right away, `Persistent=true`, timeout heavy 110 min / light 60 min |
 | `~/.config/cf-triage.env` | `JIRA_EMAIL`, `JIRA_TOKEN` (0600, not in git) |
-| `~/.local/state/cf-triage/` | `<KEY>.log`, `<KEY>.verify.md`, `holdout/<KEY>.md` (scenarios; analysis may write, implementer denied), `sentry-*.json`, `sentry-last.txt`, `sentry-today` (daily stamp), `notes.txt` (pending Slack lines), `conflicts/<project id>-<iid>` (last handled MR head) + `.md` (resolver report), `.lock` / `.lock-light` (lanes), `locks/<KEY>` (tickets) |
+| `~/.local/state/cf-triage/` | `<KEY>.log`, `<KEY>.verify.md`, `<KEY>.verify-media/` (video + MCP output), `holdout/<KEY>.md` (scenarios; analysis may write, implementer denied), `sentry-*.json`, `sentry-last.txt`, `sentry-today` (daily stamp), `notes.txt` (pending Slack lines), `conflicts/<project id>-<iid>` (last handled MR head) + `.md` (resolver report), `.lock` / `.lock-light` (lanes), `locks/<KEY>` (tickets) |
 | `~/.config/claude/slack-webhook` | incoming webhook URL for `#zimmi-claude` (0600, not in git) |
 | `~/dotfiles/gitignore` | ignores `PLAN.md`, `TICKET.md`, `install.log`, `.codegraph/` so MRs don't pick them up |
 
