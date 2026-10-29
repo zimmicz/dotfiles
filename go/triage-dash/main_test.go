@@ -29,12 +29,13 @@ func TestGroup(t *testing.T) {
 		r    row
 		want int
 	}{
-		{row{running: true, labels: []string{}}, 0},
-		{row{stage: "plan gate", labels: []string{}}, 1},
-		{row{stage: "bailed", labels: []string{}}, 1},
-		{row{stage: "mr", labels: []string{}}, 2},
-		{row{stage: "RC", parked: true, labels: []string{}}, 3},
-		{row{stage: "-"}, 4},
+		{row{running: true, jira: true}, gRunning},
+		{row{stage: "plan gate", jira: true}, gNeeds},
+		{row{stage: "bailed", jira: true}, gNeeds},
+		{row{stage: "mr", jira: true}, gFlight},
+		{row{stage: "RC", parked: true, jira: true}, gParked},
+		{row{stage: "todo", jira: true, todo: true}, gTodo},
+		{row{stage: "-"}, gOther},
 	}
 	for _, c := range cases {
 		if got := group(c.r); got != c.want {

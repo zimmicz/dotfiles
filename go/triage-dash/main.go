@@ -55,7 +55,7 @@ type row struct {
 	key, stage, summary, verdict, mr, last, resume string
 	cost                                           float64
 	seen                                           time.Time
-	running, parked                                bool
+	running, parked, jira, todo                    bool
 	labels                                         []string
 }
 
@@ -110,11 +110,22 @@ var stageStyle = map[string]struct{ icon, color string }{
 	"RC":              {"📦", "2"},
 	"nightly":         {"🌙", "2"},
 	"-":               {"📄", "2"},
+	"todo":            {"📝", "35"},
 }
+
+const (
+	gRunning = iota
+	gNeeds
+	gTodo
+	gFlight
+	gParked
+	gOther
+)
 
 var groups = []struct{ name, color string }{
 	{"RUNNING", "1;32"},
 	{"NEEDS YOU", "1;33"},
+	{"TODO", "1;35"},
 	{"IN FLIGHT", "1;34"},
 	{"PARKED", "2"},
 	{"OTHER LOGS", "2"},
@@ -123,21 +134,45 @@ var groups = []struct{ name, color string }{
 func group(r row) int {
 	switch {
 	case r.running:
-		return 0
-	case r.labels == nil:
-		return 4
+		return gRunning
+	case !r.jira:
+		return gOther
+	case r.todo:
+		return gTodo
 	case r.parked:
-		return 3
+		return gParked
 	case slices.Contains([]string{"plan gate", "verified", "verify failed", "analysis failed", "bailed"}, r.stage):
-		return 1
+		return gNeeds
 	}
-	return 2
+	return gFlight
 }
 
-func fetchJira() ([]issue, error) {
-	jql := "project = DEV AND labels in (" + labels + ") AND (statusCategory != Done OR updated >= -3d) ORDER BY updated DESC"
+func search(jql string) ([]issue, error) {
 	var out struct{ Issues []issue }
 	return out.Issues, jiraReq("GET", "/rest/api/3/search/jql?fields=labels,summary,updated,status&maxResults=100&jql="+url.QueryEscape(jql), nil, &out)
+}
+
+func fetchJira() ([]issue, []issue, error) {
+	issues, err := search("project = DEV AND labels in (" + labels + ") AND (statusCategory != Done OR updated >= -3d) ORDER BY updated DESC")
+	if err != nil {
+		return nil, nil, err
+	}
+	todos, err := search("assignee = currentUser() AND sprint in openSprints() AND statusCategory = \"To Do\" AND (labels is EMPTY OR labels not in (" + labels + ")) ORDER BY rank")
+	return issues, todos, err
+}
+
+func repos() []string {
+	dirs, _ := filepath.Glob(filepath.Join(os.Getenv("HOME"), "work/cleverfarm/repos/*/.git"))
+	var out []string
+	for _, d := range dirs {
+		out = append(out, filepath.Base(filepath.Dir(d)))
+	}
+	return out
+}
+
+func feed(key, repo string) error {
+	ops := []map[string]string{{"add": "triage"}, {"add": "repo-" + repo}}
+	return jiraReq("PUT", "/rest/api/2/issue/"+key, map[string]any{"update": map[string]any{"labels": ops}}, nil)
 }
 
 func jiraReq(method, path string, body, out any) error {
@@ -326,10 +361,15 @@ func workerBusy() bool {
 	return false
 }
 
-func collect(issues []issue, busy bool) []row {
+func collect(issues, todos []issue, busy bool) []row {
 	rows := map[string]*row{}
+	for _, i := range todos {
+		r := &row{key: i.Key, stage: "todo", summary: i.Fields.Summary, labels: i.Fields.Labels, jira: true, todo: true}
+		r.seen, _ = time.Parse("2006-01-02T15:04:05.000-0700", i.Fields.Updated)
+		rows[i.Key] = r
+	}
 	for _, i := range issues {
-		r := &row{key: i.Key, stage: stage(i.Fields.Labels), summary: i.Fields.Summary, labels: i.Fields.Labels}
+		r := &row{key: i.Key, stage: stage(i.Fields.Labels), summary: i.Fields.Summary, labels: i.Fields.Labels, jira: true}
 		r.seen, _ = time.Parse("2006-01-02T15:04:05.000-0700", i.Fields.Updated)
 		if s, ok := parkedStage(i.Fields.Status.Name, i.Fields.Status.StatusCategory.Key); ok {
 			r.stage, r.parked = s, true
@@ -408,8 +448,8 @@ func jiraURL(r row) string {
 
 type tickMsg struct{}
 type jiraMsg struct {
-	issues []issue
-	err    error
+	issues, todos []issue
+	err           error
 }
 type commentsMsg struct {
 	key string
@@ -437,7 +477,7 @@ type helpSection struct {
 var helpCols = [][]helpSection{
 	{
 		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log / plan / comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}}},
-		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}}},
+		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}}},
 	},
 	{
 		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"l", "log in less"}, {"c", "resume session"}}},
@@ -445,7 +485,7 @@ var helpCols = [][]helpSection{
 	},
 }
 
-var legend = []string{"plan gate", "verified", "verify failed", "bailed", "implementing", "mr", "new", "done", "RC", "nightly", "-"}
+var legend = []string{"plan gate", "verified", "verify failed", "bailed", "implementing", "mr", "new", "done", "RC", "nightly", "todo", "-"}
 
 func helpLines() []string {
 	const keyW, colW = 9, 34
@@ -495,22 +535,25 @@ func helpLines() []string {
 }
 
 type model struct {
-	issues      []issue
-	rows        []row
-	otherN      int
-	body        []string
-	bodySrc     string
-	comments    map[string]string
-	cur, off    int
-	tab, scroll int
-	w, h        int
-	busy, help  bool
-	showOther   bool
-	svc, status string
-	ask         string
-	pending     tea.Cmd
-	jiraErr     error
-	jiraAt      time.Time
+	issues, todos []issue
+	rows          []row
+	otherN        int
+	body          []string
+	bodySrc       string
+	comments      map[string]string
+	cur, off      int
+	tab, scroll   int
+	w, h          int
+	busy, help    bool
+	showOther     bool
+	pickKey       string
+	pickQ         string
+	pickCur       int
+	svc, status   string
+	ask           string
+	pending       tea.Cmd
+	jiraErr       error
+	jiraAt        time.Time
 }
 
 func tick() tea.Cmd {
@@ -518,8 +561,8 @@ func tick() tea.Cmd {
 }
 
 func loadJira() tea.Msg {
-	is, err := fetchJira()
-	return jiraMsg{is, err}
+	is, td, err := fetchJira()
+	return jiraMsg{is, td, err}
 }
 
 func loadComments(key string) tea.Cmd {
@@ -539,8 +582,8 @@ func (m *model) reload() {
 	m.svc = strings.TrimSpace(string(out))
 	key := m.sel().key
 	m.rows, m.otherN = nil, 0
-	for _, r := range collect(m.issues, m.busy) {
-		if group(r) == 4 {
+	for _, r := range collect(m.issues, m.todos, m.busy) {
+		if group(r) == gOther {
 			m.otherN++
 			if !m.showOther {
 				continue
@@ -598,7 +641,7 @@ func (m model) sideLines() []sideLine {
 			}
 			g = gr
 			name := groups[g].name
-			if g == 4 {
+			if g == gOther {
 				name = fmt.Sprintf("%s (%d)", name, m.otherN)
 			}
 			out = append(out, sideLine{" \033[" + groups[g].color + "m" + name + "\033[0m", -1})
@@ -606,7 +649,7 @@ func (m model) sideLines() []sideLine {
 		out = append(out, sideLine{"", i})
 	}
 	if !m.showOther && m.otherN > 0 {
-		out = append(out, sideLine{"", -1}, sideLine{fmt.Sprintf(" \033[2m%s (%d)  z shows\033[0m", groups[4].name, m.otherN), -1})
+		out = append(out, sideLine{"", -1}, sideLine{fmt.Sprintf(" \033[2m%s (%d)  z shows\033[0m", groups[gOther].name, m.otherN), -1})
 	}
 	return out
 }
@@ -724,7 +767,7 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 	case jiraMsg:
 		m.jiraAt, m.jiraErr = time.Now(), msg.err
 		if msg.err == nil {
-			m.issues = msg.issues
+			m.issues, m.todos = msg.issues, msg.todos
 		}
 		m.reload()
 	case commentsMsg:
@@ -782,6 +825,9 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 			}
 		}
 	case tea.KeyMsg:
+		if m.pickKey != "" {
+			return m.pick(msg)
+		}
 		if m.pending != nil {
 			cmd := m.pending
 			m.ask, m.pending = "", nil
@@ -812,7 +858,7 @@ func (m model) key(k string) (model, tea.Cmd) {
 		return m, nil
 	}
 	r := m.sel()
-	isTicket := jiraKey.MatchString(r.key) && r.labels != nil
+	isTicket := jiraKey.MatchString(r.key) && r.jira
 	switch k {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -892,6 +938,13 @@ func (m model) key(k string) (model, tea.Cmd) {
 		}
 		f.Close()
 		return m, tea.ExecProcess(exec.Command("zsh", "-ic", `eval "${EDITOR:-vim} ${(q)1}"`, "zsh", f.Name()), func(error) tea.Msg { return editedMsg{r.key, f.Name()} })
+	case "f":
+		if !r.todo {
+			m.status = "f feeds a TODO ticket"
+			break
+		}
+		m.pickKey, m.pickQ = r.key, ""
+		m.pickCur = max(slices.Index(m.picks(), "cf-farm-frontend"), 0)
 	case "w":
 		if !isTicket {
 			m.status = "no jira ticket"
@@ -906,6 +959,62 @@ func (m model) key(k string) (model, tea.Cmd) {
 		}))
 	}
 	return m, nil
+}
+
+func (m model) picks() []string {
+	var out []string
+	for _, r := range repos() {
+		if strings.Contains(r, m.pickQ) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func (m model) pick(msg tea.KeyMsg) (model, tea.Cmd) {
+	ps := m.picks()
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyCtrlC:
+		m.pickKey, m.status = "", "cancelled"
+	case tea.KeyUp, tea.KeyCtrlP:
+		m.pickCur--
+	case tea.KeyDown, tea.KeyCtrlN:
+		m.pickCur++
+	case tea.KeyBackspace:
+		if m.pickQ != "" {
+			m.pickQ = m.pickQ[:len(m.pickQ)-1]
+		}
+	case tea.KeyRunes:
+		m.pickQ += string(msg.Runes)
+		m.pickCur = 0
+	case tea.KeyEnter:
+		if len(ps) == 0 {
+			break
+		}
+		key, repo := m.pickKey, ps[min(m.pickCur, len(ps)-1)]
+		m.pickKey = ""
+		m.confirm("feed "+key+" to factory: add triage + repo-"+repo+"?", do(key+" fed to factory (repo-"+repo+")", func() error { return feed(key, repo) }))
+	}
+	m.pickCur = min(max(m.pickCur, 0), max(len(m.picks())-1, 0))
+	return m, nil
+}
+
+func (m model) pickLines() []string {
+	ps := m.picks()
+	out := []string{"\033[1;33mFeed " + m.pickKey + " — which repo?\033[0m", "", "> " + m.pickQ + "\033[7m \033[0m", ""}
+	const h = 12
+	from := min(max(m.pickCur-h/2, 0), max(len(ps)-h, 0))
+	for i := from; i < min(from+h, len(ps)); i++ {
+		if i == m.pickCur {
+			out = append(out, "\033[7m "+fit(ps[i], 30)+"\033[0m")
+		} else {
+			out = append(out, " "+fit(ps[i], 30))
+		}
+	}
+	if len(ps) == 0 {
+		out = append(out, "\033[2m no repo matches\033[0m")
+	}
+	return append(out, "", "\033[2mtype to filter  ↑↓ move  enter pick  esc cancel\033[0m")
 }
 
 func (m model) rowLine(i int) string {
@@ -976,8 +1085,8 @@ func (m model) pane() []string {
 	return append(out, body[from:to]...)
 }
 
-func (m model) overlay(base []string) []string {
-	lines := append(append([]string{""}, helpLines()...), "")
+func (m model) overlay(base, content []string) []string {
+	lines := append(append([]string{""}, content...), "")
 	w := 0
 	for _, l := range lines {
 		w = max(w, ansi.StringWidth(l))
@@ -1039,7 +1148,10 @@ func (m model) View() string {
 	}
 	view = append(view, fit(foot, m.w))
 	if m.help {
-		view = m.overlay(view)
+		view = m.overlay(view, helpLines())
+	}
+	if m.pickKey != "" {
+		view = m.overlay(view, m.pickLines())
 	}
 	return strings.Join(view, "\n")
 }
