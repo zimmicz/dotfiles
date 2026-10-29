@@ -7,6 +7,7 @@ LOG_DIR=~/.local/state/cf-triage
 AI_MARK="AI triage (Claude, headless)"
 NOTES=$LOG_DIR/notes.txt
 HOLDOUT=$LOG_DIR/holdout
+SELF=${0:A}
 LOCKS=$LOG_DIR/locks
 mkdir -p $LOG_DIR $HOLDOUT $LOCKS
 
@@ -290,9 +291,13 @@ stage_conflict() {
 }
 
 run_stage() {
-  flock -n -o -E 75 $LOCKS/$2 $0 --stage "$@" </dev/null
+  flock -n -o -E 75 $LOCKS/$2 $SELF --stage "$@" </dev/null
   local RC=$?
   (( RC == 75 )) && echo "  $2 busy in the other lane, skipped"
+  if (( RC != 0 && RC != 2 && RC != 75 )); then
+    echo "  stage $1 $2 crashed, exit $RC"
+    note $2 "stage $1 crashed (exit $RC), see \`journalctl --user -u cf-triage -u cf-triage-light\`"
+  fi
   return $RC
 }
 
@@ -315,7 +320,7 @@ fi
 if [[ "${TRIAGE_LOCKED:-}" != 1 ]]; then
   LANE_LOCK=$LOG_DIR/.lock
   [[ $LANE == light ]] && LANE_LOCK=$LOG_DIR/.lock-light
-  TRIAGE_LOCKED=1 flock -n -o -E 75 $LANE_LOCK $0 "$@"
+  TRIAGE_LOCKED=1 flock -n -o -E 75 $LANE_LOCK $SELF "$@"
   RC=$?
   if (( RC == 75 )); then
     (( BUSY_RC )) && echo "$LANE lane busy, run again when its current run finishes" >&2
