@@ -1,0 +1,492 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Software Factory Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Schibsted+Grotesk:wght@400;600;700&display=swap">
+<style>
+  /* layout: one big state machine (labels left to right), dispatcher on top, conflicts below, reference tables under it */
+  :root {
+    --bg: #F2F5F8;
+    --surface: #FFFFFF;
+    --fg: #14202B;
+    --muted: #526373;
+    --line: #A3B1BE;
+    --auto: #0B6E6E;
+    --auto-bg: #D7EEEE;
+    --human: #A85400;
+    --human-bg: #FFE4C2;
+    --fail: #B3261E;
+    --fail-bg: #FBDAD7;
+    --band: #E8EDF2;
+    --sans: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E151B; --surface: #17212A; --fg: #E6EDF3; --muted: #9AABBB; --line: #566777;
+      --auto: #55C7C7; --auto-bg: #11363A; --human: #F2A650; --human-bg: #3E2A12;
+      --fail: #FF9088; --fail-bg: #40191A; --band: #131C24;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E151B; --surface: #17212A; --fg: #E6EDF3; --muted: #9AABBB; --line: #566777;
+    --auto: #55C7C7; --auto-bg: #11363A; --human: #F2A650; --human-bg: #3E2A12;
+    --fail: #FF9088; --fail-bg: #40191A; --band: #131C24;
+    color-scheme: dark;
+  }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--sans); line-height: 1.45;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 24px 48px;
+  }
+  main { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+  h1 { font-size: 1.7rem; line-height: 1.15; margin: 0 0 6px; text-wrap: balance; }
+  h2 { font-size: 1.05rem; margin: 0 0 10px; text-wrap: balance; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  code { background: var(--band); padding: 1px 5px; border-radius: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; font-size: .86rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .sw { width: 22px; height: 14px; border-radius: 4px; border: 1.5px solid; display: inline-block; }
+  .sw.auto { background: var(--auto-bg); border-color: var(--auto); }
+  .sw.human { background: var(--human-bg); border-color: var(--human); }
+  .sw.state { background: var(--surface); border-color: var(--fg); }
+  .sw.fail { background: var(--fail-bg); border-color: var(--fail); }
+  .ln { width: 26px; height: 0; border-top: 2px solid var(--fg); display: inline-block; }
+  .ln.dash { border-top: 2px dashed var(--human); }
+  figure { margin: 0; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  svg.fig { display: block; width: 100%; min-width: 1100px; height: auto; }
+  figcaption { color: var(--muted); font-size: .86rem; margin-top: 8px; max-width: 90ch; }
+
+  svg text { fill: var(--fg); font-family: var(--sans); font-size: 12.5px; }
+  svg .tm { fill: var(--muted); font-size: 11.5px; }
+  svg .mono { font-family: var(--mono); font-size: 12px; }
+  svg .b { font-weight: 700; }
+  svg .lab { font-family: var(--mono); font-weight: 700; font-size: 14px; }
+  svg .hum { fill: var(--human); font-weight: 700; }
+  svg .aut { fill: var(--auto); font-weight: 700; }
+  svg .flt { fill: var(--fail); font-weight: 700; }
+  svg .band { fill: var(--band); stroke: var(--line); stroke-width: 1; }
+  svg .st { fill: var(--surface); stroke: var(--fg); stroke-width: 1.6; }
+  svg .st-fail { fill: var(--fail-bg); stroke: var(--fail); stroke-width: 1.6; }
+  svg .st-warn { fill: var(--surface); stroke: var(--fail); stroke-width: 1.6; stroke-dasharray: 5 3; }
+  svg .src { fill: var(--surface); stroke: var(--line); stroke-width: 1.3; }
+  svg .chip-n { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+  svg .chip-a { fill: var(--auto-bg); stroke: var(--auto); stroke-width: 1.3; }
+  svg .chip-h { fill: var(--human-bg); stroke: var(--human); stroke-width: 1.3; }
+  svg .chip-a + text, svg .chip-a ~ .ca { fill: var(--auto); }
+  svg .ca { fill: var(--auto); font-family: var(--mono); font-weight: 700; font-size: 12px; }
+  svg .ch { fill: var(--human); font-family: var(--mono); font-weight: 700; font-size: 12px; }
+  svg .cn { fill: var(--fg); font-family: var(--mono); font-size: 12px; }
+  svg .p { fill: none; stroke: var(--fg); stroke-width: 1.7; }
+  svg .p-a { fill: none; stroke: var(--auto); stroke-width: 1.7; }
+  svg .p-h { fill: none; stroke: var(--human); stroke-width: 1.7; }
+  svg .p-hd { fill: none; stroke: var(--human); stroke-width: 1.7; stroke-dasharray: 6 4; }
+  svg .p-f { fill: none; stroke: var(--fail); stroke-width: 1.7; }
+  svg .mk-fg { fill: var(--fg); }
+  svg .mk-a { fill: var(--auto); }
+  svg .mk-h { fill: var(--human); }
+  svg .mk-f { fill: var(--fail); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; }
+  section.panel { min-width: 0; }
+  .tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: var(--band); white-space: nowrap; }
+  td.k { white-space: nowrap; font-family: var(--mono); font-size: .8rem; color: var(--auto); font-weight: 700; }
+  .me { color: var(--human); font-weight: 700; }
+  .bad { color: var(--fail); font-weight: 700; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 14px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 12px 14px; min-width: 0; }
+  .card h3 { margin: 0 0 6px; font-size: .95rem; }
+  .card ul { margin: 0; padding-left: 18px; font-size: .86rem; }
+  .card li { margin: 3px 0; }
+  .card.gate { border-color: var(--human); }
+  .card.gate h3 { color: var(--human); }
+  .card.failc { border-color: var(--fail); }
+  .card.failc h3 { color: var(--fail); }
+</style>
+
+<main>
+  <header>
+    <h1>Software factory: how a ticket moves</h1>
+    <p class="lede">The cf-triage pipeline as it runs today. Every box is a Jira label (the ticket’s state), every pill is the stage that moves it on, amber is where I act. One dispatcher tick per minute decides which stage runs next. The bottom band shows the two modes I drive myself.</p>
+    <div class="legend" aria-label="Legend">
+      <span><i class="sw state"></i>Jira label (state)</span>
+      <span><i class="sw auto"></i>stage, runs in a slot</span>
+      <span><i class="sw human"></i>me (gate or recovery)</span>
+      <span><i class="sw fail"></i>failure label</span>
+      <span><i class="ln"></i>automatic move</span>
+      <span><i class="ln dash"></i>my recovery</span>
+    </div>
+  </header>
+
+  <figure>
+    <div class="scroll">
+<svg class="fig" viewBox="0 0 1470 1290" role="img" aria-label="State machine of the software factory, with the two interactive modes (cf-ticket with two checkpoints, cf-epic with three) in the bottom band. A Sentry issue or my triage label creates a triage ticket. Stage new produces triaged. My ai-fix label starts stage impl, which opens a draft MR labelled ai-mr. Stage review (opus, read-only) produces ai-reviewed; a blocking finding gets one auto-fix round (ai-review-retry), then ai-review-findings. Stage verify produces ai-verified or a one-time retry, then ai-verify-failed. I merge and release, then stage done sets ai-done. Replies in Jira loop back through stages reply and mr. A dispatcher with three slots runs the stages, and a separate conflict stage rebases my open MRs.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-fg" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="ara" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-a" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="arh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-h" d="M0 0 L10 5 L0 10 z"/></marker>
+    <marker id="arf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-f" d="M0 0 L10 5 L0 10 z"/></marker>
+  </defs>
+
+  <!-- dispatcher -->
+  <rect class="band" x="20" y="12" width="1430" height="98" rx="10"/>
+  <text class="mono b" x="38" y="34">DISPATCHER  every minute, Mon–Fri 07–18</text>
+  <text class="tm" x="430" y="34">reads Jira labels + comments, starts each stage as its own systemd unit, exits in seconds</text>
+  <rect class="chip-n" x="38" y="46" width="112" height="24" rx="6"/><text class="cn" x="94" y="62" text-anchor="middle">3 slots total</text>
+  <rect class="chip-n" x="160" y="46" width="104" height="24" rx="6"/><text class="cn" x="212" y="62" text-anchor="middle">impl: max 1</text>
+  <rect class="chip-n" x="274" y="46" width="90" height="24" rx="6"/><text class="cn" x="319" y="62" text-anchor="middle">mr: max 1</text>
+  <rect class="chip-n" x="374" y="46" width="190" height="24" rx="6"/><text class="cn" x="469" y="62" text-anchor="middle">review, verify: max 1 each</text>
+  <rect class="chip-n" x="574" y="46" width="130" height="24" rx="6"/><text class="cn" x="639" y="62" text-anchor="middle">1 stage / ticket</text>
+  <text class="tm" x="740" y="58">Slack #zimmi-claude: digest when a stage left a note,</text>
+  <text class="tm" x="740" y="73">“alive” heartbeat if nothing was posted for 3 h</text>
+  <text class="mono" x="38" y="98"><tspan class="b">priority</tspan>  reply › mr › rfix › review › verify › conflict › new › impl › done › sentry   <tspan class="tm">(finish what is in flight before starting new work)</tspan></text>
+
+  <!-- sources -->
+  <rect class="src" x="20" y="124" width="150" height="54" rx="8"/>
+  <text class="b" x="95" y="142" text-anchor="middle">Sentry</text>
+  <text class="tm" x="95" y="157" text-anchor="middle">stage sentry: 1 ticket</text>
+  <text class="tm" x="95" y="170" text-anchor="middle">a day, if none open</text>
+  <rect class="chip-h" x="186" y="124" width="150" height="54" rx="8"/>
+  <text class="hum" x="261" y="142" text-anchor="middle">ME</text>
+  <text class="tm" x="261" y="157" text-anchor="middle">add triage + repo-x</text>
+  <text class="tm" x="261" y="170" text-anchor="middle">to any ticket</text>
+  <path class="p" d="M125 178 V257" marker-end="url(#ar)"/>
+  <text class="tm" x="118" y="206" text-anchor="end">DEV bug:</text>
+  <text class="tm" x="118" y="220" text-anchor="end">triage + sentry-ID</text>
+  <text class="tm" x="118" y="234" text-anchor="end">+ repo-x</text>
+  <path class="p-h" d="M262 178 L152 257" marker-end="url(#arh)"/>
+
+  <!-- comment loops -->
+  <path class="p-a" d="M300 260 C300 218 400 218 400 258" marker-end="url(#ara)"/>
+  <rect class="chip-h" x="262" y="190" width="78" height="20" rx="5"/><text class="ch" x="301" y="204" text-anchor="middle">ME reply</text>
+  <rect class="chip-a" x="346" y="190" width="54" height="20" rx="5"/><text class="ca" x="373" y="204" text-anchor="middle">reply</text>
+  <text class="tm" x="412" y="204">re-analyze, PLAN.md + scenarios updated,</text>
+  <text class="tm" x="412" y="218">bot answers. To Do tickets, or any open</text>
+  <text class="tm" x="412" y="232">ai-fix ticket. Fails → triage-failed</text>
+
+  <path class="p-a" d="M792 260 C792 218 892 218 892 258" marker-end="url(#ara)"/>
+  <rect class="chip-h" x="752" y="190" width="98" height="20" rx="5"/><text class="ch" x="801" y="204" text-anchor="middle">ME comment</text>
+  <rect class="chip-a" x="856" y="190" width="40" height="20" rx="5"/><text class="ca" x="876" y="204" text-anchor="middle">mr</text>
+  <text class="tm" x="906" y="204">answers, pushes a fix if asked (own mr slot).</text>
+  <text class="tm" x="906" y="218">New commits drop ai-verified / -failed / -retry.</text>
+  <text class="tm" x="906" y="232">No answer posted → ai-fix-failed</text>
+
+  <!-- states -->
+  <rect class="st" x="20" y="260" width="140" height="92" rx="10"/>
+  <text class="lab" x="90" y="284" text-anchor="middle">triage</text>
+  <text class="tm" x="90" y="303" text-anchor="middle">new, waits for</text>
+  <text class="tm" x="90" y="317" text-anchor="middle">analysis</text>
+  <text class="tm" x="90" y="339" text-anchor="middle">Jira: To Do</text>
+
+  <rect class="st" x="266" y="260" width="140" height="92" rx="10"/>
+  <text class="lab" x="336" y="284" text-anchor="middle">triaged</text>
+  <text class="tm" x="336" y="303" text-anchor="middle">PLAN.md + scenarios</text>
+  <text class="tm" x="336" y="317" text-anchor="middle">+ Czech bot comment</text>
+  <text class="tm" x="336" y="339" text-anchor="middle">Jira: To Do</text>
+
+  <rect class="st" x="512" y="260" width="140" height="92" rx="10"/>
+  <text class="lab" x="582" y="284" text-anchor="middle">ai-fix</text>
+  <text class="tm" x="582" y="303" text-anchor="middle">plan + scenarios</text>
+  <text class="tm" x="582" y="317" text-anchor="middle">approved by me</text>
+  <text class="tm" x="582" y="339" text-anchor="middle">→ In Progress</text>
+
+  <rect class="st" x="758" y="260" width="140" height="92" rx="10"/>
+  <text class="lab" x="828" y="284" text-anchor="middle">ai-mr</text>
+  <text class="tm" x="828" y="303" text-anchor="middle">draft MR</text>
+  <text class="tm" x="828" y="317" text-anchor="middle">no reviewers</text>
+  <text class="tm" x="828" y="339" text-anchor="middle">In Progress</text>
+
+  <rect class="st" x="975" y="260" width="110" height="92" rx="10"/>
+  <text class="lab" x="1030" y="284" text-anchor="middle">ai-reviewed</text>
+  <text class="tm" x="1030" y="303" text-anchor="middle">review clean</text>
+  <text class="tm" x="1030" y="317" text-anchor="middle">or minor only</text>
+  <text class="tm" x="1030" y="339" text-anchor="middle">In Progress</text>
+
+  <rect class="st" x="1165" y="260" width="110" height="92" rx="10"/>
+  <text class="lab" x="1220" y="284" text-anchor="middle">ai-verified</text>
+  <text class="tm" x="1220" y="303" text-anchor="middle">scenarios pass</text>
+  <text class="tm" x="1220" y="317" text-anchor="middle">on the preview</text>
+  <text class="tm" x="1220" y="339" text-anchor="middle">In Progress</text>
+
+  <rect class="st" x="1350" y="260" width="100" height="92" rx="10"/>
+  <text class="lab" x="1400" y="284" text-anchor="middle">ai-done</text>
+  <text class="tm" x="1400" y="303" text-anchor="middle">ticket Done,</text>
+  <text class="tm" x="1400" y="317" text-anchor="middle">Sentry resolved</text>
+  <text class="tm" x="1400" y="339" text-anchor="middle">Done (prod)</text>
+
+  <!-- main path -->
+  <path class="p" d="M160 306 H264" marker-end="url(#ar)"/>
+  <rect class="chip-a" x="181" y="295" width="64" height="22" rx="6"/><text class="ca" x="213" y="311" text-anchor="middle">new</text>
+  <text class="tm" x="213" y="334" text-anchor="middle">analyze</text>
+  <text class="tm" x="213" y="348" text-anchor="middle">(/cf-work)</text>
+
+  <path class="p-h" d="M406 306 H510" marker-end="url(#arh)"/>
+  <rect class="chip-h" x="427" y="295" width="64" height="22" rx="6"/><text class="ch" x="459" y="311" text-anchor="middle">ME</text>
+  <text class="tm" x="459" y="334" text-anchor="middle">adds ai-fix =</text>
+  <text class="tm" x="459" y="348" text-anchor="middle">plan gate</text>
+
+  <path class="p" d="M652 306 H756" marker-end="url(#ar)"/>
+  <rect class="chip-a" x="673" y="295" width="64" height="22" rx="6"/><text class="ca" x="705" y="311" text-anchor="middle">impl</text>
+  <text class="tm" x="705" y="334" text-anchor="middle">implement</text>
+  <text class="tm" x="705" y="348" text-anchor="middle">(/cf-ticket)</text>
+
+  <path class="p" d="M898 306 H973" marker-end="url(#ar)"/>
+  <rect class="chip-a" x="904" y="295" width="64" height="22" rx="6"/><text class="ca" x="936" y="311" text-anchor="middle">review</text>
+  <text class="tm" x="936" y="334" text-anchor="middle">opus</text>
+  <text class="tm" x="936" y="348" text-anchor="middle">read-only</text>
+
+  <path class="p" d="M1085 306 H1163" marker-end="url(#ar)"/>
+  <rect class="chip-a" x="1088" y="295" width="72" height="22" rx="6"/><text class="ca" x="1124" y="311" text-anchor="middle">verify</text>
+  <text class="tm" x="1124" y="372" text-anchor="middle">pipeline green,</text>
+  <text class="tm" x="1124" y="386" text-anchor="middle">preview ready</text>
+  <text class="tm flt" x="1124" y="404" text-anchor="middle">stuck 4 h → Slack</text>
+
+  <path class="p" d="M1275 306 H1348" marker-end="url(#ar)"/>
+  <rect class="chip-h" x="1277" y="272" width="68" height="22" rx="6"/><text class="ch" x="1311" y="288" text-anchor="middle">ME: merge</text>
+  <rect class="chip-a" x="1285" y="318" width="52" height="22" rx="6"/><text class="ca" x="1311" y="334" text-anchor="middle">done</text>
+  <text class="tm" x="1311" y="372" text-anchor="middle">Jira Done →</text>
+  <text class="tm" x="1311" y="386" text-anchor="middle">resolve Sentry</text>
+
+  <!-- failures -->
+  <rect class="st-fail" x="20" y="470" width="140" height="64" rx="10"/>
+  <text class="lab flt" x="90" y="492" text-anchor="middle">triage-failed</text>
+  <text class="tm" x="90" y="510" text-anchor="middle">no repo, worktree</text>
+  <text class="tm" x="90" y="524" text-anchor="middle">or analysis crash</text>
+  <path class="p-f" d="M50 352 V468" marker-end="url(#arf)"/>
+  <text class="tm" x="56" y="400">analysis or</text><text class="tm" x="56" y="414">reply fails</text>
+  <path class="p-hd" d="M150 468 V354" marker-end="url(#arh)"/>
+  <text class="tm" x="158" y="408"><tspan class="hum">ME</tspan> fix, re-add</text><text class="tm" x="158" y="422">triage</text>
+
+  <rect class="st-fail" x="512" y="470" width="140" height="64" rx="10"/>
+  <text class="lab flt" x="582" y="492" text-anchor="middle">ai-fix-failed</text>
+  <text class="tm" x="582" y="510" text-anchor="middle">agent bailed out</text>
+  <text class="tm" x="582" y="524" text-anchor="middle">or no MR created</text>
+  <path class="p-f" d="M545 352 V468" marker-end="url(#arf)"/>
+  <text class="tm" x="551" y="408">impl bails</text><text class="tm" x="551" y="422">or no MR</text>
+  <path class="p-hd" d="M640 468 V354" marker-end="url(#arh)"/>
+  <text class="tm" x="648" y="408"><tspan class="hum">ME</tspan> re-add</text><text class="tm" x="648" y="422">ai-fix</text>
+  <path class="p-f" d="M790 352 C790 430 700 500 656 500" marker-end="url(#arf)"/>
+  <text class="tm" x="716" y="452">mr can’t answer</text>
+
+  <rect class="st-warn" x="775" y="470" width="150" height="64" rx="10"/>
+  <text class="lab" x="850" y="492" text-anchor="middle">ai-verify-retry</text>
+  <text class="tm" x="850" y="510" text-anchor="middle">failed once, fix pushed</text>
+  <text class="tm" x="850" y="524" text-anchor="middle">by impl, verify again</text>
+  <path class="p" d="M850 352 V468" marker-end="url(#ar)"/>
+  <text class="tm" x="858" y="400">verify fails</text><text class="tm" x="858" y="414">first time</text>
+  <path class="p" d="M925 488 C1100 500 1220 470 1220 355" marker-end="url(#ar)"/>
+  <text class="tm" x="1160" y="450">re-verify passes</text>
+
+  <rect class="st-warn" x="880" y="570" width="150" height="64" rx="10"/>
+  <text class="lab" x="955" y="592" text-anchor="middle">ai-review-retry</text>
+  <text class="tm" x="955" y="610" text-anchor="middle">blocking finding,</text>
+  <text class="tm" x="955" y="624" text-anchor="middle">rfix fixes it once</text>
+  <path class="p-f" d="M937 318 V568" marker-end="url(#arf)"/>
+  <text class="tm" x="943" y="560">blocking</text>
+  <path class="p" d="M1010 568 V354" marker-end="url(#ar)"/>
+  <text class="tm" x="1018" y="548">rfix pushed</text>
+
+  <rect class="st-fail" x="1180" y="570" width="150" height="64" rx="10"/>
+  <text class="lab flt" x="1255" y="592" text-anchor="middle">ai-review-findings</text>
+  <text class="tm" x="1255" y="610" text-anchor="middle">still blocking, or</text>
+  <text class="tm" x="1255" y="624" text-anchor="middle">crash (verify runs)</text>
+  <path class="p-f" d="M1030 602 H1178" marker-end="url(#arf)"/>
+  <text class="tm" x="1040" y="596">rfix pushed nothing</text>
+  <text class="tm" x="1255" y="652" text-anchor="middle"><tspan class="hum">ME</tspan> read MR note, fix, drop label to re-review</text>
+
+  <rect class="st-fail" x="1180" y="470" width="150" height="64" rx="10"/>
+  <text class="lab flt" x="1255" y="492" text-anchor="middle">ai-verify-failed</text>
+  <text class="tm" x="1255" y="510" text-anchor="middle">failed twice, blocked</text>
+  <text class="tm" x="1255" y="524" text-anchor="middle">or verifier crashed</text>
+  <path class="p-f" d="M925 516 H1178" marker-end="url(#arf)"/>
+  <text class="tm" x="944" y="533">fails again / blocked / crash</text>
+  <text class="tm" x="1255" y="552" text-anchor="middle"><tspan class="hum">ME</tspan> read verify report, fix scenario, re-label</text>
+
+  <g transform="translate(0,110)">
+  <!-- conflicts -->
+  <rect class="band" x="20" y="580" width="1430" height="294" rx="10"/>
+  <text class="mono b" x="38" y="604">MERGE CONFLICTS  stage conflict</text>
+  <text class="tm" x="340" y="604">every 5 min, all my open MRs (factory or not, any repo), only when the MR head or its draft/ai-rebase state changed. One Slack line per head.</text>
+
+  <rect class="st" x="36" y="699" width="170" height="64" rx="10"/>
+  <text class="b" x="121" y="727" text-anchor="middle">my MR has</text>
+  <text class="b" x="121" y="744" text-anchor="middle">conflicts with target</text>
+  <path class="p" d="M206 731 H238 V657 H268" marker-end="url(#ar)"/>
+  <path class="p" d="M206 731 H268" marker-end="url(#ar)"/>
+  <path class="p" d="M206 731 H238 V813 H268" marker-end="url(#ar)"/>
+
+  <rect class="st" x="270" y="622" width="300" height="70" rx="8"/>
+  <text class="b" x="286" y="646">draft, not approved</text>
+  <text class="tm" x="286" y="662">only my commits</text>
+  <path class="p" d="M570 657 H610" marker-end="url(#ar)"/>
+  <rect class="chip-n" x="612" y="622" width="824" height="70" rx="8"/>
+  <text x="628" y="642"><tspan class="b">lockfile only:</tspan> git checkout --ours + pnpm install --lockfile-only, no LLM</text>
+  <text x="628" y="659"><tspan class="b">code conflict:</tspan> opus agent resolves, runs lint / typecheck / tests, push --force-with-lease, MR note</text>
+  <text class="tm" x="628" y="676">agent-resolved + ai-verified → label dropped, holdout re-verify</text>
+
+  <rect class="st" x="270" y="704" width="300" height="70" rx="8"/>
+  <text class="b" x="286" y="728">ready or approved</text>
+  <text class="tm" x="286" y="744">only my commits</text>
+  <rect class="chip-n" x="612" y="704" width="824" height="70" rx="8"/>
+  <text x="628" y="724"><tspan class="b">clean rebase or lockfile only:</tspan> resolved + pushed, MR note says no code changed, approval stays valid</text>
+  <text x="628" y="741"><tspan class="b">code conflict:</tspan> rebase aborted, Slack only → <tspan class="hum">ME add MR label ai-rebase</tspan> → agent resolves next run, label removed</text>
+  <text class="tm" x="628" y="758">gated because approvals don’t reset on push: an agent-written fix would inherit an approval nobody gave it</text>
+  <path class="p" d="M570 739 H610" marker-end="url(#ar)"/>
+
+  <rect class="st" x="270" y="786" width="300" height="70" rx="8"/>
+  <text class="b" x="286" y="810">others’ commits, dirty or diverged</text>
+  <text class="tm" x="286" y="826">worktree, or &gt;10 files changed on</text>
+  <text class="tm" x="286" y="840">both sides</text>
+  <path class="p" d="M570 821 H610" marker-end="url(#ar)"/>
+  <rect class="chip-n" x="612" y="786" width="824" height="70" rx="8"/>
+  <text x="628" y="810"><tspan class="b">Slack only:</tspan> <tspan class="hum">ME</tspan> resolve by hand. A failed agent resolve also aborts the rebase and posts to Slack.</text>
+  <text class="tm" x="628" y="828">retry the same head: rm ~/.local/state/cf-triage/conflicts/&lt;project id&gt;-&lt;iid&gt;</text>
+
+  <!-- interactive modes -->
+  <rect class="band" x="20" y="894" width="1430" height="270" rx="10"/>
+  <text class="mono b" x="38" y="920">INTERACTIVE TICKET  cf-work DEV-X → /cf-ticket</text>
+  <text class="tm" x="500" y="920">runs in my own terminal, not through the dispatcher. <tspan class="b">--step</tspan> stops after every step.</text>
+
+  <rect class="st" x="20" y="934" width="150" height="56" rx="8"/>
+  <text class="b" x="95" y="956" text-anchor="middle">grill + cf-work</text><text class="tm" x="95" y="974" text-anchor="middle">goal, gaps, [?] answered</text>
+  <rect class="st" x="233" y="934" width="150" height="56" rx="8"/>
+  <text class="b" x="308" y="956" text-anchor="middle">plan mode</text><text class="tm" x="308" y="974" text-anchor="middle">steps + scenarios</text>
+  <rect class="st" x="446" y="934" width="150" height="56" rx="8"/>
+  <text class="b" x="521" y="956" text-anchor="middle">PLAN.md + implement</text><text class="tm" x="521" y="974" text-anchor="middle">Czech Jira plan comment</text>
+  <rect class="st" x="659" y="934" width="150" height="56" rx="8"/>
+  <text class="b" x="734" y="956" text-anchor="middle">tests + reviews</text><text class="tm" x="734" y="974" text-anchor="middle">lint, UI check, 2 reviews</text>
+  <rect class="st" x="872" y="934" width="150" height="56" rx="8"/>
+  <text class="b" x="947" y="956" text-anchor="middle">draft MR</text><text class="tm" x="947" y="974" text-anchor="middle">/cf-mr, Nightly preview</text>
+  <rect class="st" x="1085" y="934" width="150" height="56" rx="8"/>
+  <text class="b" x="1160" y="956" text-anchor="middle">verify</text><text class="tm" x="1160" y="974" text-anchor="middle">scenarios on preview</text>
+  <rect class="st" x="1298" y="934" width="150" height="56" rx="8"/>
+  <text class="b" x="1373" y="956" text-anchor="middle">ready</text><text class="tm" x="1373" y="974" text-anchor="middle">reviewers + time log</text>
+  <path class="p" d="M170 962 H231" marker-end="url(#ar)"/>
+  <path class="p" d="M383 962 H444" marker-end="url(#ar)"/>
+  <path class="p" d="M596 962 H657" marker-end="url(#ar)"/>
+  <path class="p" d="M809 962 H870" marker-end="url(#ar)"/>
+  <path class="p" d="M1022 962 H1083" marker-end="url(#ar)"/>
+  <path class="p" d="M1235 962 H1296" marker-end="url(#ar)"/>
+  <rect class="chip-h" x="393" y="936" width="44" height="20" rx="5"/><text class="ch" x="415" y="950" text-anchor="middle">CP1</text>
+  <rect class="chip-h" x="1245" y="936" width="44" height="20" rx="5"/><text class="ch" x="1267" y="950" text-anchor="middle">CP2</text>
+  <text class="tm" x="415" y="1008" text-anchor="middle"><tspan class="hum">ME</tspan> approve plan + scenarios</text>
+  <text class="tm" x="1267" y="1008" text-anchor="middle"><tspan class="hum">ME</tspan> say “ready”</text>
+
+  <text class="mono b" x="38" y="1040">INTERACTIVE EPIC  /cf-epic DEV-X</text>
+  <text class="tm" x="390" y="1040">re-run once per wayfinder decision. Same rule: my own session, no slots.</text>
+
+  <rect class="st" x="20" y="1054" width="190" height="56" rx="8"/>
+  <text class="b" x="115" y="1076" text-anchor="middle">wayfind</text><text class="tm" x="115" y="1094" text-anchor="middle">decisions in a local map</text>
+  <rect class="st" x="268" y="1054" width="190" height="56" rx="8"/>
+  <text class="b" x="363" y="1076" text-anchor="middle">SPEC.md</text><text class="tm" x="363" y="1094" text-anchor="middle">spec + Czech epic comment</text>
+  <rect class="st" x="516" y="1054" width="190" height="56" rx="8"/>
+  <text class="b" x="611" y="1076" text-anchor="middle">child tickets</text><text class="tm" x="611" y="1094" text-anchor="middle">blocked-by + scenarios</text>
+  <rect class="st" x="764" y="1054" width="190" height="56" rx="8"/>
+  <text class="b" x="859" y="1076" text-anchor="middle">build slices</text><text class="tm" x="859" y="1094" text-anchor="middle">parallel sub-agents, worktrees</text>
+  <rect class="st" x="1012" y="1054" width="190" height="56" rx="8"/>
+  <text class="b" x="1107" y="1076" text-anchor="middle">ONE acceptance MR</text><text class="tm" x="1107" y="1094" text-anchor="middle">draft, all slices, preview verify</text>
+  <rect class="st" x="1260" y="1054" width="190" height="56" rx="8"/>
+  <text class="b" x="1355" y="1076" text-anchor="middle">stacked review MRs</text><text class="tm" x="1355" y="1094" text-anchor="middle">one per ticket</text>
+  <path class="p" d="M210 1082 H266" marker-end="url(#ar)"/>
+  <path class="p" d="M458 1082 H514" marker-end="url(#ar)"/>
+  <path class="p" d="M706 1082 H762" marker-end="url(#ar)"/>
+  <path class="p" d="M954 1082 H1010" marker-end="url(#ar)"/>
+  <path class="p" d="M1202 1082 H1258" marker-end="url(#ar)"/>
+  <rect class="chip-h" x="465" y="1056" width="44" height="20" rx="5"/><text class="ch" x="487" y="1070" text-anchor="middle">CP1</text>
+  <rect class="chip-h" x="713" y="1056" width="44" height="20" rx="5"/><text class="ch" x="735" y="1070" text-anchor="middle">CP2</text>
+  <rect class="chip-h" x="1209" y="1056" width="44" height="20" rx="5"/><text class="ch" x="1231" y="1070" text-anchor="middle">CP3</text>
+  <text class="tm" x="487" y="1128" text-anchor="middle"><tspan class="hum">ME</tspan> approve SPEC.md</text>
+  <text class="tm" x="735" y="1128" text-anchor="middle"><tspan class="hum">ME</tspan> approve tickets + scenarios</text>
+  <text class="tm" x="1231" y="1128" text-anchor="middle"><tspan class="hum">ME</tspan> say “accepted”; preview stays up till then</text>
+  </g>
+</svg>
+    </div>
+    <figcaption>Left to right is the happy path. Stage pills sit on the arrow they drive; every pill is one unit started by the dispatcher and holds one slot until it finishes, so a long <code>impl</code> no longer delays <code>verify</code>, <code>reply</code> or <code>conflict</code>. Review runs first on every MR; one blocking finding gets one automatic fix round. Verify only starts once the MR pipeline is green (and, for frontend, the Amplify preview note matches that commit); not ready for 4 h raises a Slack alert naming the reason. Tickets already On nightly, To test, Release candidate or Rejected are ignored by <code>verify</code> and <code>mr</code>.</figcaption>
+  </figure>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Who answers a Jira comment</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>Ticket</th><th>Last comment</th><th>Handled by</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td><code>triaged</code> without <code>ai-mr</code>: To Do, or any open ticket with <code>ai-fix</code></td><td class="me">mine, newer than the last handled one</td><td class="k">reply</td><td>Re-analyzes, updates PLAN.md + scenarios, posts a bot answer. <code>impl</code> skips the ticket until it is answered. Failure: <span class="bad">triage-failed</span>, no retry loop.</td></tr>
+          <tr><td><code>ai-mr</code>, not Done and not On nightly / To test / Release candidate / Rejected</td><td class="me">mine, newer than the last handled one</td><td class="k">mr</td><td>Implementer runs again on the same worktree. A question gets a Jira answer; a change request also gets a push to the same MR, which drops <code>ai-verified</code> / <code>ai-verify-failed</code> / <code>ai-verify-retry</code> so verify runs again. No bot answer afterwards: <span class="bad">ai-fix-failed</span>.</td></tr>
+          <tr><td>any factory ticket</td><td>bot (“AI triage” marker), or already handled</td><td class="k">nobody</td><td>Waits for me. A bot comment posted after mine no longer hides it: pending = newest human comment id above <code>handled/&lt;KEY&gt;</code>.</td></tr>
+          <tr><td><code>triage-failed</code>, <code>ai-fix-failed</code></td><td>any</td><td class="k">nobody</td><td>Parked. Re-add <code>triage</code> / <code>ai-fix</code>, or swap <code>ai-fix-failed</code> back to <code>ai-mr</code>, to get it read again.</td></tr>
+          <tr><td>Done, or merged (On nightly, To test, Release candidate, Rejected)</td><td>any</td><td class="k">nobody</td><td>Ignored. Only stage <code>done</code> touches Done tickets.</td></tr>
+          <tr><td>GitLab MR threads</td><td>any</td><td class="k">nobody</td><td>The factory reads Jira comments only. Ask for MR changes in Jira.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="lede" style="margin-top:8px;font-size:.86rem">Latency: next dispatcher tick, about a minute when a slot is free. Replying from <code>triage-dash</code> answers right away.</p>
+    </section>
+
+    <section class="panel">
+      <h2>When I step in</h2>
+      <div class="cards">
+        <div class="card gate"><h3>Plan gate</h3><ul>
+          <li>Read the Jira plan comment and the Given/When/Then scenarios.</li>
+          <li>Wrong or unclear: reply, loop until right.</li>
+          <li>Good: add <code>ai-fix</code>. It approves plan and scenarios.</li>
+        </ul></div>
+        <div class="card gate"><h3>MR gate</h3><ul>
+          <li>Needs <code>ai-verified</code>; read the review and verify notes on the MR. <code>ai-review-findings</code> = look at the review first.</li>
+          <li>Review, mark ready, add reviewers, merge.</li>
+          <li>Changes wanted: comment in Jira, <code>mr</code> pushes to the same MR.</li>
+        </ul></div>
+        <div class="card failc"><h3>Failure labels</h3><ul>
+          <li><code>triage-failed</code> (analysis or reply failed): fix the cause, re-add <code>triage</code>.</li>
+          <li><code>ai-fix-failed</code>: read the bot comment, fix plan, re-add <code>ai-fix</code> or take over with <code>cf-work</code>.</li>
+          <li><code>ai-verify-failed</code>: read <code>&lt;KEY&gt;.verify.md</code>, fix the scenario, re-label, or take over.</li>
+        </ul></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Every stage: what it picks, what it changes</h2>
+    <div class="tbl"><table>
+      <thead><tr><th>Stage</th><th>Picks up</th><th>Slots</th><th>On success</th><th>On failure</th><th>Timeout</th></tr></thead>
+      <tbody>
+        <tr><td class="k">sentry</td><td>Once per workday, only if no Sentry ticket is still open (retry ≥15 min after a failed run)</td><td>1</td><td>DEV bug with <code>triage</code>, <code>sentry-ID</code>, <code>repo-x</code></td><td>Slack note, retry</td><td>30 min</td></tr>
+        <tr><td class="k">new</td><td><code>triage</code>, Jira To Do, oldest first</td><td>1</td><td>→ <code>triaged</code>: worktree, PLAN.md, scenarios, Czech bot comment</td><td>→ <span class="bad">triage-failed</span></td><td>30 min</td></tr>
+        <tr><td class="k">reply</td><td><code>triaged</code> without <code>ai-mr</code>, To Do or <code>ai-fix</code>, comment newer than the last handled one</td><td>1</td><td>Stays <code>triaged</code>, plan updated, comment id saved in <code>handled/KEY</code></td><td>→ <span class="bad">triage-failed</span></td><td>30 min</td></tr>
+        <tr><td class="k">impl</td><td><code>ai-fix</code>, not Done, no unanswered comment</td><td>1 + impl</td><td>→ <code>ai-mr</code> (draft MR, no reviewers). Already fixed elsewhere: closed as duplicate, back to <code>triaged</code></td><td>→ <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
+        <tr><td class="k">mr</td><td><code>ai-mr</code>, not Done or merged, comment newer than the last handled one</td><td>1 + mr</td><td>Stays <code>ai-mr</code>; answer posted, fix pushed if asked (new commits drop the verify labels)</td><td>→ <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
+        <tr><td class="k">review</td><td><code>ai-mr</code> without review / verify labels, not merged, worktree and MR exist</td><td>1 + review</td><td>Opus, read-only, one MR note. clean or minor → <code>ai-reviewed</code>; blocking → <code>ai-review-retry</code></td><td>Crash → <span class="bad">ai-review-findings</span></td><td>45 min</td></tr>
+        <tr><td class="k">rfix</td><td><code>ai-mr</code> + <code>ai-review-retry</code></td><td>1 + impl</td><td>Fixes must-fix findings once; pushed → <code>ai-reviewed</code></td><td>Nothing pushed → <span class="bad">ai-review-findings</span> (verify still runs)</td><td>110 min</td></tr>
+        <tr><td class="k">verify</td><td><code>ai-mr</code> + <code>ai-reviewed</code> or <code>ai-review-findings</code>, without <code>ai-verified</code> / <code>ai-verify-failed</code>, holdout file exists, every repo’s latest pipeline green (frontend: Amplify note for that commit), not merged. Not ready for 4 h: Slack alert with the reason, daily while stuck</td><td>1 + verify</td><td>→ <code>ai-verified</code> (UI scenarios, plus API diff for BE refactors)</td><td>1st fail: <code>ai-verify-retry</code> + fix push. 2nd fail, blocked or crash: <span class="bad">ai-verify-failed</span></td><td>110 min</td></tr>
+        <tr><td class="k">conflict</td><td>My open MR with conflicts, head or state changed since last handled</td><td>1</td><td>Rebased, pushed, MR note</td><td>Slack line</td><td>110 min</td></tr>
+        <tr><td class="k">done</td><td>Jira Done, labelled <code>triaged</code> / <code>ai-mr</code> / failure, no <code>ai-done</code> (5 per tick)</td><td>1</td><td>→ <code>ai-done</code>, every <code>sentry-ID</code> resolved</td><td>Retried every tick</td><td>5 min</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="panel">
+    <h2>Still not covered</h2>
+    <div class="cards">
+      <div class="card failc"><h3>Availability</h3><ul>
+        <li>The timer runs Mon–Fri 07–18 and only while I am logged in. A comment outside that window, or while the laptop sleeps, waits.</li>
+        <li>Nothing alerts when the dispatcher itself is dead; a missing “alive” heartbeat is the only sign.</li>
+      </ul></div>
+      <div class="card failc"><h3>Slots</h3><ul>
+        <li>Three long stages (impl, mr, a backend verify, an LLM conflict) can fill all three slots. <code>reply</code> is first in line but cannot preempt.</li>
+      </ul></div>
+      <div class="card failc"><h3>Visibility</h3><ul>
+        <li>GitLab MR threads are not read, only Jira comments.</li>
+        <li>A fix I push by hand leaves <code>ai-verified</code> standing; rfix and verify-fix pushes are not re-reviewed.</li>
+        <li><code>triage-dash</code> still judges “needs you” by the last comment, not the handled id.</li>
+      </ul></div>
+    </div>
+  </section>
+</main>
+
+</body></html>
