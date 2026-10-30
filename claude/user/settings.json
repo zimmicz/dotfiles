@@ -361,6 +361,12 @@
         "source": "github",
         "repo": "mbailey/voicemode"
       }
+    },
+    "rodokmen-skill": {
+      "source": {
+        "source": "github",
+        "repo": "sarsonj/rodokmen-skill"
+      }
     }
   },
   "pluginConfigs": {
