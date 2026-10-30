@@ -2,7 +2,7 @@
 set -uo pipefail
 
 MAX=${MAX:-10}
-SLOTS=${SLOTS:-3} IMPL_SLOTS=${IMPL_SLOTS:-1} VERIFY_SLOTS=${VERIFY_SLOTS:-1}
+SLOTS=${SLOTS:-3} IMPL_SLOTS=${IMPL_SLOTS:-1} MR_SLOTS=${MR_SLOTS:-1} VERIFY_SLOTS=${VERIFY_SLOTS:-1}
 REPOS=~/work/cleverfarm/repos
 LOG_DIR=~/.local/state/cf-triage
 AI_MARK="AI triage (Claude, headless)"
@@ -11,7 +11,9 @@ HOLDOUT=$LOG_DIR/holdout
 SELF=${0:A}
 LOCKS=$LOG_DIR/locks
 SLOTDIR=$LOG_DIR/slots
-mkdir -p $LOG_DIR $HOLDOUT $LOCKS $SLOTDIR
+HANDLED=$LOG_DIR/handled
+STALLED=$LOG_DIR/stalled
+mkdir -p $LOG_DIR $HOLDOUT $LOCKS $SLOTDIR $HANDLED $STALLED
 
 STREAM_JQ='if .type == "system" and .subtype == "init" then "🆔 session \(.session_id) — reopen: cd \(.cwd) && claude --resume \(.session_id)"
   elif .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
@@ -23,8 +25,32 @@ search() {
   jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=labels,comment&maxResults=$2"
 }
 
+HUMAN_JQ='def human: (.body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not;'
+
+handled_json() {
+  local F
+  for F in $HANDLED/*(N); do echo "${F:t} $(<$F)"; done \
+    | jq -Rn '[inputs | split(" ") | select(length == 2) | {(.[0]): (.[1] | tonumber)}] | add // {}'
+}
+
+snap_human() {
+  jira GET "/rest/api/3/issue/$1/comment?maxResults=1000" | jq -r --arg m "$AI_MARK" "$HUMAN_JQ"' [.comments[] | select(human) | .id | tonumber] | max // 0'
+}
+
+mark_handled() { echo ${2:-0} >$HANDLED/$1 }
+
+answered_since() {
+  jira GET "/rest/api/3/issue/$1/comment?maxResults=1000" \
+    | jq -e --arg m "$AI_MARK" --argjson id ${2:-0} "$HUMAN_JQ"' any(.comments[]; (human | not) and ((.id | tonumber) > $id))' >/dev/null
+}
+
 reply_filter() {
-  jq -r --arg m "$AI_MARK" --argjson w $1 '.issues[] | select(((.fields.comment.comments | length > 0) and ((.fields.comment.comments | last | .body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not)) == $w)' \
+  jq -r --arg m "$AI_MARK" --argjson w $1 --argjson H "$(handled_json)" "$HUMAN_JQ"' .issues[]
+    | select((.fields.comment.comments // []) as $c
+      | ($c | map(select(human)) | last) as $h
+      | (if $h == null then false
+         elif $H[.key] != null then (($h.id | tonumber) > $H[.key])
+         else ($c | last | human) end) == $w)' \
     | jq -rs "{issues: .} | $ROWS_JQ"
 }
 
@@ -102,27 +128,50 @@ implement() {
   [[ -n "$MR" ]] && echo "  mr -> $MR" | tee -a $LOG && echo "$MR" >$LOG_DIR/$KEY.mr
 }
 
+why() { [[ -n "${WHY:-}" ]] && echo "$1" >$WHY; return 2 }
+
 verify_targets() {
-  local KEY=$1 R WT MR PID IID PIPE SHA
-  [[ -n "$2" ]] || return 2
+  local KEY=$1 R WT MR PID IID PIPE SHA PS
+  [[ -n "$2" ]] || { why "no repo-* label"; return 2 }
   for R in ${(s:,:)2}; do
     WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
-    [[ -n "$WT" ]] || return 2
+    [[ -n "$WT" ]] || { why "no worktree in $R"; return 2 }
     MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null </dev/null | jq -c '.[0] // empty')
-    [[ -n "$MR" ]] || return 2
+    [[ -n "$MR" ]] || { why "no open MR in $R"; return 2 }
     PID=$(jq -r .project_id <<<$MR) IID=$(jq -r .iid <<<$MR)
     PIPE=$(glab api "projects/$PID/merge_requests/$IID/pipelines" </dev/null | jq -c '.[0] // empty')
-    [[ "$(jq -r .status <<<$PIPE)" == success ]] || return 2
+    PS=$(jq -r .status <<<$PIPE)
+    [[ "$PS" == success ]] || { why "pipeline ${PS:-missing} in $R, $(jq -r .web_url <<<$MR)"; return 2 }
     SHA=$(jq -r .sha <<<$PIPE)
     if [[ $2 == cf-farm-frontend ]]; then
       glab api "projects/$PID/merge_requests/$IID/notes?per_page=100" </dev/null \
-        | jq -e --arg s "${SHA[1,8]}" 'any(.[]; (.body | contains("amplify-preview-url")) and (.body | contains("@ " + $s)))' >/dev/null || return 2
+        | jq -e --arg s "${SHA[1,8]}" 'any(.[]; (.body | contains("amplify-preview-url")) and (.body | contains("@ " + $s)))' >/dev/null || { why "Amplify preview note missing for ${SHA[1,8]} in $R"; return 2 }
     fi
     echo "$R:$PID:$IID:$(jq -r .id <<<$PIPE):${SHA[1,8]}"
   done
 }
 
-verify_ready() { [[ -f $HOLDOUT/$1.md ]] && verify_targets $1 $2 >/dev/null }
+verify_blocker() {
+  local F=$(mktemp)
+  if [[ ! -f $HOLDOUT/$1.md ]]; then
+    echo "no holdout scenarios file"
+  elif WHY=$F verify_targets $1 $2 >/dev/null </dev/null; then
+    rm -f $F
+    return 1
+  else
+    cat $F
+  fi
+  rm -f $F
+}
+
+stall_note() {
+  local S=$STALLED/$1.since A=$STALLED/$1.alert NOW=$(date +%s)
+  [[ -f $S ]] || { echo $NOW >$S; return }
+  (( NOW - $(<$S) < ${STALL_HOURS:-4} * 3600 )) && return
+  [[ -f $A ]] && (( NOW - $(<$A) < 86400 )) && return
+  note $1 "ai-mr not verified for $(( (NOW - $(<$S)) / 3600 )) h: $2"
+  echo $NOW >$A
+}
 
 verify() {
   local KEY=$1 KIND=${3:-ui} LOG=$LOG_DIR/$1.log WT0 T
@@ -231,7 +280,7 @@ resolve_conflict() {
       echo "$WHO conflicts with $TGT in code, under review → add MR label \`ai-rebase\` to resolve" >>$NOTES; return
     fi
     local PANE=$(wm_window $WT $LOG)
-    (cd $WT && TMUX_PANE=$PANE claude -p "Rebase of branch $BR onto origin/$TGT is in progress in this worktree and stopped on conflicts. No human present, never ask. Run /mattpocock-skills:resolving-merge-conflicts. Intent of this branch: its MR $URL + PLAN.md / TICKET.md here if present. Intent of the other side: the commits on origin/$TGT touching each conflicted file (git log origin/$TGT -- <file>) and their MRs (glab api). Keep both intents. pnpm-lock.yaml: never hand-merge, git checkout --ours it, then pnpm install --lockfile-only. Continue with GIT_EDITOR=true git rebase --continue until the rebase is finished. Then run the repo's lint, typecheck and the tests touching the conflicted files (per its CLAUDE.md), fix only what the resolution broke, amend into the rebased commits. Never push, never skip or drop commits. Not confident about a hunk → stop. Write $REPORT: first line exactly RESOLVED or FAILED: <reason>, then one line per conflicted file: how you resolved it and why." \
+    (cd $WT && TMUX_PANE=$PANE claude -p "Rebase of branch $BR onto origin/$TGT is in progress in this worktree and stopped on conflicts. No human present, never ask. Run /mattpocock-skills:resolving-merge-conflicts. Intent of this branch: its MR $URL + PLAN.md / TICKET.md here if present. Intent of the other side: the commits on origin/$TGT touching each conflicted file (git log origin/$TGT -- <file>) and their MRs (glab api). Keep both intents. pnpm-lock.yaml: never hand-merge, git checkout --ours it, then pnpm install --lockfile-only. Continue with GIT_EDITOR=true git rebase --continue until the rebase is finished. Then run the repo's lint, typecheck and the tests touching the conflicted files (per its CLAUDE.md), fix only what the resolution broke, amend into the rebased commits. Never push, never skip or drop commits. Not confident about a hunk → stop. Write $REPORT: first line exactly RESOLVED or FAILED: <reason>, then markdown bullets for a reviewer skimming an MR note, one per conflicted file: - \`<path>\`: kept <X>, dropped <Y>, <why in one short clause> (max 2 lines each, no paragraphs). If the resolution forced a follow-up edit in a file that did not conflict, one more bullet for it. Last bullet: - Checks: <what ran, result>." \
       --model opus \
       --allowedTools "Read Edit Write Skill mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Bash(git:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Bash(glab api:*) Bash(glab mr view:*) Bash(jq:*)" \
       --disallowedTools "Bash(git push:*) Bash(git reset --hard:*) Bash(git rebase --skip:*) Bash(git rebase --abort:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**)" \
@@ -241,7 +290,7 @@ resolve_conflict() {
       echo "  conflict resolve failed: $(head -1 $REPORT 2>/dev/null)" | tee -a $LOG
       echo "$WHO conflict resolve failed: $(head -1 $REPORT 2>/dev/null || echo 'no report'), see \`$LOG\`" >>$NOTES; return
     fi
-    HOW=$(tail -n +2 $REPORT)
+    HOW=$(tail -n +2 $REPORT | sed -E '/^[[:space:]]*$/d; /^[[:space:]]*[-*] /!s/^/- /')
   fi
   if [[ $(git -C $WT rev-list --count origin/$TGT..HEAD) != $(git -C $GIT rev-list --count origin/$TGT..$OLD) ]]; then
     git -C $WT reset -q --hard $OLD
@@ -252,6 +301,7 @@ resolve_conflict() {
   glab api -X POST projects/$PID/merge_requests/$IID/notes -f body="🤖 _I'm writing on Michal's behalf. If you don't like it, please let me know._
 
 Rebased onto \`$TGT\`, conflicts resolved:
+
 $HOW${${GATED:#false}:+
 
 No code changed: git applied every commit as is, only \`pnpm-lock.yaml\` was regenerated if it conflicted. Existing approvals stay valid.}" >/dev/null
@@ -260,7 +310,7 @@ No code changed: git applied every commit as is, only \`pnpm-lock.yaml\` was reg
     jira PUT "/rest/api/2/issue/$KEY" '{"update":{"labels":[{"remove":"ai-verified"}]}}' >/dev/null
     echo "$WHO rebased, conflicts resolved by agent, holdout re-verify queued" >>$NOTES
   else
-    echo "$WHO rebased onto $TGT (${HOW%%$'\n'*})" >>$NOTES
+    echo "$WHO rebased onto $TGT (${${HOW%%$'\n'*}#- })" >>$NOTES
   fi
 }
 
@@ -268,22 +318,38 @@ ROWS_JQ='.issues[] | "\(.key) \((.fields.labels | map(select(startswith("repo-")
 REPOS_JQ='.issues[] | "\(.key) \(.fields.labels | map(select(startswith("repo-")) | ltrimstr("repo-")) | sort_by(. != "cf-farm-frontend") | join(","))"'
 
 stage_new() {
-  if analyze $1 $2; then relabel $1 triage triaged; note $1 "triaged, PLAN.md ready (add \`ai-fix\` to implement)"; else relabel $1 triage triage-failed; note $1 "triage failed, see \`$LOG_DIR/$1.log\`"; fi
+  local ID=$(snap_human $1)
+  if analyze $1 $2; then mark_handled $1 $ID; relabel $1 triage triaged; note $1 "triaged, PLAN.md ready (add \`ai-fix\` to implement)"; else relabel $1 triage triage-failed; note $1 "triage failed, see \`$LOG_DIR/$1.log\`"; fi
 }
 
 stage_reply() {
   echo "--- follow-up $1"
-  if analyze $1 $2; then note $1 "your reply answered"; else note $1 "reply follow-up failed, see \`$LOG_DIR/$1.log\`"; fi
+  local ID=$(snap_human $1)
+  if analyze $1 $2; then mark_handled $1 $ID; note $1 "your reply answered"; else relabel $1 triaged triage-failed; note $1 "reply follow-up failed, parked as \`triage-failed\` (re-add \`triage\` to retry), see \`$LOG_DIR/$1.log\`"; fi
 }
 
 stage_impl() {
-  if implement $1 $2; then relabel $1 ai-fix ai-mr; note $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; note $1 "already fixed, closed as duplicate, Sentry resolves next run"; else relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
+  local ID=$(snap_human $1)
+  if implement $1 $2; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; note $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; note $1 "already fixed, closed as duplicate, Sentry resolves next run"; else relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
+}
+
+wt_heads() {
+  local W
+  for W in $REPOS/*/.worktrees/$1-*(N/); do echo "${W:t} $(git -C $W rev-parse HEAD 2>/dev/null)"; done
+}
+
+unverify() {
+  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"}]}}' >/dev/null
 }
 
 stage_mr() {
   echo "--- MR follow-up $1"
+  local ID=$(snap_human $1) H0=$(wt_heads $1)
   implement $1 $2
-  if search "key = $1" 1 | awaiting_reply | grep -q .; then relabel $1 ai-mr ai-fix-failed; note $1 "MR follow-up failed, see \`$LOG_DIR/$1.log\`"; else note $1 "your reply answered on MR: $(cat $LOG_DIR/$1.mr)"; fi
+  if answered_since $1 $ID; then
+    mark_handled $1 $ID
+    if [[ "$(wt_heads $1)" != "$H0" ]]; then unverify $1; note $1 "your reply answered on MR, new commits pushed, verify labels dropped, re-verify next: $(cat $LOG_DIR/$1.mr)"; else note $1 "your reply answered on MR: $(cat $LOG_DIR/$1.mr)"; fi
+  else relabel $1 ai-mr ai-fix-failed; note $1 "MR follow-up failed, see \`$LOG_DIR/$1.log\`"; fi
 }
 
 stage_verify() {
@@ -349,7 +415,7 @@ if [[ "${1:-}" == --run ]]; then
   exit $?
 fi
 
-stage_class() { case $1 in impl|mr) echo impl ;; verify) echo verify ;; esac }
+stage_class() { case $1 in impl|mr|verify) echo $1 ;; esac }
 stage_timeout() { case $1 in impl|mr|conflict|verify) echo 110min ;; done) echo 5min ;; *) echo 30min ;; esac }
 
 RUNNING=(${(f)"$(systemctl --user list-units 'cf-triage-*' --state=active,activating,deactivating --plain --no-legend | awk '{print $1}')"})
@@ -377,6 +443,7 @@ spawn_stage() {
   if [[ -n $CLS ]]; then
     N=$IMPL_SLOTS
     [[ $CLS == verify ]] && N=$VERIFY_SLOTS
+    [[ $CLS == mr ]] && N=$MR_SLOTS
     pick_slot $CLS- $N || return 4
     CAP=($PICKED)
   fi
@@ -424,11 +491,13 @@ if [[ -n "${1:-}" ]]; then
   fi
 else
   NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
-  REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory = "To Do"' 20 | awaiting_reply)
+  REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory != Done AND (statusCategory = "To Do" OR labels = ai-fix)' 20 | awaiting_reply)
   IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' 20 | not_awaiting)
-  MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done ORDER BY updated ASC' 20 | awaiting_reply)
-  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed) AND statusCategory != Done ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
-    | while read -r K R; do verify_ready $K $R </dev/null && echo "$K $R"; done)
+  MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | awaiting_reply)
+  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
+    | while read -r K R; do
+      if W=$(verify_blocker $K $R </dev/null); then stall_note $K "$W"; else rm -f $STALLED/$K.*; echo "$K $R"; fi
+    done)
   DONE=$(search 'project = DEV AND labels in (triaged, ai-mr, triage-failed, ai-fix-failed) AND labels not in (ai-done) AND status = Done' 5 \
     | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
   CHECKED=($LOG_DIR/.conflicts-checked(Nmm-${CONFLICT_EVERY:-5}))
