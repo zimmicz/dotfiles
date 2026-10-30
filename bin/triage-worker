@@ -13,7 +13,8 @@ LOCKS=$LOG_DIR/locks
 SLOTDIR=$LOG_DIR/slots
 HANDLED=$LOG_DIR/handled
 STALLED=$LOG_DIR/stalled
-mkdir -p $LOG_DIR $HOLDOUT $LOCKS $SLOTDIR $HANDLED $STALLED
+GLHANDLED=$LOG_DIR/handled-mr
+mkdir -p $LOG_DIR $HOLDOUT $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED
 
 STREAM_JQ='if .type == "system" and .subtype == "init" then "🆔 session \(.session_id) — reopen: cd \(.cwd) && claude --resume \(.session_id)"
   elif .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
@@ -198,7 +199,7 @@ verify() {
   (cd $WT0 && TMUX_PANE=$PANE TMPDIR=$HOME/cf-env-tmp claude -p "/cf-verify-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA/$KEY.webm")" \
     --model sonnet \
     --strict-mcp-config --mcp-config "$MCP" \
-    --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(node $HOME/.claude/skills/cf-verify-api/token.mjs:*)" \
+    --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(bash $HOME/.claude/skills/cf-verify-api/run-scenarios.sh:*)" \
     --disallowedTools "Edit Bash(git:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)
@@ -221,6 +222,31 @@ mr_targets() {
     [[ -n "$MR" ]] || return 2
     echo "$R:$(jq -r .project_id <<<$MR):$(jq -r .iid <<<$MR)"
   done
+}
+
+ticket_repos() {
+  jira GET "/rest/api/3/issue/$1?fields=labels" | jq -r '[.fields.labels[] | select(startswith("repo-")) | ltrimstr("repo-")] | join(",")'
+}
+
+gl_human_max() {
+  local T L P ID=0 N
+  T=$(mr_targets $1 $2) || return 1
+  GLME=${GLME:-$(glab api user </dev/null | jq -r .username)}
+  [[ -n "$GLME" ]] || return 1
+  for L in ${(f)T}; do
+    P=(${(s.:.)L})
+    N=$(glab api "projects/${P[2]}/merge_requests/${P[3]}/notes?per_page=100" </dev/null \
+      | jq -r --arg me "$GLME" '[.[] | select((.system | not) and .author.username == $me and (.body | contains("writing on Michal") | not)) | .id] | max // 0') || return 1
+    (( N > ID )) && ID=$N
+  done
+  echo $ID
+}
+
+gl_pending() {
+  local ID=$(gl_human_max $1 $2 </dev/null) H=$GLHANDLED/$1
+  [[ -n "$ID" ]] || return 1
+  [[ -f $H ]] || { echo $ID >$H; return 1 }
+  (( ID > $(<$H) ))
 }
 
 review() {
@@ -386,10 +412,11 @@ unverify() {
 
 stage_mr() {
   echo "--- MR follow-up $1"
-  local ID=$(snap_human $1) H0=$(wt_heads $1)
-  implement $1 $2
+  local ID=$(snap_human $1) H0=$(wt_heads $1) GLID=$(gl_human_max $1 "$(ticket_repos $1)" </dev/null)
+  implement $1 $2 "--mr-notes-after $(<$GLHANDLED/$1 2>/dev/null || echo 0)"
   if answered_since $1 $ID; then
     mark_handled $1 $ID
+    [[ -n "$GLID" ]] && echo $GLID >$GLHANDLED/$1
     if [[ "$(wt_heads $1)" != "$H0" ]]; then unverify $1; note $1 "your reply answered on MR, new commits pushed, review + verify labels dropped, re-review next: $(cat $LOG_DIR/$1.mr)"; else note $1 "your reply answered on MR: $(cat $LOG_DIR/$1.mr)"; fi
   else relabel $1 ai-mr ai-fix-failed; note $1 "MR follow-up failed, see \`$LOG_DIR/$1.log\`"; fi
 }
@@ -564,6 +591,13 @@ else
   REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory != Done AND (statusCategory = "To Do" OR labels = ai-fix)' 20 | awaiting_reply)
   IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' 20 | not_awaiting)
   MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | awaiting_reply)
+  GLCHECKED=($LOG_DIR/.glnotes-checked(Nmm-${GL_EVERY:-2}))
+  if (( ! ${#GLCHECKED} )) || [[ -n "${TRIAGE_DRY:-}" ]]; then
+    [[ -n "${TRIAGE_DRY:-}" ]] || touch $LOG_DIR/.glnotes-checked
+    MR_REPLIES+=$'\n'$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
+      | while read -r K R; do gl_pending $K $R </dev/null && echo "$K ${R%%,*}"; done)
+    MR_REPLIES=$(awk 'NF && !s[$1]++' <<<$MR_REPLIES)
+  fi
   RFIX=$(search 'project = DEV AND labels = ai-mr AND labels = ai-review-retry AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$ROWS_JQ")
   REVIEW=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-reviewed, ai-review-retry, ai-review-findings, ai-verified, ai-verify-failed) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
     | while read -r K R; do mr_targets $K $R >/dev/null </dev/null && echo "$K $R"; done)
