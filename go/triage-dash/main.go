@@ -969,7 +969,7 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		}
 		m.reload()
 	case commentsMsg:
-		m.comments[msg.key], m.descs[msg.key] = msg.md, or(msg.desc, "_(no description)_")
+		m.comments[msg.key], m.descs[msg.key] = or(msg.md, "_(no comments)_"), or(msg.desc, "_(no description)_")
 		if msg.err != nil {
 			m.comments[msg.key], m.descs[msg.key] = "**error:** "+msg.err.Error(), "**error:** "+msg.err.Error()
 		}
