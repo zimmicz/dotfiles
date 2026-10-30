@@ -707,6 +707,22 @@ type model struct {
 	jiraErr         error
 	jiraAt          time.Time
 	mrs             map[string]mrInfo
+	labels          map[string]string
+}
+
+func changed(prev map[string]string, rows []row, label func(row) string) (map[string]string, []string) {
+	cur, out := map[string]string{}, []string(nil)
+	for _, r := range rows {
+		l := label(r)
+		cur[r.key] = l
+		if prev == nil || prev[r.key] == l {
+			continue
+		}
+		if group(r) == gNeeds || r.stage == "done" {
+			out = append(out, r.key+" "+or(prev[r.key], "new")+" → "+l)
+		}
+	}
+	return cur, out
 }
 
 func tick() tea.Cmd {
@@ -747,6 +763,13 @@ func (m *model) reload() {
 		m.rows = append(m.rows, r)
 	}
 	sort.SliceStable(m.rows, func(a, b int) bool { return group(m.rows[a]) < group(m.rows[b]) })
+	if !m.jiraAt.IsZero() {
+		var ch []string
+		m.labels, ch = changed(m.labels, m.rows, func(r row) string { _, _, l := m.look(r); return l })
+		if len(ch) > 0 {
+			m.status = "\033[33m" + strings.Join(ch, ", ") + "\033[0m"
+		}
+	}
 	for i, r := range m.rows {
 		if r.key == key {
 			m.cur = i

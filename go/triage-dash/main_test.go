@@ -111,3 +111,20 @@ func TestLookConflict(t *testing.T) {
 		}
 	}
 }
+
+func TestChanged(t *testing.T) {
+	rows := []row{{key: "A", stage: "verify failed", jira: true}, {key: "B", stage: "implementing", jira: true}, {key: "C", stage: "done", jira: true, parked: true}}
+	lbl := func(r row) string { return r.stage }
+	base, ch := changed(nil, rows, lbl)
+	if len(ch) != 0 {
+		t.Fatalf("baseline notified: %v", ch)
+	}
+	if _, ch = changed(base, rows, lbl); len(ch) != 0 {
+		t.Fatalf("no-op notified: %v", ch)
+	}
+	base["A"], base["B"], base["C"] = "implementing", "plan", "mr"
+	_, ch = changed(base, rows, lbl)
+	if len(ch) != 2 || ch[0] != "A implementing → verify failed" || ch[1] != "C mr → done" {
+		t.Fatalf("got %v", ch)
+	}
+}
