@@ -10,6 +10,8 @@ description: |
   changes; BE build/tests not runnable locally → via MR pipeline), independent review vs standards + PLAN.md, opens a draft MR without reviewers. On a ticket labelled
   ai-mr: answers new human Jira comments by pushing fixes to the existing MR.
   With `--verify-fix <report>`: fixes failed holdout scenarios on the existing MR.
+  With `--review-fix <report>`: fixes the must-fix findings of the independent
+  reviewer (cf-review) on the existing MR.
   Plan says already fixed elsewhere: links Duplicate, moves ticket to Done, no MR.
 ---
 
@@ -88,5 +90,7 @@ No user present — never ask, never wait, no checkpoints. The user approved `PL
 **MR follow-up** — MR for this branch already exists (ticket labelled `ai-mr`, triage-worker re-runs on a human Jira comment newer than the last 🤖 one): skip steps 3–6 above. Read every human comment after the last 🤖 comment, plus unresolved MR threads (`glab api`). The `## Comments` section is at the END of a long `TICKET.md`: read the file to the end (`tail`, or Read with an offset), never `head` it, or use `jira GET /rest/api/2/issue/<KEY>/comment`. Apply what they ask on the existing branch (scope = those comments), run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). A question gets an answer, not a code change. Then post ONE Jira comment, same first line as step 7: what changed per comment, the answer, or why not.
 
 **Verify fix** — `--verify-fix <report>` in arguments (MR exists, the holdout verifier failed): skip steps 3–6 above. Read the report (failed scenarios, observed vs expected, screenshots) and the scenarios file. Fix the code on the existing branch so the failed scenarios pass — never edit the scenarios. Run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). Post ONE Jira comment, same first line as step 7: which scenarios failed, what you changed. Scenario itself looks wrong (contradicts `PLAN.md` / ticket) → no code change, say so in the comment.
+
+**Review fix** — `--review-fix <report>` in arguments (MR exists, the independent reviewer `cf-review` found must-fix issues): skip steps 3–6 above. Read the report. Fix every must-fix finding on the existing branch (scope = those findings; a should-fix only when its fix is trivial and inside lines you already touch). A finding you disagree with after reading the code: no code change, say why in the comment. Run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). Post ONE Jira comment, same first line as step 7: per finding what you changed, or why not.
 
 **Bail out** — no MR, just the Jira comment explaining why — when: root cause in `PLAN.md` doesn't hold in the code, the fix needs scope beyond the plan, or phase 4 can't go green (incl. 3 red CI rounds, step 4a). Never push to develop/staging/production, never force-push, never merge or approve.

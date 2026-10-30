@@ -25,7 +25,7 @@ import (
 
 const (
 	jiraBase = "https://cleverfarm.atlassian.net"
-	labels   = "triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-verify-retry, ai-verified, ai-verify-failed, ai-done"
+	labels   = "triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-review-retry, ai-reviewed, ai-review-findings, ai-verify-retry, ai-verified, ai-verify-failed, ai-done"
 	sideW    = 34
 	top      = 2
 	detailH  = 5
@@ -87,8 +87,14 @@ func stage(ls []string) string {
 		return "verify failed"
 	case has["ai-done"]:
 		return "done"
+	case has["ai-review-findings"]:
+		return "review findings"
 	case has["ai-verified"]:
 		return "verified"
+	case has["ai-review-retry"]:
+		return "review fix"
+	case has["ai-reviewed"]:
+		return "reviewed"
 	case has["ai-mr"]:
 		return "mr"
 	case has["ai-fix"]:
@@ -107,6 +113,9 @@ var stageStyle = map[string]struct{ icon, color string }{
 	"bailed":          {"❌", "31"},
 	"implementing":    {"🔨", "36"},
 	"mr":              {"🔍", "34"},
+	"reviewed":        {"🔎", "34"},
+	"review fix":      {"🔧", "36"},
+	"review findings": {"🔶", "33"},
 	"new":             {"🆕", "36"},
 	"done":            {"🏁", "2"},
 	"RC":              {"📦", "2"},
@@ -145,7 +154,7 @@ func group(r row) int {
 		return gTodo
 	case r.parked:
 		return gParked
-	case slices.Contains([]string{"plan gate", "verified", "verify failed", "analysis failed", "bailed"}, r.stage):
+	case slices.Contains([]string{"plan gate", "verified", "verify failed", "review findings", "analysis failed", "bailed"}, r.stage):
 		return gNeeds
 	}
 	return gFlight
@@ -426,6 +435,8 @@ func retryAction(ls []string) (remove, add string) {
 			return l, "ai-fix"
 		case "ai-verify-failed":
 			return l, ""
+		case "ai-review-findings":
+			return l, ""
 		}
 	}
 	return "", ""
@@ -627,7 +638,7 @@ var helpCols = [][]helpSection{
 	},
 }
 
-var legend = []string{"plan gate", "verified", "verify failed", "bailed", "implementing", "mr", "new", "done", "RC", "nightly", "todo", "-"}
+var legend = []string{"plan gate", "verified", "verify failed", "review findings", "bailed", "implementing", "mr", "reviewed", "review fix", "new", "done", "RC", "nightly", "todo", "-"}
 
 func helpLines() []string {
 	const keyW, colW = 9, 34
@@ -1226,9 +1237,11 @@ func (m model) mrURLs() []string {
 	return out
 }
 
+func mrStage(s string) bool { return s == "mr" || s == "reviewed" || s == "review fix" }
+
 func (m model) look(r row) (icon, color, label string) {
 	st := stageStyle[r.stage]
-	if in, ok := m.mrs[r.mr]; ok && (r.stage == "mr" || r.stage == "todo" || r.stage == "-") {
+	if in, ok := m.mrs[r.mr]; ok && (mrStage(r.stage) || r.stage == "todo" || r.stage == "-") {
 		if in.label == "conflict" {
 			switch r.conflict {
 			case "waiting":
@@ -1284,7 +1297,7 @@ func (m model) pane() []string {
 	if mm := mrIIDRe.FindStringSubmatch(r.mr); mm != nil {
 		mr := "\033[4m!" + mm[1] + "\033[0m"
 		if in, ok := m.mrs[r.mr]; ok {
-			if r.stage != "mr" {
+			if !mrStage(r.stage) {
 				mr += " " + in.icon + " \033[" + in.color + "m" + in.label + "\033[0m"
 			}
 			mr += " \033[2m(" + in.detail + ")\033[0m"
