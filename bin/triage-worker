@@ -94,9 +94,14 @@ analyze() {
   local PANE=$(wm_window $WT $LOG)
   (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work $KEY --headless" \
     --model $TIER $DIRS \
-    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
+    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) Write(/$HOLDOUT/$KEY.api.md) Edit(/$HOLDOUT/$KEY.api.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) && [[ -f $WT/PLAN.md ]] \
     && echo "  ok -> $WT/PLAN.md" | tee -a $LOG
+  local RC=$? F
+  for F in $HOLDOUT/$KEY.md:holdout.md $HOLDOUT/$KEY.api.md:holdout.api.md; do
+    [[ -f ${F%%:*} ]] && { jira attach $KEY ${F%%:*} ${F##*:} >/dev/null || echo "  holdout attach failed: ${F##*:}" | tee -a $LOG; }
+  done
+  return $RC
 }
 
 wm_window() {
@@ -189,10 +194,11 @@ verify() {
   local CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-env/*' 2>/dev/null | sort -V | tail -1)
   local MCP=$(jq -nc --arg d $MEDIA '{mcpServers:{playwright:{type:"stdio",command:"npx",args:["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--output-dir",$d]}}}')
   local PANE=$(wm_window $WT0 $LOG)
-  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-verify-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA/$KEY.webm")" \
+  mkdir -p ~/cf-env-tmp
+  (cd $WT0 && TMUX_PANE=$PANE TMPDIR=$HOME/cf-env-tmp claude -p "/cf-verify-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA/$KEY.webm")" \
     --model sonnet \
     --strict-mcp-config --mcp-config "$MCP" \
-    --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*)" \
+    --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(node $HOME/.claude/skills/cf-verify-api/token.mjs:*)" \
     --disallowedTools "Edit Bash(git:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)

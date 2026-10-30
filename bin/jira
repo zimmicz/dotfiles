@@ -15,6 +15,7 @@ BODY="$3"
 if [[ -z "$METHOD" || -z "$ENDPOINT" ]]; then
   echo "Usage: jira <METHOD> <endpoint> [body-json]" >&2
   echo "       jira add-comment <TICKET-ID> <message>" >&2
+  echo "       jira attach <TICKET-ID> <file> [attachment-name]" >&2
   exit 1
 fi
 
@@ -31,6 +32,24 @@ if [[ "$METHOD" == "ADD-COMMENT" ]]; then
     -H "Content-Type: application/json" \
     -d "$BODY" \
     "$JIRA_BASE/rest/api/2/issue/$TICKET/comment"
+fi
+
+if [[ "$METHOD" == "ATTACH" ]]; then
+  TICKET="$2"
+  FILE="$3"
+  NAME="${4:-${FILE:t}}"
+  if [[ -z "$TICKET" || ! -f "$FILE" ]]; then
+    echo "Usage: jira attach <TICKET-ID> <file> [attachment-name]" >&2
+    exit 1
+  fi
+  for ID in $(curl -sS -u "$JIRA_EMAIL:$JIRA_TOKEN" "$JIRA_BASE/rest/api/2/issue/$TICKET?fields=attachment" \
+    | jq -r --arg n "$NAME" '.fields.attachment[]? | select(.filename == $n) | .id'); do
+    curl -sS -X DELETE -u "$JIRA_EMAIL:$JIRA_TOKEN" "$JIRA_BASE/rest/api/2/attachment/$ID" >/dev/null
+  done
+  exec curl -sS -X POST -u "$JIRA_EMAIL:$JIRA_TOKEN" \
+    -H "X-Atlassian-Token: no-check" \
+    -F "file=@$FILE;filename=$NAME" \
+    "$JIRA_BASE/rest/api/2/issue/$TICKET/attachments"
 fi
 
 CURL_ARGS=(-sS -X "$METHOD" -u "$JIRA_EMAIL:$JIRA_TOKEN" -H "Content-Type: application/json")
