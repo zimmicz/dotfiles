@@ -7,7 +7,7 @@ description: |
   verified on preview); `--step` adds a stop after every plan step.
   With `--headless` (triage-worker, ticket labelled ai-fix): implements PLAN.md
   unattended, verifies (tests, lint, typecheck, visual check via /verify-ui for UI
-  changes), independent review vs standards + PLAN.md, opens a draft MR without reviewers. On a ticket labelled
+  changes; BE build/tests not runnable locally → via MR pipeline), independent review vs standards + PLAN.md, opens a draft MR without reviewers. On a ticket labelled
   ai-mr: answers new human Jira comments by pushing fixes to the existing MR.
   With `--verify-fix <report>`: fixes failed holdout scenarios on the existing MR.
   Plan says already fixed elsewhere: links Duplicate, moves ticket to Done, no MR.
@@ -57,7 +57,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 ## Phase 6: MR → CHECKPOINT 2
 
 15. Run `/cf-mr --headless` — draft MR, no reviewers, FE preview on Nightly.
-16. Holdout verify: wait for the preview (every repo's latest MR pipeline green; FE-only also the bot note `<!-- amplify-preview-url -->` showing `@ <its short sha>`), then run `/cf-verify <KEY> repos=<repo>:<project id>:<mr iid>:<pipeline id>:<short sha>,… branch=…` in a fresh `Agent` sub-agent (pass only those args, no context from this session). Fail → fix once (same rules as headless `--verify-fix`), push, verify again.
+16. Holdout verify: wait for the preview (every repo's latest MR pipeline green; FE-only also the bot note `<!-- amplify-preview-url -->` showing `@ <its short sha>`), then run `/cf-verify-ui <KEY> repos=<repo>:<project id>:<mr iid>:<pipeline id>:<short sha>,… branch=…` in a fresh `Agent` sub-agent (pass only those args, no context from this session). `holdout/<KEY>.api.md` exists (BE refactor) → after it passes, same for `/cf-verify-api <KEY> repos=… branch=…`. Fail → fix once (same rules as headless `--verify-fix`), push, verify again.
 17. **CHECKPOINT 2** — MR link, review findings fixed, verify verdict, anything deviating from the plan. Only on the user's explicit OK: `glab mr update <iid> --ready` + reviewers per `/cf-mr` step 6, ticket to review per `/cf-mr` step 8, then `/cf-mr` steps 11–12 (time log, retro). Then: "Come back after merge and run `/cf-feedback`."
 
 ## Stop rules (between checkpoints)
@@ -78,6 +78,7 @@ No user present — never ask, never wait, no checkpoints. The user approved `PL
 2. Phase 2: no new plan, no Jira comment. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win. `~/.local/state/cf-triage/holdout/<KEY>.md` = acceptance scenarios an independent verifier runs against the preview after the MR exists. Read them, make the change satisfy them; never edit that file.
 3. Phase 3: implement all plan steps in one go. Stay strictly in plan scope.
 4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix. UI diff → `/verify-ui` against Storybook (Playwright, headless); routes needing auth can't be checked — list them in the MR description and Jira comment as unverified.
+4a. **Build tool not in the shell allowlist** (BE: `./gradlew`, `mvn`) → CI is the build gate. Never ask to widen the allowlist, never bail for it. Only local static checks (read the diff, `git diff --check`). Commit in plan order (a pinning/characterization test first, then the change), push the branch, open the draft MR early (`/cf-mr --headless`). Poll the MR pipeline with `glab api projects/<id>/merge_requests/<iid>/pipelines` and the jobs of each child pipeline via `.../pipelines/<pid>/bridges` → downstream `.../pipelines/<child>/jobs`. Failed job → `glab api projects/<id>/jobs/<job>/trace`, fix, push. Max 3 red rounds per phase 4, then bail out with the last failing trace excerpt. Phase 4 is green only when every job of the latest pipeline (check/test + lint) is green. A pinning test pushed first must be green on its own pipeline before the refactor commit is pushed.
 5. Phase 5: steps 12–14 on the diff.
 6. Phase 6: `/cf-mr --headless`. No holdout verify here — triage-worker runs it once the preview is up.
 7. Post ONE Jira comment (`jira add-comment`, Czech, my voice, Jira wiki markup, first line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`): MR link, what changed, how to verify (preview/screen URL for FE), anything deviating from the plan. If the ticket has `sentry-*` labels: those Sentry issues resolve automatically once the ticket is Done (list them by short id).
@@ -88,4 +89,4 @@ No user present — never ask, never wait, no checkpoints. The user approved `PL
 
 **Verify fix** — `--verify-fix <report>` in arguments (MR exists, the holdout verifier failed): skip steps 3–6 above. Read the report (failed scenarios, observed vs expected, screenshots) and the scenarios file. Fix the code on the existing branch so the failed scenarios pass — never edit the scenarios. Run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). Post ONE Jira comment, same first line as step 7: which scenarios failed, what you changed. Scenario itself looks wrong (contradicts `PLAN.md` / ticket) → no code change, say so in the comment.
 
-**Bail out** — no MR, just the Jira comment explaining why — when: root cause in `PLAN.md` doesn't hold in the code, the fix needs scope beyond the plan, or phase 4 can't go green. Never push to develop/staging/production, never force-push, never merge or approve.
+**Bail out** — no MR, just the Jira comment explaining why — when: root cause in `PLAN.md` doesn't hold in the code, the fix needs scope beyond the plan, or phase 4 can't go green (incl. 3 red CI rounds, step 4a). Never push to develop/staging/production, never force-push, never merge or approve.

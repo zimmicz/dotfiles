@@ -1,9 +1,0 @@
-[Unit]
-Description=Run cf-triage light lane every minute on weekdays 07-18
-
-[Timer]
-OnCalendar=Mon..Fri *-*-* 07..18:*:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target

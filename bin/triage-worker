@@ -1,7 +1,8 @@
 #!/bin/zsh
 set -uo pipefail
 
-MAX=${MAX:-3}
+MAX=${MAX:-10}
+SLOTS=${SLOTS:-3} IMPL_SLOTS=${IMPL_SLOTS:-1} VERIFY_SLOTS=${VERIFY_SLOTS:-1}
 REPOS=~/work/cleverfarm/repos
 LOG_DIR=~/.local/state/cf-triage
 AI_MARK="AI triage (Claude, headless)"
@@ -9,7 +10,8 @@ NOTES=$LOG_DIR/notes.txt
 HOLDOUT=$LOG_DIR/holdout
 SELF=${0:A}
 LOCKS=$LOG_DIR/locks
-mkdir -p $LOG_DIR $HOLDOUT $LOCKS
+SLOTDIR=$LOG_DIR/slots
+mkdir -p $LOG_DIR $HOLDOUT $LOCKS $SLOTDIR
 
 STREAM_JQ='if .type == "system" and .subtype == "init" then "🆔 session \(.session_id) — reopen: cd \(.cwd) && claude --resume \(.session_id)"
   elif .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
@@ -100,36 +102,48 @@ implement() {
   [[ -n "$MR" ]] && echo "  mr -> $MR" | tee -a $LOG && echo "$MR" >$LOG_DIR/$KEY.mr
 }
 
-verify() {
-  local KEY=$1 LOG=$LOG_DIR/$1.log OUT=$LOG_DIR/$1.verify.md WT0="" R WT MR PID IID PIPE SHA
-  local TARGETS=()
-  [[ -f $HOLDOUT/$KEY.md && -n "$2" ]] || return 2
+verify_targets() {
+  local KEY=$1 R WT MR PID IID PIPE SHA
+  [[ -n "$2" ]] || return 2
   for R in ${(s:,:)2}; do
     WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
     [[ -n "$WT" ]] || return 2
-    [[ -n "$WT0" ]] || WT0=$WT
-    MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null | jq -c '.[0] // empty')
+    MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null </dev/null | jq -c '.[0] // empty')
     [[ -n "$MR" ]] || return 2
     PID=$(jq -r .project_id <<<$MR) IID=$(jq -r .iid <<<$MR)
-    PIPE=$(glab api "projects/$PID/merge_requests/$IID/pipelines" | jq -c '.[0] // empty')
+    PIPE=$(glab api "projects/$PID/merge_requests/$IID/pipelines" </dev/null | jq -c '.[0] // empty')
     [[ "$(jq -r .status <<<$PIPE)" == success ]] || return 2
     SHA=$(jq -r .sha <<<$PIPE)
     if [[ $2 == cf-farm-frontend ]]; then
-      glab api "projects/$PID/merge_requests/$IID/notes?per_page=100" \
+      glab api "projects/$PID/merge_requests/$IID/notes?per_page=100" </dev/null \
         | jq -e --arg s "${SHA[1,8]}" 'any(.[]; (.body | contains("amplify-preview-url")) and (.body | contains("@ " + $s)))' >/dev/null || return 2
     fi
-    TARGETS+=("$R:$PID:$IID:$(jq -r .id <<<$PIPE):${SHA[1,8]}")
+    echo "$R:$PID:$IID:$(jq -r .id <<<$PIPE):${SHA[1,8]}"
   done
-  echo "=== verify $KEY (${(j:, :)TARGETS}) $(date -Iseconds)" | tee -a $LOG
+}
+
+verify_ready() { [[ -f $HOLDOUT/$1.md ]] && verify_targets $1 $2 >/dev/null }
+
+verify() {
+  local KEY=$1 KIND=${3:-ui} LOG=$LOG_DIR/$1.log WT0 T
+  local OUT=$LOG_DIR/$KEY.verify$([[ $KIND == api ]] && echo -api).md SCEN=$HOLDOUT/$KEY$([[ $KIND == api ]] && echo .api).md
+  local TARGETS=() WTA=() RS=(${(s:,:)2})
+  [[ -f $SCEN ]] || return 2
+  T=$(verify_targets $KEY $2) || return 2
+  TARGETS=(${(f)T})
+  WTA=($REPOS/${RS[1]}/.worktrees/${KEY}-*(N/[1]))
+  [[ -n "$WTA" ]] || return 2
+  WT0=$WTA
+  echo "=== verify-$KIND $KEY (${(j:, :)TARGETS}) $(date -Iseconds)" | tee -a $LOG
   local MEDIA=$LOG_DIR/$KEY.verify-media
   rm -rf $OUT $MEDIA
   local CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-env/*' 2>/dev/null | sort -V | tail -1)
   local MCP=$(jq -nc --arg d $MEDIA '{mcpServers:{playwright:{type:"stdio",command:"npx",args:["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--output-dir",$d]}}}')
   local PANE=$(wm_window $WT0 $LOG)
-  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-verify $KEY repos=${(j:,:)TARGETS} branch=${WT0:t} video=$MEDIA/$KEY.webm" \
+  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-verify-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA/$KEY.webm")" \
     --model sonnet \
     --strict-mcp-config --mcp-config "$MCP" \
-    --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*)" \
+    --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*)" \
     --disallowedTools "Edit Bash(git:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)
@@ -166,16 +180,26 @@ lock_resolve() {
   return 0
 }
 
+conflict_state() {
+  local GIT=$1 TGT=$2 BR=$3 DRAFT=$4 GO=$5
+  [[ -d $GIT/.git ]] || { echo norepo; return }
+  git -C $GIT fetch -q origin $TGT $BR || return 1
+  echo "$(git -C $GIT rev-parse origin/$BR) $DRAFT $GO"
+}
+
+conflict_due() {
+  local PID=$1 IID=$2 R=$3 BR=$4 TGT=$5 DRAFT=$6 GO=$7 STATE
+  STATE=$(conflict_state $REPOS/$R $TGT $BR $DRAFT $GO) || return 1
+  [[ "$(cat $LOG_DIR/conflicts/$PID-$IID 2>/dev/null)" != "$STATE" ]]
+}
+
 resolve_conflict() {
   local PID=$1 IID=$2 R=$3 BR=$4 TGT=$5 DRAFT=$6 GO=$7 URL=$8
   local GIT=$REPOS/$R KEY=${$(grep -oiP '^dev-\d+' <<<$BR):u} MARK=$LOG_DIR/conflicts/$1-$2
   local LOG=$LOG_DIR/${KEY:-$BR}.log REPORT=$MARK.md WHO="$URL (${KEY:-$BR})"
-  local OLD STATE=norepo
-  if [[ -d $GIT/.git ]]; then
-    git -C $GIT fetch -q origin $TGT $BR || return
-    OLD=$(git -C $GIT rev-parse origin/$BR)
-    STATE="$OLD $DRAFT $GO"
-  fi
+  local OLD STATE
+  STATE=$(conflict_state $GIT $TGT $BR $DRAFT $GO) || return
+  [[ $STATE == norepo ]] || OLD=${STATE%% *}
   [[ "$(cat $MARK 2>/dev/null)" == "$STATE" ]] && return
   echo $STATE >$MARK
   [[ $STATE == norepo ]] && { echo "$WHO conflicts, no local repo $R" >>$NOTES; return }
@@ -263,21 +287,27 @@ stage_mr() {
 }
 
 stage_verify() {
-  local KEY=$1 REPO=$2 RC
-  verify $KEY $REPO
+  local KEY=$1 REPO=$2 RC REPORT=$LOG_DIR/$1.verify.md
+  verify $KEY $REPO ui
   RC=$?
   (( RC == 2 )) && return 2
+  if (( RC == 0 )) && [[ -f $HOLDOUT/$KEY.api.md ]]; then
+    REPORT=$LOG_DIR/$KEY.verify-api.md
+    verify $KEY $REPO api
+    RC=$?
+    (( RC == 2 )) && return 2
+  fi
   if (( RC == 0 )); then
     relabel $KEY ai-verify-retry ai-verified; note $KEY "holdout scenarios pass: $(cat $LOG_DIR/$KEY.mr)"
   elif (( RC == 3 )); then
     relabel $KEY "" ai-verify-failed; note $KEY "verifier crashed, see \`$LOG_DIR/$KEY.log\`"
   elif (( RC == 4 )); then
-    relabel $KEY "" ai-verify-failed; note $KEY "verify blocked (env/data), see \`$LOG_DIR/$KEY.verify.md\`"
+    relabel $KEY "" ai-verify-failed; note $KEY "verify blocked (env/data), see \`$REPORT\`"
   elif search "key = $KEY AND labels = ai-verify-retry" 1 | jq -e '.issues | length > 0' >/dev/null; then
-    relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios still fail after retry, see \`$LOG_DIR/$KEY.verify.md\`"
+    relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios still fail after retry, see \`$REPORT\`"
   else
     relabel $KEY "" ai-verify-retry
-    implement $KEY ${REPO%%,*} "--verify-fix $LOG_DIR/$KEY.verify.md"
+    implement $KEY ${REPO%%,*} "--verify-fix $REPORT"
     note $KEY "holdout scenarios failed, fix pushed, re-verify next run"
   fi
   return 0
@@ -293,13 +323,18 @@ stage_conflict() {
   resolve_conflict "${@:2}"
 }
 
+stage_sentry() {
+  ${SELF:h}/sentry-triage
+  return 0
+}
+
 run_stage() {
   flock -n -o -E 75 $LOCKS/$2 $SELF --stage "$@" </dev/null
   local RC=$?
-  (( RC == 75 )) && echo "  $2 busy in the other lane, skipped"
+  (( RC == 75 )) && echo "  $2 busy in another stage, skipped"
   if (( RC != 0 && RC != 2 && RC != 75 )); then
     echo "  stage $1 $2 crashed, exit $RC"
-    note $2 "stage $1 crashed (exit $RC), see \`journalctl --user -u cf-triage -u cf-triage-light\`"
+    note $2 "stage $1 crashed (exit $RC), see \`journalctl --user -u 'cf-triage-*'\`"
   fi
   return $RC
 }
@@ -309,32 +344,75 @@ if [[ "${1:-}" == --stage ]]; then
   exit $?
 fi
 
-if [[ -n "${1:-}" && "$1" != --light ]]; then
-  LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
-  LANE=light
-  [[ " $LABELS " == *" ai-fix "* || " $LABELS " == *" ai-mr "* ]] && LANE=heavy
-  BUSY_RC=75
-else
-  LANE=heavy
-  [[ "${1:-}" == --light ]] && LANE=light
-  BUSY_RC=0
+if [[ "${1:-}" == --run ]]; then
+  run_stage "${@:2}"
+  exit $?
 fi
 
-if [[ "${TRIAGE_LOCKED:-}" != 1 ]]; then
-  LANE_LOCK=$LOG_DIR/.lock
-  [[ $LANE == light ]] && LANE_LOCK=$LOG_DIR/.lock-light
-  TRIAGE_LOCKED=1 flock -n -o -E 75 $LANE_LOCK $SELF "$@"
-  RC=$?
-  if (( RC == 75 )); then
-    (( BUSY_RC )) && echo "$LANE lane busy, run again when its current run finishes" >&2
-    exit $BUSY_RC
+stage_class() { case $1 in impl|mr) echo impl ;; verify) echo verify ;; esac }
+stage_timeout() { case $1 in impl|mr|conflict|verify) echo 110min ;; done) echo 5min ;; *) echo 30min ;; esac }
+
+RUNNING=(${(f)"$(systemctl --user list-units 'cf-triage-*' --state=active,activating,deactivating --plain --no-legend | awk '{print $1}')"})
+TAKEN=() SPAWNED=0
+
+pick_slot() {
+  local I F
+  for (( I=1; I<=$2; I++ )); do
+    F=$SLOTDIR/$1$I
+    (( ${TAKEN[(Ie)$F]} )) && continue
+    flock -n $F true 2>/dev/null || continue
+    PICKED=$F
+    return 0
+  done
+  return 1
+}
+
+spawn_stage() {
+  local S=$1 KEY=${2//[^A-Za-z0-9_.-]/-} CLS SLOT CAP=() F CMD=() N
+  local UNIT=cf-triage-$KEY-$S
+  [[ -n ${(M)RUNNING:#cf-triage-$KEY-*} ]] && return 1
+  pick_slot slot- $SLOTS || return 3
+  SLOT=$PICKED
+  CLS=$(stage_class $S)
+  if [[ -n $CLS ]]; then
+    N=$IMPL_SLOTS
+    [[ $CLS == verify ]] && N=$VERIFY_SLOTS
+    pick_slot $CLS- $N || return 4
+    CAP=($PICKED)
   fi
-  exit $RC
-fi
-export TRIAGE_LOCKED
+  for F in $SLOT $CAP; do CMD+=(flock -n -o -E 75 $F); done
+  CMD+=($SELF --run $S $2 "${@:3}")
+  if [[ -n "${TRIAGE_DRY:-}" ]]; then
+    echo "would spawn $UNIT (slots ${SLOT:t} ${CAP:t})"
+  else
+    systemd-run --user --collect --quiet --unit=$UNIT "--setenv=PATH=$PATH" \
+      -p EnvironmentFile=$HOME/.config/cf-triage.env -p RuntimeMaxSec=$(stage_timeout $S) \
+      -p SuccessExitStatus="2 75" $CMD || return 1
+    echo "spawned $UNIT (slots ${SLOT:t} ${CAP:t})"
+  fi
+  TAKEN+=($SLOT $CAP)
+  RUNNING+=($UNIT.service)
+  (( SPAWNED++ ))
+  return 0
+}
 
-NEW="" IMPL="" REPLIES="" MR_REPLIES="" VERIFY="" DONE=""
-if [[ -n "${1:-}" && "$1" != --light ]]; then
+emit() {
+  local L
+  while read -r L; do [[ -n "$L" ]] && echo "$1 $L"; done <<<"$2"
+}
+
+dispatch() {
+  local S KEY ARGS
+  while read -r S KEY ARGS; do
+    [[ -z "$S" ]] && continue
+    spawn_stage $S $KEY ${=ARGS}
+    (( $? == 3 )) && { echo "no free slot ($SLOTS busy), rest waits for next tick"; return }
+  done
+}
+
+NEW="" IMPL="" REPLIES="" MR_REPLIES="" VERIFY="" DONE="" CONFLICT=""
+if [[ -n "${1:-}" ]]; then
+  LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
   if [[ " $LABELS " == *" ai-fix "* ]]; then
     IMPL=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
   elif [[ " $LABELS " == *" ai-mr "* && "${2:-}" == --verify ]]; then
@@ -344,58 +422,55 @@ if [[ -n "${1:-}" && "$1" != --light ]]; then
   else
     NEW=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
   fi
-elif [[ $LANE == light ]]; then
+else
   NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
   REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory = "To Do"' 20 | awaiting_reply)
-else
-  IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' 20 | not_awaiting | head -${IMPL_MAX:-1})
-  MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done ORDER BY updated ASC' 20 | awaiting_reply | head -${IMPL_MAX:-1})
-  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed) AND statusCategory != Done ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ")
+  IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' 20 | not_awaiting)
+  MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done ORDER BY updated ASC' 20 | awaiting_reply)
+  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed) AND statusCategory != Done ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
+    | while read -r K R; do verify_ready $K $R </dev/null && echo "$K $R"; done)
   DONE=$(search 'project = DEV AND labels in (triaged, ai-mr, triage-failed, ai-fix-failed) AND labels not in (ai-done) AND status = Done' 5 \
     | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
+  CHECKED=($LOG_DIR/.conflicts-checked(Nmm-${CONFLICT_EVERY:-5}))
+  if (( ! ${#CHECKED} )) || [[ -n "${TRIAGE_DRY:-}" ]]; then
+    [[ -n "${TRIAGE_DRY:-}" ]] || { mkdir -p $LOG_DIR/conflicts; touch $LOG_DIR/.conflicts-checked }
+    CONFLICT=$(conflicts | while read -r PID IID R BR TGT DRAFT GO URL; do
+      conflict_due $PID $IID $R $BR $TGT $DRAFT $GO </dev/null || continue
+      K=${$(grep -oiP '^dev-\d+' <<<$BR):u}
+      echo "${K:-${BR//\//-}} $PID $IID $R $BR $TGT $DRAFT $GO $URL"
+    done)
+  fi
 fi
 
-PAR=1
-[[ $LANE == light ]] && PAR=${LIGHT_PAR:-2}
-for S L in reply "$REPLIES" new "$NEW" impl "$IMPL" mr "$MR_REPLIES"; do
-  while read -r KEY REPO; do
-    [[ -z "$KEY" ]] && continue
-    while (( ${#jobstates} >= PAR )); do sleep 1; done
-    run_stage $S $KEY $REPO &
-  done <<<"$L"
-done
-wait
+LASTFAIL=($LOG_DIR/sentry-last.txt(Nmm-15))
+WORK=$(
+  emit reply "$REPLIES"
+  emit mr "$MR_REPLIES"
+  emit verify "$VERIFY"
+  emit conflict "$CONFLICT"
+  emit new "$NEW"
+  emit impl "$IMPL"
+  emit done "$DONE"
+  if [[ -z "${1:-}" ]] && [[ "$(cat $LOG_DIR/sentry-today 2>/dev/null)" != "$(date +%F)" ]] && (( ! ${#LASTFAIL} )); then
+    echo "sentry sentry"
+  fi
+)
+dispatch <<<"$WORK"
 
-VERIFIED=0
-while read -r KEY REPO; do
-  [[ -z "$KEY" ]] && continue
-  (( VERIFIED >= ${VERIFY_MAX:-1} )) && break
-  run_stage verify $KEY $REPO
-  (( $? == 0 )) && (( VERIFIED++ ))
-done <<<"$VERIFY"
-
-while read -r KEY IDS; do
-  [[ -n "$KEY" ]] && run_stage done $KEY ${=IDS}
-done <<<"$DONE"
-
-if [[ -z "${1:-}" ]]; then
-  mkdir -p $LOG_DIR/conflicts
-  while read -r ARGS; do
-    [[ -z "$ARGS" ]] && continue
-    A=(${=ARGS})
-    K=${$(grep -oiP '^dev-\d+' <<<${A[4]}):u}
-    run_stage conflict ${K:-${A[4]//\//-}} ${=ARGS}
-  done <<<"$(conflicts)"
+if [[ -n "${1:-}" ]]; then
+  (( SPAWNED )) || { echo "nothing spawned: ticket already running, no free slot, or no work for its labels" >&2; exit 75 }
+  exit 0
 fi
+[[ -n "${TRIAGE_DRY:-}" ]] && exit 0
 
 POSTED=$LOG_DIR/.posted QUIET=$LOG_DIR/.quiet SEND=$NOTES.$$
 if [[ -s $NOTES ]] && mv $NOTES $SEND; then
-  if printf '**cf-triage %s run %s**\n%s\n' $LANE "$(date '+%H:%M')" "$(sed 's/^/• /' $SEND)" | ~/.claude/scripts/slack-post.sh "cf-triage"; then
+  if printf '**cf-triage run %s**\n%s\n' "$(date '+%H:%M')" "$(sed 's/^/• /' $SEND)" | ~/.claude/scripts/slack-post.sh "cf-triage"; then
     rm -f $SEND $QUIET && touch $POSTED
   else
     cat $SEND >>$NOTES && rm -f $SEND
   fi
-elif [[ -z "${1:-}" ]]; then
+elif (( ! SPAWNED && ! ${#RUNNING} )); then
   date '+%a %H:%M' >>$QUIET
   RECENT=($POSTED(Nmh-3))
   if (( ! ${#RECENT} )); then

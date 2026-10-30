@@ -55,7 +55,7 @@ No user present — never ask, never wait. Replaces step 5:
    When: <user actions>
    Then: <observable outcome in the UI>
    ```
-   Derive them from the ticket's acceptance criteria / the bug's repro, not from the planned code. Each must be checkable by clicking through the UI. Change not observable in the UI (Sentry filter, pure refactor, BE change no screen shows) → file contains one line `NONE: <reason>`.
+   Derive them from the ticket's acceptance criteria / the bug's repro, not from the planned code. Each must be checkable by clicking through the UI. Change not observable in the UI (Sentry filter, pure refactor, BE change no screen shows) → file contains one line `NONE: <reason>`. A BE refactor (behaviour must not change, endpoints reachable) additionally gets `~/.local/state/cf-triage/holdout/<KEY>.api.md` for `/cf-verify-api` (format in that skill): 3–8 request sequences (GET and mutations) over the endpoints the refactored code serves, picked from PLAN.md's touched code, not from the diff. Write it only for refactors; no such endpoint → skip it.
 4. Post ONE Czech Jira comment via `jira add-comment <ticket-id> "<text>"` (bare `jira`, matches the permission allowlist) in the user's voice (`~/.claude/my-voice.md`): root cause (bugs), plan summary, scenarios (Given/When/Then, so the human approves them with `ai-fix`), `[?]` questions. First line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._` (triage-worker detects replies by it). Jira wiki markup, not markdown: `h3.` headings, `*` bullets, `#` numbered, `{{code}}` inline, `{code}` blocks.
 
 ### Follow-up (headless, `PLAN.md` exists + `TICKET.md` has comments after the last `_AI triage` one)

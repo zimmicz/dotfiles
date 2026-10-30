@@ -1,12 +1,12 @@
 ---
-name: cf-verify
+name: cf-verify-ui
 description: |
   Independent holdout verifier for the cf-triage factory. Runs the ticket's
   Given/When/Then scenarios from ~/.local/state/cf-triage/holdout/<KEY>.md in a
   real browser against the MR's preview (FE-only: Amplify preview; any BE repo,
   also cross-repo: a throwaway cf-dyn-env env with every BE MR image + the FE
   branch) and writes a pass/fail report (+ optional video). Never changes
-  code. Invoked headless by triage-worker; use by hand with "cf-verify DEV-XXXX".
+  code. Invoked headless by triage-worker; use by hand with "cf-verify-ui DEV-XXXX".
 ---
 
 # Verify MR against holdout scenarios

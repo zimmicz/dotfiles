@@ -747,7 +747,7 @@ func do(status string, f func() error) tea.Cmd {
 
 func (m *model) reload() {
 	m.busy = workerBusy()
-	out, _ := exec.Command("systemctl", "--user", "is-active", "cf-triage.service", "cf-triage-light.service").Output()
+	out, _ := exec.Command("systemctl", "--user", "is-active", "cf-triage.service").Output()
 	m.svc = strings.TrimSpace(string(out))
 	key := m.sel().key
 	m.rows, m.otherN = nil, 0
@@ -969,8 +969,8 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		case msg.err != nil:
 			m.status = "\033[31m" + msg.err.Error() + "\033[0m"
 		case msg.kick:
-			exec.Command("systemctl", "--user", "start", "--no-block", "cf-triage.service", "cf-triage-light.service").Run()
-			m.status += "\033[2m, both lanes kicked (a busy lane picks it up when free)\033[0m"
+			exec.Command("systemctl", "--user", "start", "--no-block", "cf-triage.service").Run()
+			m.status += "\033[2m, dispatcher kicked (a free slot picks it up)\033[0m"
 		}
 		delete(m.comments, m.sel().key)
 		m.jiraAt = time.Now()
@@ -1354,10 +1354,8 @@ func (m model) View() string {
 		worker = "\033[32m● busy\033[0m"
 	}
 	head := fmt.Sprintf(" \033[1mcf-triage\033[0m   %s   \033[2m%d tickets   $%.2f\033[0m", worker, len(m.rows)+m.otherN, total)
-	for i, s := range strings.Fields(m.svc) {
-		if s == "failed" {
-			head += "   \033[31m" + []string{"heavy", "light"}[min(i, 1)] + " lane failed\033[0m"
-		}
+	if m.svc == "failed" {
+		head += "   \033[31mdispatcher failed\033[0m"
 	}
 	switch {
 	case m.jiraErr != nil:
