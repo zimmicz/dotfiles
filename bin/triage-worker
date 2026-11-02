@@ -40,6 +40,27 @@ snap_human() {
 
 mark_handled() { echo ${2:-0} >$HANDLED/$1 }
 
+has_label() {
+  search "key = $1" 1 | jq -e --arg l "$2" '.issues[0].fields.labels | index($l) != null' >/dev/null
+}
+
+grill_outcome() { head -1 $LOG_DIR/$1.grill 2>/dev/null; }
+
+grill_bump() {
+  echo $(( $(<$LOG_DIR/$1.round 2>/dev/null || echo 0) + 1 )) >$LOG_DIR/$1.round
+  date +%s >$STALLED/$1.ask
+  rm -f $STALLED/$1.askalert
+}
+
+grill_remind() {
+  local S=$STALLED/$1.ask A=$STALLED/$1.askalert NOW=$(date +%s)
+  [[ -f $S ]] || { echo $NOW >$S; return }
+  [[ -f $A ]] && return
+  (( NOW - $(<$S) < ${GRILL_REMIND_HOURS:-24} * 3600 )) && return
+  note $1 "questions waiting for you in Jira for $(( (NOW - $(<$S)) / 3600 )) h (\`needs-answer\`)"
+  echo $NOW >$A
+}
+
 answered_since() {
   jira GET "/rest/api/3/issue/$1/comment?maxResults=1000" \
     | jq -e --arg m "$AI_MARK" --argjson id ${2:-0} "$HUMAN_JQ"' any(.comments[]; (human | not) and ((.id | tonumber) > $id))' >/dev/null
@@ -68,6 +89,10 @@ relabel() {
   jira PUT "/rest/api/2/issue/$1" "{\"update\":{\"labels\":[$OPS]}}" >/dev/null
 }
 
+unlabel() {
+  jira PUT "/rest/api/2/issue/$1" "{\"update\":{\"labels\":[{\"remove\":\"$2\"}]}}" >/dev/null
+}
+
 resolve_sentry() {
   local KEY=$1; shift
   claude -p "Sentry org cleverfarm-sro, regionUrl https://us.sentry.io. No human present, never ask. For EACH of these issue short ids: $* -> update_issue status 'resolved', reason 'Jira $KEY released'. Final answer: 'done' if all succeeded, else the errors." \
@@ -92,12 +117,16 @@ analyze() {
     echo "  worktree setup failed" | tee -a $LOG
     return 1
   fi
-  local PANE=$(wm_window $WT $LOG)
-  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work $KEY --headless" \
+  local PANE=$(wm_window $WT $LOG) GARGS=""
+  if [[ -n "${GRILL:-}" ]]; then
+    rm -f $LOG_DIR/$KEY.grill
+    GARGS=" --grill --round $(( $(<$LOG_DIR/$KEY.round 2>/dev/null || echo 0) + 1 )) --max-rounds ${GRILL_MAX_ROUNDS:-3}"
+  fi
+  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work $KEY --headless$GARGS" \
     --model $TIER $DIRS \
-    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) Write(/$HOLDOUT/$KEY.api.md) Edit(/$HOLDOUT/$KEY.api.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
-    --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) && [[ -f $WT/PLAN.md ]] \
-    && echo "  ok -> $WT/PLAN.md" | tee -a $LOG
+    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$LOG_DIR/$KEY.grill) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) Write(/$HOLDOUT/$KEY.api.md) Edit(/$HOLDOUT/$KEY.api.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
+    --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) && [[ -f $WT/PLAN.md || "$(grill_outcome $KEY)" == ASK ]] \
+    && echo "  ok -> $WT/PLAN.md${$(grill_outcome $KEY):+ (grill: $(grill_outcome $KEY))}" | tee -a $LOG
   local RC=$? F
   for F in $HOLDOUT/$KEY.md:holdout.md $HOLDOUT/$KEY.api.md:holdout.api.md; do
     [[ -f ${F%%:*} ]] && { jira attach $KEY ${F%%:*} ${F##*:} >/dev/null || echo "  holdout attach failed: ${F##*:}" | tee -a $LOG; }
@@ -387,13 +416,26 @@ REPOS_JQ='.issues[] | "\(.key) \(.fields.labels | map(select(startswith("repo-")
 
 stage_new() {
   local ID=$(snap_human $1)
-  if analyze $1 $2; then mark_handled $1 $ID; relabel $1 triage triaged; note $1 "triaged, PLAN.md ready (add \`ai-fix\` to implement)"; else relabel $1 triage triage-failed; note $1 "triage failed, see \`$LOG_DIR/$1.log\`"; fi
+  if analyze $1 $2; then
+    mark_handled $1 $ID
+    if [[ "$(grill_outcome $1)" == ASK ]]; then grill_bump $1; relabel $1 triage needs-answer; note $1 "questions posted, \`needs-answer\` (round $(<$LOG_DIR/$1.round)), reply in Jira"
+    else relabel $1 triage triaged; note $1 "triaged, PLAN.md ready (add \`ai-fix\` to implement)"; fi
+  else relabel $1 triage triage-failed; note $1 "triage failed, see \`$LOG_DIR/$1.log\`"; fi
 }
 
 stage_reply() {
   echo "--- follow-up $1"
-  local ID=$(snap_human $1)
-  if analyze $1 $2; then mark_handled $1 $ID; note $1 "your reply answered"; else relabel $1 triaged triage-failed; note $1 "reply follow-up failed, parked as \`triage-failed\` (re-add \`triage\` to retry), see \`$LOG_DIR/$1.log\`"; fi
+  local ID=$(snap_human $1) CUR=triaged
+  [[ -n "${GRILL:-}" ]] && has_label $1 needs-answer && CUR=needs-answer
+  if analyze $1 $2; then
+    mark_handled $1 $ID
+    if [[ "$(grill_outcome $1)" == ASK ]]; then grill_bump $1; note $1 "your reply answered, more questions (round $(<$LOG_DIR/$1.round)), reply in Jira"
+    else
+      [[ -n "${GRILL:-}" ]] && has_label $1 ai-fix-failed && unlabel $1 ai-fix-failed
+      if [[ $CUR == needs-answer ]]; then relabel $1 needs-answer triaged; note $1 "questions settled, PLAN.md ready (add \`ai-fix\` to implement)"
+      else note $1 "your reply answered"; fi
+    fi
+  else relabel $1 $CUR triage-failed; note $1 "reply follow-up failed, parked as \`triage-failed\` (re-add \`triage\` to retry), see \`$LOG_DIR/$1.log\`"; fi
 }
 
 stage_impl() {
@@ -547,7 +589,7 @@ spawn_stage() {
   if [[ -n "${TRIAGE_DRY:-}" ]]; then
     echo "would spawn $UNIT (slots ${SLOT:t} ${CAP:t})"
   else
-    systemd-run --user --collect --quiet --unit=$UNIT "--setenv=PATH=$PATH" \
+    systemd-run --user --collect --quiet --unit=$UNIT "--setenv=PATH=$PATH" ${GRILL:+--setenv=GRILL=$GRILL} ${GRILL_MAX_ROUNDS:+--setenv=GRILL_MAX_ROUNDS=$GRILL_MAX_ROUNDS} \
       -p EnvironmentFile=$HOME/.config/cf-triage.env -p RuntimeMaxSec=$(stage_timeout $S) \
       -p SuccessExitStatus="2 75" $CMD || return 1
     echo "spawned $UNIT (slots ${SLOT:t} ${CAP:t})"
@@ -575,7 +617,9 @@ dispatch() {
 NEW="" IMPL="" REPLIES="" MR_REPLIES="" VERIFY="" DONE="" CONFLICT="" REVIEW="" RFIX=""
 if [[ -n "${1:-}" ]]; then
   LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
-  if [[ " $LABELS " == *" ai-fix "* ]]; then
+  if [[ -n "${GRILL:-}" && " $LABELS " == *" needs-answer "* ]]; then
+    REPLIES=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
+  elif [[ " $LABELS " == *" ai-fix "* ]]; then
     IMPL=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
   elif [[ " $LABELS " == *" ai-mr "* && "${2:-}" == --verify ]]; then
     VERIFY=$(search "key = ${1:u}" 1 | jq -r "$REPOS_JQ")
@@ -588,8 +632,14 @@ if [[ -n "${1:-}" ]]; then
   fi
 else
   NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
-  REPLIES=$(search 'project = DEV AND labels = triaged AND labels not in (ai-mr) AND statusCategory != Done AND (statusCategory = "To Do" OR labels = ai-fix)' 20 | awaiting_reply)
-  IMPL=$(search 'project = DEV AND labels = ai-fix AND statusCategory != Done ORDER BY updated ASC' 20 | not_awaiting)
+  REPLY_LABELS=triaged GRILL_HOLD=""
+  [[ -n "${GRILL:-}" ]] && REPLY_LABELS="triaged, needs-answer" GRILL_HOLD=" AND labels not in (needs-answer)"
+  REPLIES=$(search "project = DEV AND labels in ($REPLY_LABELS) AND labels not in (ai-mr) AND statusCategory != Done AND (statusCategory = \"To Do\" OR labels = ai-fix)" 20 | awaiting_reply)
+  IMPL=$(search "project = DEV AND labels = ai-fix$GRILL_HOLD AND statusCategory != Done ORDER BY updated ASC" 20 | not_awaiting)
+  if [[ -n "${GRILL:-}" && -z "${TRIAGE_DRY:-}" ]]; then
+    search 'project = DEV AND labels = needs-answer AND statusCategory != Done' 20 | not_awaiting \
+      | while read -r K R; do grill_remind $K; done
+  fi
   MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | awaiting_reply)
   GLCHECKED=($LOG_DIR/.glnotes-checked(Nmm-${GL_EVERY:-2}))
   if (( ! ${#GLCHECKED} )) || [[ -n "${TRIAGE_DRY:-}" ]]; then

@@ -19,6 +19,7 @@ func TestStage(t *testing.T) {
 		"bailed":          {"ai-fix-failed", "ai-fix"},
 		"verify failed":   {"ai-done", "ai-mr", "ai-verify-failed"},
 		"analysis failed": {"triage-failed"},
+		"questions":       {"needs-answer", "ai-fix"},
 	}
 	for want, ls := range cases {
 		if got := stage(ls); got != want {
@@ -34,6 +35,7 @@ func TestGroup(t *testing.T) {
 	}{
 		{row{running: true, jira: true}, gRunning},
 		{row{stage: "plan gate", jira: true}, gNeeds},
+		{row{stage: "questions", jira: true}, gNeeds},
 		{row{stage: "bailed", jira: true}, gNeeds},
 		{row{stage: "mr", jira: true}, gFlight},
 		{row{stage: "RC", parked: true, jira: true}, gParked},

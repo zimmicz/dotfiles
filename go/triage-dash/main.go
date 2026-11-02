@@ -25,7 +25,7 @@ import (
 
 const (
 	jiraBase = "https://cleverfarm.atlassian.net"
-	labels   = "triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-review-retry, ai-reviewed, ai-review-findings, ai-verify-retry, ai-verified, ai-verify-failed, ai-done"
+	labels   = "triage, needs-answer, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-review-retry, ai-reviewed, ai-review-findings, ai-verify-retry, ai-verified, ai-verify-failed, ai-done"
 	sideW    = 34
 	top      = 2
 	detailH  = 5
@@ -81,6 +81,8 @@ func stage(ls []string) string {
 	switch {
 	case has["triage-failed"]:
 		return "analysis failed"
+	case has["needs-answer"]:
+		return "questions"
 	case has["ai-fix-failed"]:
 		return "bailed"
 	case has["ai-verify-failed"]:
@@ -107,6 +109,7 @@ func stage(ls []string) string {
 
 var stageStyle = map[string]struct{ icon, color string }{
 	"plan gate":       {"📋", "33"},
+	"questions":       {"❓", "33"},
 	"verified":        {"✅", "32"},
 	"verify failed":   {"❗", "31"},
 	"analysis failed": {"❌", "31"},
@@ -154,7 +157,7 @@ func group(r row) int {
 		return gTodo
 	case r.parked:
 		return gParked
-	case slices.Contains([]string{"plan gate", "verified", "verify failed", "review findings", "analysis failed", "bailed"}, r.stage):
+	case slices.Contains([]string{"plan gate", "questions", "verified", "verify failed", "review findings", "analysis failed", "bailed"}, r.stage):
 		return gNeeds
 	}
 	return gFlight
@@ -638,7 +641,7 @@ var helpCols = [][]helpSection{
 	},
 }
 
-var legend = []string{"plan gate", "verified", "verify failed", "review findings", "bailed", "implementing", "mr", "reviewed", "review fix", "new", "done", "RC", "nightly", "todo", "-"}
+var legend = []string{"questions", "plan gate", "verified", "verify failed", "review findings", "bailed", "implementing", "mr", "reviewed", "review fix", "new", "done", "RC", "nightly", "todo", "-"}
 
 func helpLines() []string {
 	const keyW, colW = 9, 34

@@ -79,7 +79,10 @@ Sentry (fe-monitoring, can-frontend)
   ▼
 DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentry; description ends with "Belongs in Sentry?" verdict
   │  triage-worker          every minute: cf-work --no-claim → claude -p "/cf-work KEY --headless"
-  ▼
+  ▼  GRILL=1 only: blocking gaps in the ticket?
+[needs-answer]  Czech Jira comment: Zjištěno + numbered Otázky, each with a recommended answer; no PLAN.md, blocks ai-fix
+  │  I reply "ok" / "ok, 3 jinak: …"  →  analysis re-runs: more questions → next round (≤ GRILL_MAX_ROUNDS), none ↓
+  ▼  no gaps (or GRILL off): straight here
 [triaged]  worktree + PLAN.md (first section: Belongs in Sentry? → filter fix if no) + holdout scenarios + Czech Jira comment (🤖 + "AI triage" marker)
   │  I reply in Jira  →  next run (≤2 min) answers, updates PLAN.md + scenarios   (To Do tickets any age, plus any not-Done ticket labelled `ai-fix`, so a comment can't deadlock behind `impl`)
   │  I add label ai-fix  (= approves plan AND scenarios)
@@ -99,6 +102,8 @@ DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentr
 [ai-done]  → next morning sentry-triage picks the next issue
 ```
 
+**Grill phase (opt-in, `GRILL=1` in `~/.config/cf-triage.env`; unset = off, nothing above changes).** `cf-work --headless --grill` first decides whether the ticket has blocking gaps (the answer would change the plan or the scenarios). Yes → ONE Czech Jira comment (`Zjištěno` + numbered `Otázky`, each with a recommended answer and tradeoff), label `triage` → `needs-answer`, Slack line, no PLAN.md. I reply `ok` (take every recommendation) or `ok, 3 jinak: …`; the reply (≤2 min, or `R` in `triage-dash`) re-runs the analysis. More questions → another round (cap `GRILL_MAX_ROUNDS`, default 3, then plan with leftovers as `[!]`); none → PLAN.md + scenarios, `needs-answer` → `triaged`, plan gate as before. `ai-fix` is ignored while `needs-answer` is set. No answer for `GRILL_REMIND_HOURS` (24) → one Slack reminder per round. Sentry tickets are asked only when the root cause stays unconfirmed. Worker ↔ skill handshake: `<KEY>.grill` (`ASK` | `READY`) + `<KEY>.round` in the state dir.
+
 Any other ticket (feature, chore, manual bug): I add labels `triage` + `repo-<dir>` → same flow from `[triaged]` on; PLAN.md starts with Requirements instead of "Belongs in Sentry?". On Done it just gets `ai-done`.
 
 One Sentry issue at a time: `sentry-triage` skips the day (Slack note) while any ticket with a `sentry-*` label and labelled `triage|triaged|triage-failed|ai-fix|ai-mr|ai-fix-failed` is not Done AND its MR is not merged/closed (`glab mr list --all --search KEY` in the `repo-*` repo; no MR at all = blocking, so failed/unfixed tickets block until closed). Jira status doesn't matter — `On nightly` with a merged MR is fine. Sentry resolve waits for status `Done` (prod release), not Release candidate. Stamp `~/.local/state/cf-triage/sentry-today` = already ran today (delete to re-run).
@@ -112,6 +117,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | `triage` | new, waiting for analysis | sentry-triage, or me on any ticket |
 | `sentry-<SHORTID>` | linked Sentry issue(s), full short id (dedup key) | sentry-triage |
 | `repo-<dir>` | repo under `~/work/cleverfarm/repos` | sentry-triage |
+| `needs-answer` | grill phase (`GRILL=1`): questions posted, no plan yet. Blocks `ai-fix`; my reply re-runs the analysis | triage-worker |
 | `triaged` | PLAN.md + comment done | triage-worker |
 | `triage-failed` | analysis or reply follow-up failed (no repo, worktree, crash); parked, no retry loop, re-add `triage` | triage-worker |
 | `ai-fix` | **my approval** to implement PLAN.md | me |

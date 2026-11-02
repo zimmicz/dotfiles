@@ -8,6 +8,9 @@ description: |
   code, writes PLAN.md (root cause for bugs) + plan + holdout scenarios, posts one
   Czech Jira comment, no STOP.
   Re-run after a human reply: answers it, updates PLAN.md.
+  With `--headless --grill --round N --max-rounds M` (only triage-worker, opt-in): before
+  planning, asks blocking questions in a Jira comment (numbered, each with a recommended
+  answer) and writes no plan until they are answered.
 ---
 
 # Analyze ticket requirements
@@ -66,3 +69,21 @@ A human replied. Don't redo the analysis from scratch:
 2. Apply answers / corrections: resolve `[?]` → `[!]` with the decision, adjust root cause / fix plan if challenged. Re-check code if needed.
 3. Update `PLAN.md` in place, and the holdout scenarios file if replies change behaviour or acceptance.
 4. Post ONE reply comment, same format + 🤖 prefix + marker: what changed in the plan, remaining `[?]` if any. Nothing to change → short confirmation.
+
+### Grill mode (`--grill --round N --max-rounds M`)
+
+Passed only by triage-worker when the grill phase is on. Without these args nothing in this section applies. The worker reads the outcome file to decide the next label, so always write it.
+
+Goal: the human answers questions in Jira instead of a session. One round = one comment. Plan comes only after the questions are settled.
+
+1. Headless steps 1–2 (read `TICKET.md`, explore code). Facts the code can answer are never questions.
+2. Blocking gap = the answer would change PLAN.md or the holdout scenarios: unclear goal, two plausible behaviours, no testable acceptance criteria, missing dependency decision. Everything else becomes a `[!]` assumption in the plan.
+3. `sentry-*` ticket: ask only if the root cause is still unconfirmed after exploring. Otherwise no questions.
+4. `N > M`: never ask. Plan with the leftovers as `[!]`.
+5. Gaps found → **ASK**: write no `PLAN.md`, no holdout files. Post ONE Czech comment, same marker line + wiki markup as headless step 4:
+   * `h3. Zjištěno`: facts from the code and decisions settled in earlier rounds, one bullet each.
+   * `h3. Otázky`: `#` numbered, the whole frontier at once (a question depending on an unanswered one waits for the next round). Each: short bold title, body with a concrete example when it helps, then `➡️` recommended answer with a one-line tradeoff. Worded so "ano" accepts the recommendation.
+   * Last line: `Odpověď "ok" = beru všechna doporučení, "ok, 3 jinak: …" = výjimky.`
+   Then write the single line `ASK` to `~/.local/state/cf-triage/<KEY>.grill` (absolute path).
+6. No gaps → headless steps 3–4 as normal (settled decisions in Requirements, new assumptions as `[!]`), then write the single line `READY` to the same file.
+7. Round > 1 (no `PLAN.md`, last AI comment has `Otázky`): read the human reply in `TICKET.md`. `ok` accepts every `➡️`; `N jinak: X` overrides question N; free text answers what it addresses. Fold decisions into Zjištěno, recompute the frontier, then step 5 or 6.
