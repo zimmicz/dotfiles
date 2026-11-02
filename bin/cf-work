@@ -169,8 +169,13 @@ for DIR in $REPO_DIRS; do
     fi
     WT="$DIR/.worktrees/$BRANCH"
     echo "→ ${DIR:t}: creating worktree $WT from origin/$BASE..."
-    git -C "$DIR" fetch origin "$BASE"
-    git -C "$DIR" worktree add "$WT" "origin/$BASE" -b "$BRANCH"
+    flock "$DIR/.git" git -C "$DIR" fetch origin "$BASE"
+    if git -C "$DIR" show-ref -q --verify "refs/heads/$BRANCH"; then
+      echo "  (${DIR:t}: branch $BRANCH exists, reusing)"
+      flock "$DIR/.git" git -C "$DIR" worktree add "$WT" "$BRANCH"
+    else
+      flock "$DIR/.git" git -C "$DIR" worktree add "$WT" "origin/$BASE" -b "$BRANCH"
+    fi
     [[ -f "$DIR/.env" ]] && cp "$DIR/.env" "$WT/.env"
   fi
   WORKTREES+=("$WT")
