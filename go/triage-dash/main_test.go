@@ -52,11 +52,14 @@ func TestGroup(t *testing.T) {
 
 func TestParseLog(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "DEV-1.log")
-	os.WriteFile(p, []byte("🔧 Bash {}\n✅ exit error=false cost=$0.5\n  VERDICT: fail\n💬 hi\n✅ exit error=false cost=$0.25\n  VERDICT: pass\n"), 0o644)
+	os.WriteFile(p, []byte("🔧 Bash {}\n✅ exit error=false cost=$0.5\n  VERDICT: fail\n13:20:15 💬 hi\n13:20:16 🆔 session s — reopen: cd /x && claude --resume s\n13:21:00 ✅ exit error=false cost=$0.25\n  VERDICT: pass\n"), 0o644)
 	var r row
 	parseLog(&r, p)
-	if r.cost != 0.75 || r.verdict != "pass" || r.last != "✅ exit error=false cost=$0.25" {
+	if r.cost != 0.75 || r.verdict != "pass" || r.last != "✅ exit error=false cost=$0.25" || r.resume != "cd /x && claude --resume s" {
 		t.Errorf("got %+v", r)
+	}
+	if ts, body := splitTS("13:20:15 🔧 x"); ts != "13:20:15" || body != "🔧 x" {
+		t.Errorf("splitTS = %q %q", ts, body)
 	}
 }
 

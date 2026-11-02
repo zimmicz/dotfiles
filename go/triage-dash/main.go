@@ -35,6 +35,7 @@ var (
 	stateDir = filepath.Join(os.Getenv("HOME"), ".local/state/cf-triage")
 	costRe   = regexp.MustCompile(`cost=\$([0-9.]+)`)
 	verdRe   = regexp.MustCompile(`^\s*VERDICT: (\S+)`)
+	tsRe     = regexp.MustCompile(`^\d\d:\d\d:\d\d `)
 	mrIIDRe  = regexp.MustCompile(`merge_requests/(\d+)`)
 	jiraKey  = regexp.MustCompile(`^[A-Z]+-\d+$`)
 )
@@ -387,6 +388,13 @@ func renderMD(src string, w int) []string {
 	return strings.Split(strings.Trim(out, "\n"), "\n")
 }
 
+func splitTS(l string) (ts, body string) {
+	if m := tsRe.FindString(l); m != "" {
+		return strings.TrimSpace(m), l[len(m):]
+	}
+	return "", l
+}
+
 func isMarker(l string) bool {
 	for _, p := range []string{"🔧", "✅", "🆔", "💬", "==="} {
 		if strings.HasPrefix(l, p) {
@@ -404,20 +412,25 @@ func renderLog(lines []string, w int) []string {
 		}
 		md = nil
 	}
-	for _, l := range lines {
+	for _, raw := range lines {
+		ts, l := splitTS(raw)
 		if isMarker(l) {
 			flush()
 		}
+		dim := ""
+		if ts != "" {
+			dim = "\033[2m" + ts + "\033[0m "
+		}
 		switch {
 		case strings.HasPrefix(l, "💬"), md != nil && !isMarker(l):
-			md = append(md, l)
+			md = append(md, strings.TrimSpace(ts+" "+l))
 		case strings.HasPrefix(l, "🔧"):
-			out = append(out, "\033[2m"+l+"\033[0m")
+			out = append(out, "\033[2m"+raw+"\033[0m")
 		case strings.HasPrefix(l, "✅"):
-			out = append(out, l)
+			out = append(out, dim+l)
 			md = []string{}
 		default:
-			out = append(out, l)
+			out = append(out, dim+l)
 		}
 	}
 	flush()
@@ -457,7 +470,7 @@ func parseLog(r *row, path string) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 1<<24)
 	for sc.Scan() {
-		t := sc.Text()
+		_, t := splitTS(sc.Text())
 		if m := costRe.FindStringSubmatch(t); m != nil {
 			c, _ := strconv.ParseFloat(m[1], 64)
 			r.cost += c

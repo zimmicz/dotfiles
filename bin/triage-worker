@@ -16,9 +16,11 @@ STALLED=$LOG_DIR/stalled
 GLHANDLED=$LOG_DIR/handled-mr
 mkdir -p $LOG_DIR $HOLDOUT $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED
 
-STREAM_JQ='if .type == "system" and .subtype == "init" then "🆔 session \(.session_id) — reopen: cd \(.cwd) && claude --resume \(.session_id)"
+STREAM_JQ='(now | localtime | strftime("%T")) as $t
+  | (if .type == "system" and .subtype == "init" then "🆔 session \(.session_id) — reopen: cd \(.cwd) && claude --resume \(.session_id)"
   elif .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
-  elif .type == "result" then "✅ exit error=\(.is_error) cost=$\(.total_cost_usd)\n\(.result // "")" else empty end'
+  elif .type == "result" then "✅ exit error=\(.is_error) cost=$\(.total_cost_usd)\n\(.result // "")" else empty end)
+  | "\($t) \(.)"'
 
 stream() { jq --unbuffered -r "$STREAM_JQ" }
 
