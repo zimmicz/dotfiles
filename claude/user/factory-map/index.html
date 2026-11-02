@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Factory Map Grill Draft</title>
+<title>Software Factory Map</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Schibsted+Grotesk:wght@400;600;700&display=swap">
 <style>
@@ -115,8 +115,8 @@
 
 <main>
   <header>
-    <h1>Software factory: how a ticket moves (draft with grill phase)</h1>
-    <p class="lede">DRAFT of the next version: the first figure adds the async grill phase (branch <code>feat/triage-grill</code>, opt-in via <code>GRILL=1</code>, not live). The second figure is the pipeline as it runs today. Every box is a Jira label (the ticket’s state), every pill is the stage that moves it on, amber is where I act. One dispatcher tick per minute decides which stage runs next. The bottom band shows the two modes I drive myself.</p>
+    <h1>Software factory: how a ticket moves</h1>
+    <p class="lede">The cf-triage pipeline as it runs today. The first figure shows the grill phase (on with <code>GRILL=1</code>), the second the full pipeline. Every box is a Jira label (the ticket’s state), every pill is the stage that moves it on, amber is where I act. One dispatcher tick per minute decides which stage runs next. The bottom band shows the two modes I drive myself.</p>
     <div class="legend" aria-label="Legend">
       <span><i class="sw state"></i>Jira label (state)</span>
       <span><i class="sw auto"></i>stage, runs in a slot</span>
@@ -128,7 +128,7 @@
   </header>
 
   <figure>
-    <h2>New: grill phase, answered in Jira instead of an interactive session</h2>
+    <h2>Grill phase: questions answered in Jira, not in a session</h2>
     <div class="scroll">
 <svg class="fig" viewBox="0 84 1470 286" role="img" aria-label="Grill phase. Stage new now runs cf-work with the grill flag. If the ticket has blocking gaps, the ticket gets the needs-answer label and a Czech Jira comment with numbered questions, each with a recommended answer. I reply ok or ok with exceptions, the reply stage re-runs the analysis, and either asks the next round or, when no gaps are left, writes the plan and scenarios and moves the ticket to triaged. No gaps from the start skips straight to triaged. From triaged on the flow is unchanged.">
   <defs>
@@ -205,11 +205,11 @@
   <text class="tm" x="878" y="347">• questions are facts the code cannot answer, never lookups</text>
 </svg>
     </div>
-    <figcaption>Amber boxes are new. The worker and the skill hand over through <code>&lt;KEY&gt;.grill</code> (<code>ASK</code> or <code>READY</code>) and <code>&lt;KEY&gt;.round</code> in the state dir.</figcaption>
+    <figcaption>Amber boxes belong to the grill phase. The worker and the skill hand over through <code>&lt;KEY&gt;.grill</code> (<code>ASK</code> or <code>READY</code>) and <code>&lt;KEY&gt;.round</code> in the state dir.</figcaption>
   </figure>
 
   <figure>
-    <h2>Today: the full pipeline</h2>
+    <h2>The full pipeline</h2>
     <div class="scroll">
 <svg class="fig" viewBox="0 0 1470 1290" role="img" aria-label="State machine of the software factory, with the two interactive modes (cf-ticket with two checkpoints, cf-epic with three) in the bottom band. A Sentry issue or my triage label creates a triage ticket. Stage new produces triaged. My ai-fix label starts stage impl, which opens a draft MR labelled ai-mr. Stage review (opus, read-only) produces ai-reviewed; a blocking finding gets one auto-fix round (ai-review-retry), then ai-review-findings. Stage verify produces ai-verified or a one-time retry, then ai-verify-failed. I merge and release, then stage done sets ai-done. Replies in Jira loop back through stages reply and mr. A dispatcher with three slots runs the stages, and a separate conflict stage rebases my open MRs.">
   <defs>
