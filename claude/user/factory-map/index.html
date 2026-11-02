@@ -174,7 +174,7 @@
 
   <path class="p" d="M1022 146 H1098" marker-end="url(#g-ar)"/>
   <rect class="src" x="1100" y="100" width="330" height="92" rx="10"/>
-  <text class="b" x="1265" y="132" text-anchor="middle">ai-mr → review → verify → merge</text>
+  <text class="b" x="1265" y="132" text-anchor="middle">ai-mr → verify → review → merge</text>
   <text class="tm" x="1265" y="152" text-anchor="middle">unchanged, see the map below</text>
 
   <path class="p-a" d="M380 192 V260" marker-end="url(#g-ara)"/>
@@ -211,7 +211,7 @@
   <figure>
     <h2>The full pipeline</h2>
     <div class="scroll">
-<svg class="fig" viewBox="0 0 1470 1290" role="img" aria-label="State machine of the software factory, with the two interactive modes (cf-ticket with two checkpoints, cf-epic with three) in the bottom band. A Sentry issue or my triage label creates a triage ticket. Stage new produces triaged. My ai-fix label starts stage impl, which opens a draft MR labelled ai-mr. Stage review (opus, read-only) produces ai-reviewed; a blocking finding gets one auto-fix round (ai-review-retry), then ai-review-findings. Stage verify produces ai-verified or a one-time retry, then ai-verify-failed. I merge and release, then stage done sets ai-done. Replies in Jira loop back through stages reply and mr. A dispatcher with three slots runs the stages, and a separate conflict stage rebases my open MRs.">
+<svg class="fig" viewBox="0 0 1470 1290" role="img" aria-label="State machine of the software factory, with the two interactive modes (cf-ticket with two checkpoints, cf-epic with three) in the bottom band. A Sentry issue or my triage label creates a triage ticket. Stage new produces triaged. My ai-fix label starts stage impl, which opens a draft MR labelled ai-mr. Stage verify produces ai-verified or a one-time retry, then ai-verify-failed. Stage review (opus, read-only, once per MR) then produces ai-reviewed; a blocking finding gets one auto-fix round (ai-review-retry) with an incremental re-check, then ai-review-findings. I merge and release, then stage done sets ai-done. Replies in Jira loop back through stages reply and mr. A dispatcher with three slots runs the stages, and a separate conflict stage rebases my open MRs.">
   <defs>
     <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-fg" d="M0 0 L10 5 L0 10 z"/></marker>
     <marker id="ara" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-a" d="M0 0 L10 5 L0 10 z"/></marker>
@@ -230,7 +230,7 @@
   <rect class="chip-n" x="574" y="46" width="130" height="24" rx="6"/><text class="cn" x="639" y="62" text-anchor="middle">1 stage / ticket</text>
   <text class="tm" x="740" y="58">Slack #zimmi-claude: digest when a stage left a note,</text>
   <text class="tm" x="740" y="73">“alive” heartbeat if nothing was posted for 3 h</text>
-  <text class="mono" x="38" y="98"><tspan class="b">priority</tspan>  reply › mr › rfix › review › verify › conflict › new › impl › done › sentry   <tspan class="tm">(finish what is in flight before starting new work)</tspan></text>
+  <text class="mono" x="38" y="98"><tspan class="b">priority</tspan>  reply › mr › rfix › verify › review › conflict › new › impl › done › sentry   <tspan class="tm">(finish what is in flight before starting new work)</tspan></text>
 
   <!-- sources -->
   <rect class="src" x="20" y="124" width="150" height="54" rx="8"/>
@@ -259,7 +259,7 @@
   <rect class="chip-h" x="752" y="190" width="98" height="20" rx="5"/><text class="ch" x="801" y="204" text-anchor="middle">ME comment</text>
   <rect class="chip-a" x="856" y="190" width="40" height="20" rx="5"/><text class="ca" x="876" y="204" text-anchor="middle">mr</text>
   <text class="tm" x="906" y="204">answers, pushes a fix if asked (own mr slot).</text>
-  <text class="tm" x="906" y="218">New commits drop ai-verified / -failed / -retry.</text>
+  <text class="tm" x="906" y="218">New commits drop ai-verified / -failed / -retry, review labels stay.</text>
   <text class="tm" x="906" y="232">No answer posted → ai-fix-failed</text>
 
   <!-- states -->
@@ -288,15 +288,15 @@
   <text class="tm" x="828" y="339" text-anchor="middle">In Progress</text>
 
   <rect class="st" x="975" y="260" width="110" height="92" rx="10"/>
-  <text class="lab" x="1030" y="284" text-anchor="middle">ai-reviewed</text>
-  <text class="tm" x="1030" y="303" text-anchor="middle">review clean</text>
-  <text class="tm" x="1030" y="317" text-anchor="middle">or minor only</text>
+  <text class="lab" x="1030" y="284" text-anchor="middle">ai-verified</text>
+  <text class="tm" x="1030" y="303" text-anchor="middle">scenarios pass</text>
+  <text class="tm" x="1030" y="317" text-anchor="middle">on the preview</text>
   <text class="tm" x="1030" y="339" text-anchor="middle">In Progress</text>
 
   <rect class="st" x="1165" y="260" width="110" height="92" rx="10"/>
-  <text class="lab" x="1220" y="284" text-anchor="middle">ai-verified</text>
-  <text class="tm" x="1220" y="303" text-anchor="middle">scenarios pass</text>
-  <text class="tm" x="1220" y="317" text-anchor="middle">on the preview</text>
+  <text class="lab" x="1220" y="284" text-anchor="middle">ai-reviewed</text>
+  <text class="tm" x="1220" y="303" text-anchor="middle">review clean, minor</text>
+  <text class="tm" x="1220" y="317" text-anchor="middle">or fixed once</text>
   <text class="tm" x="1220" y="339" text-anchor="middle">In Progress</text>
 
   <rect class="st" x="1350" y="260" width="100" height="92" rx="10"/>
@@ -322,15 +322,15 @@
   <text class="tm" x="705" y="348" text-anchor="middle">(/cf-ticket)</text>
 
   <path class="p" d="M898 306 H973" marker-end="url(#ar)"/>
-  <rect class="chip-a" x="904" y="295" width="64" height="22" rx="6"/><text class="ca" x="936" y="311" text-anchor="middle">review</text>
-  <text class="tm" x="936" y="334" text-anchor="middle">opus</text>
-  <text class="tm" x="936" y="348" text-anchor="middle">read-only</text>
+  <rect class="chip-a" x="900" y="295" width="72" height="22" rx="6"/><text class="ca" x="936" y="311" text-anchor="middle">verify</text>
+  <text class="tm" x="952" y="372" text-anchor="middle">pipeline green,</text>
+  <text class="tm" x="952" y="386" text-anchor="middle">preview ready</text>
+  <text class="tm flt" x="952" y="404" text-anchor="middle">stuck 4 h → Slack</text>
 
   <path class="p" d="M1085 306 H1163" marker-end="url(#ar)"/>
-  <rect class="chip-a" x="1088" y="295" width="72" height="22" rx="6"/><text class="ca" x="1124" y="311" text-anchor="middle">verify</text>
-  <text class="tm" x="1124" y="372" text-anchor="middle">pipeline green,</text>
-  <text class="tm" x="1124" y="386" text-anchor="middle">preview ready</text>
-  <text class="tm flt" x="1124" y="404" text-anchor="middle">stuck 4 h → Slack</text>
+  <rect class="chip-a" x="1092" y="295" width="64" height="22" rx="6"/><text class="ca" x="1124" y="311" text-anchor="middle">review</text>
+  <text class="tm" x="1124" y="372" text-anchor="middle">opus, read-only</text>
+  <text class="tm" x="1124" y="386" text-anchor="middle">once per MR</text>
 
   <path class="p" d="M1275 306 H1348" marker-end="url(#ar)"/>
   <rect class="chip-h" x="1277" y="272" width="68" height="22" rx="6"/><text class="ch" x="1311" y="288" text-anchor="middle">ME: merge</text>
@@ -359,39 +359,37 @@
   <path class="p-f" d="M790 352 C790 430 700 500 656 500" marker-end="url(#arf)"/>
   <text class="tm" x="716" y="452">mr can’t answer</text>
 
-  <rect class="st-warn" x="775" y="470" width="150" height="64" rx="10"/>
-  <text class="lab" x="850" y="492" text-anchor="middle">ai-verify-retry</text>
-  <text class="tm" x="850" y="510" text-anchor="middle">failed once, fix pushed</text>
-  <text class="tm" x="850" y="524" text-anchor="middle">by impl, verify again</text>
-  <path class="p" d="M850 352 V468" marker-end="url(#ar)"/>
-  <text class="tm" x="858" y="400">verify fails</text><text class="tm" x="858" y="414">first time</text>
-  <path class="p" d="M925 488 C1100 500 1220 470 1220 355" marker-end="url(#ar)"/>
-  <text class="tm" x="1160" y="450">re-verify passes</text>
-
-  <rect class="st-warn" x="880" y="570" width="150" height="64" rx="10"/>
-  <text class="lab" x="955" y="592" text-anchor="middle">ai-review-retry</text>
-  <text class="tm" x="955" y="610" text-anchor="middle">blocking finding,</text>
-  <text class="tm" x="955" y="624" text-anchor="middle">rfix fixes it once</text>
-  <path class="p-f" d="M937 318 V568" marker-end="url(#arf)"/>
-  <text class="tm" x="943" y="560">blocking</text>
-  <path class="p" d="M1010 568 V354" marker-end="url(#ar)"/>
-  <text class="tm" x="1018" y="548">rfix pushed</text>
-
-  <rect class="st-fail" x="1180" y="570" width="150" height="64" rx="10"/>
-  <text class="lab flt" x="1255" y="592" text-anchor="middle">ai-review-findings</text>
-  <text class="tm" x="1255" y="610" text-anchor="middle">still blocking, or</text>
-  <text class="tm" x="1255" y="624" text-anchor="middle">crash (verify runs)</text>
-  <path class="p-f" d="M1030 602 H1178" marker-end="url(#arf)"/>
-  <text class="tm" x="1040" y="596">rfix pushed nothing</text>
-  <text class="tm" x="1255" y="652" text-anchor="middle"><tspan class="hum">ME</tspan> read MR note, fix, drop label to re-review</text>
+  <rect class="st-warn" x="960" y="470" width="150" height="64" rx="10"/>
+  <text class="lab" x="1035" y="492" text-anchor="middle">ai-review-retry</text>
+  <text class="tm" x="1035" y="510" text-anchor="middle">blocking: rfix fixes all,</text>
+  <text class="tm" x="1035" y="524" text-anchor="middle">delta re-check, verify again</text>
+  <path class="p-f" d="M1124 318 V430 H1080 V468" marker-end="url(#arf)"/>
+  <text class="tm" x="1130" y="418">blocking</text>
+  <path class="p" d="M1110 480 C1150 480 1205 430 1220 354" marker-end="url(#ar)"/>
 
   <rect class="st-fail" x="1180" y="470" width="150" height="64" rx="10"/>
-  <text class="lab flt" x="1255" y="492" text-anchor="middle">ai-verify-failed</text>
-  <text class="tm" x="1255" y="510" text-anchor="middle">failed twice, blocked</text>
-  <text class="tm" x="1255" y="524" text-anchor="middle">or verifier crashed</text>
-  <path class="p-f" d="M925 516 H1178" marker-end="url(#arf)"/>
-  <text class="tm" x="944" y="533">fails again / blocked / crash</text>
-  <text class="tm" x="1255" y="552" text-anchor="middle"><tspan class="hum">ME</tspan> read verify report, fix scenario, re-label</text>
+  <text class="lab flt" x="1255" y="492" text-anchor="middle">ai-review-findings</text>
+  <text class="tm" x="1255" y="510" text-anchor="middle">still open after rfix,</text>
+  <text class="tm" x="1255" y="524" text-anchor="middle">or crash (verify runs)</text>
+  <path class="p-f" d="M1110 502 H1178" marker-end="url(#arf)"/>
+  <text class="tm" x="1255" y="552" text-anchor="middle"><tspan class="hum">ME</tspan> read MR note, fix, drop label to re-review</text>
+
+  <rect class="st-warn" x="775" y="570" width="150" height="64" rx="10"/>
+  <text class="lab" x="850" y="592" text-anchor="middle">ai-verify-retry</text>
+  <text class="tm" x="850" y="610" text-anchor="middle">failed once, fix pushed</text>
+  <text class="tm" x="850" y="624" text-anchor="middle">by impl, verify again</text>
+  <path class="p" d="M830 352 V568" marker-end="url(#ar)"/>
+  <text class="tm" x="836" y="400">verify fails</text><text class="tm" x="836" y="414">first time</text>
+  <path class="p" d="M870 568 V450 H1020 V354" marker-end="url(#ar)"/>
+  <text class="tm" x="878" y="444">re-verify passes</text>
+
+  <rect class="st-fail" x="1180" y="570" width="150" height="64" rx="10"/>
+  <text class="lab flt" x="1255" y="592" text-anchor="middle">ai-verify-failed</text>
+  <text class="tm" x="1255" y="610" text-anchor="middle">failed twice, blocked</text>
+  <text class="tm" x="1255" y="624" text-anchor="middle">or verifier crashed</text>
+  <path class="p-f" d="M925 602 H1178" marker-end="url(#arf)"/>
+  <text class="tm" x="944" y="596">fails again / blocked / crash</text>
+  <text class="tm" x="1255" y="652" text-anchor="middle"><tspan class="hum">ME</tspan> read verify report, fix scenario, re-label</text>
 
   <g transform="translate(0,110)">
   <!-- conflicts -->
@@ -492,7 +490,7 @@
   </g>
 </svg>
     </div>
-    <figcaption>Left to right is the happy path. Stage pills sit on the arrow they drive; every pill is one unit started by the dispatcher and holds one slot until it finishes, so a long <code>impl</code> no longer delays <code>verify</code>, <code>reply</code> or <code>conflict</code>. Review runs first on every MR; one blocking finding gets one automatic fix round. Verify only starts once the MR pipeline is green (and, for frontend, the Amplify preview note matches that commit); not ready for 4 h raises a Slack alert naming the reason. Tickets already On nightly, To test, Release candidate or Rejected are ignored by <code>verify</code> and <code>mr</code>.</figcaption>
+    <figcaption>Left to right is the happy path. Stage pills sit on the arrow they drive; every pill is one unit started by the dispatcher and holds one slot until it finishes, so a long <code>impl</code> no longer delays <code>verify</code>, <code>reply</code> or <code>conflict</code>. Verify runs first, once the MR pipeline is green (and, for frontend, the Amplify preview note matches that commit); not ready for 4 h raises a Slack alert naming the reason. Review runs once per MR after verify passed; a blocking verdict gets one automatic fix round that fixes every finding, then an incremental re-check of only the pushed delta. A push answering my comment re-runs verify, never the review. Tickets already On nightly, To test, Release candidate or Rejected are ignored by <code>verify</code> and <code>mr</code>.</figcaption>
   </figure>
 
   <div class="grid">
@@ -502,7 +500,7 @@
         <thead><tr><th>Ticket</th><th>Last comment</th><th>Handled by</th><th>What happens</th></tr></thead>
         <tbody>
           <tr><td><code>triaged</code> without <code>ai-mr</code>: To Do, or any open ticket with <code>ai-fix</code></td><td class="me">mine, newer than the last handled one</td><td class="k">reply</td><td>Re-analyzes, updates PLAN.md + scenarios, posts a bot answer. <code>impl</code> skips the ticket until it is answered. Failure: <span class="bad">triage-failed</span>, no retry loop.</td></tr>
-          <tr><td><code>ai-mr</code>, not Done and not On nightly / To test / Release candidate / Rejected</td><td class="me">mine, newer than the last handled one</td><td class="k">mr</td><td>Implementer runs again on the same worktree. A question gets a Jira answer; a change request also gets a push to the same MR, which drops <code>ai-verified</code> / <code>ai-verify-failed</code> / <code>ai-verify-retry</code> so verify runs again. No bot answer afterwards: <span class="bad">ai-fix-failed</span>.</td></tr>
+          <tr><td><code>ai-mr</code>, not Done and not On nightly / To test / Release candidate / Rejected</td><td class="me">mine, newer than the last handled one</td><td class="k">mr</td><td>Implementer runs again on the same worktree. A question gets a Jira answer; a change request also gets a push to the same MR, which drops <code>ai-verified</code> / <code>ai-verify-failed</code> / <code>ai-verify-retry</code> so verify runs again (review labels stay, no re-review). No bot answer afterwards: <span class="bad">ai-fix-failed</span>.</td></tr>
           <tr><td>any factory ticket</td><td>bot (“AI triage” marker), or already handled</td><td class="k">nobody</td><td>Waits for me. A bot comment posted after mine no longer hides it: pending = newest human comment id above <code>handled/&lt;KEY&gt;</code>.</td></tr>
           <tr><td><code>triage-failed</code>, <code>ai-fix-failed</code></td><td>any</td><td class="k">nobody</td><td>Parked. Re-add <code>triage</code> / <code>ai-fix</code>, or swap <code>ai-fix-failed</code> back to <code>ai-mr</code>, to get it read again.</td></tr>
           <tr><td>Done, or merged (On nightly, To test, Release candidate, Rejected)</td><td>any</td><td class="k">nobody</td><td>Ignored. Only stage <code>done</code> touches Done tickets.</td></tr>
@@ -521,7 +519,7 @@
           <li>Good: add <code>ai-fix</code>. It approves plan and scenarios.</li>
         </ul></div>
         <div class="card gate"><h3>MR gate</h3><ul>
-          <li>Needs <code>ai-verified</code>; read the review and verify notes on the MR. <code>ai-review-findings</code> = look at the review first.</li>
+          <li>Needs <code>ai-verified</code> + <code>ai-reviewed</code>; read the verify and review notes on the MR. <code>ai-review-findings</code> = look at the review first.</li>
           <li>Review, mark ready, add reviewers, merge.</li>
           <li>Changes wanted: comment in Jira, <code>mr</code> pushes to the same MR.</li>
         </ul></div>
@@ -544,9 +542,9 @@
         <tr><td class="k">reply</td><td><code>triaged</code> without <code>ai-mr</code>, To Do or <code>ai-fix</code>, comment newer than the last handled one</td><td>1</td><td>Stays <code>triaged</code>, plan updated, comment id saved in <code>handled/KEY</code></td><td>→ <span class="bad">triage-failed</span></td><td>30 min</td></tr>
         <tr><td class="k">impl</td><td><code>ai-fix</code>, not Done, no unanswered comment</td><td>1 + impl</td><td>→ <code>ai-mr</code> (draft MR, no reviewers). Already fixed elsewhere: closed as duplicate, back to <code>triaged</code></td><td>→ <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
         <tr><td class="k">mr</td><td><code>ai-mr</code>, not Done or merged, comment newer than the last handled one</td><td>1 + mr</td><td>Stays <code>ai-mr</code>; answer posted, fix pushed if asked (new commits drop the verify labels)</td><td>→ <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
-        <tr><td class="k">review</td><td><code>ai-mr</code> without review / verify labels, not merged, worktree and MR exist</td><td>1 + review</td><td>Opus, read-only, one MR note. clean or minor → <code>ai-reviewed</code>; blocking → <code>ai-review-retry</code></td><td>Crash → <span class="bad">ai-review-findings</span></td><td>45 min</td></tr>
-        <tr><td class="k">rfix</td><td><code>ai-mr</code> + <code>ai-review-retry</code></td><td>1 + impl</td><td>Fixes must-fix findings once; pushed → <code>ai-reviewed</code></td><td>Nothing pushed → <span class="bad">ai-review-findings</span> (verify still runs)</td><td>110 min</td></tr>
-        <tr><td class="k">verify</td><td><code>ai-mr</code> + <code>ai-reviewed</code> or <code>ai-review-findings</code>, without <code>ai-verified</code> / <code>ai-verify-failed</code>, holdout file exists, every repo’s latest pipeline green (frontend: Amplify note for that commit), not merged. Not ready for 4 h: Slack alert with the reason, daily while stuck</td><td>1 + verify</td><td>→ <code>ai-verified</code> (UI scenarios, plus API diff for BE refactors)</td><td>1st fail: <code>ai-verify-retry</code> + fix push. 2nd fail, blocked or crash: <span class="bad">ai-verify-failed</span></td><td>110 min</td></tr>
+        <tr><td class="k">verify</td><td><code>ai-mr</code> without <code>ai-verified</code> / <code>ai-verify-failed</code> / <code>ai-review-retry</code>, holdout file exists, every repo’s latest pipeline green (frontend: Amplify note for that commit), not merged. Not ready for 4 h: Slack alert with the reason, daily while stuck</td><td>1 + verify</td><td>→ <code>ai-verified</code> (UI scenarios, plus API diff for BE refactors)</td><td>1st fail: <code>ai-verify-retry</code> + fix push. 2nd fail, blocked or crash: <span class="bad">ai-verify-failed</span></td><td>110 min</td></tr>
+        <tr><td class="k">review</td><td><code>ai-mr</code> + <code>ai-verified</code>, no review label, not merged, worktree and MR exist</td><td>1 + review</td><td>Opus, read-only, one MR note, once per MR. clean or minor → <code>ai-reviewed</code>; blocking → <code>ai-review-retry</code></td><td>Crash → <span class="bad">ai-review-findings</span></td><td>45 min</td></tr>
+        <tr><td class="k">rfix</td><td><code>ai-mr</code> + <code>ai-review-retry</code></td><td>1 + impl + review</td><td>Fixes every finding once (must- and should-fix), then the reviewer re-checks only the pushed delta against the prior report (<code>&lt;KEY&gt;.review.prev.md</code>). Re-check clean or minor → <code>ai-reviewed</code>; verify labels dropped so verify runs again</td><td>Nothing pushed, re-check still blocking, or crash → <span class="bad">ai-review-findings</span> (verify still runs)</td><td>110 min</td></tr>
         <tr><td class="k">conflict</td><td>My open MR with conflicts, head or state changed since last handled</td><td>1</td><td>Rebased, pushed, MR note</td><td>Slack line</td><td>110 min</td></tr>
         <tr><td class="k">done</td><td>Jira Done, labelled <code>triaged</code> / <code>ai-mr</code> / failure, no <code>ai-done</code> (5 per tick)</td><td>1</td><td>→ <code>ai-done</code>, every <code>sentry-ID</code> resolved</td><td>Retried every tick</td><td>5 min</td></tr>
       </tbody>
@@ -565,7 +563,8 @@
       </ul></div>
       <div class="card failc"><h3>Visibility</h3><ul>
         <li>GitLab MR threads are not read, only Jira comments.</li>
-        <li>A fix I push by hand leaves <code>ai-verified</code> standing; rfix and verify-fix pushes are not re-reviewed.</li>
+        <li>A fix I push by hand leaves <code>ai-verified</code> standing; verify-fix pushes and pushes answering my comments are not re-reviewed.</li>
+        <li>Verify blocked (missing flag, no data) parks the ticket as <code>ai-verify-failed</code> before any review happened; <code>triage-worker KEY --review</code> runs it by hand.</li>
         <li><code>triage-dash</code> still judges “needs you” by the last comment, not the handled id.</li>
       </ul></div>
     </div>

@@ -284,10 +284,15 @@ review() {
   WTA=($REPOS/${RS[1]}/.worktrees/${KEY}-*(N/[1]))
   [[ -n "$WTA" ]] || return 2
   WT0=$WTA
-  echo "=== review $KEY (${(j:, :)${(f)T}}) $(date -Iseconds)" | tee -a $LOG
+  local PRIOR=""
+  if [[ -n "${3:-}" ]]; then
+    cp -f $OUT $LOG_DIR/$KEY.review.prev.md
+    PRIOR=" prior=$LOG_DIR/$KEY.review.prev.md since=${(j:,:)${${(f)3}// /@}}"
+  fi
+  echo "=== review${PRIOR:+ (incremental)} $KEY (${(j:, :)${(f)T}}) $(date -Iseconds)" | tee -a $LOG
   rm -f $OUT
   local PANE=$(wm_window $WT0 $LOG)
-  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-review $KEY repos=${(j:,:)${(f)T}} branch=${WT0:t} report=$OUT" \
+  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-review $KEY repos=${(j:,:)${(f)T}} branch=${WT0:t} report=$OUT$PRIOR" \
     --model opus \
     --allowedTools "Read Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Write(/$OUT) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git merge-base:*) Bash(git fetch:*) Bash(glab mr note:*) Bash(glab api:*) Bash(jq:*)" \
     --disallowedTools "Edit Bash(git push:*) Bash(git commit:*) Bash(git checkout:*) Bash(git reset:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*)" \
@@ -449,7 +454,7 @@ wt_heads() {
 }
 
 unverify() {
-  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"},{"remove":"ai-reviewed"},{"remove":"ai-review-findings"},{"remove":"ai-review-retry"}]}}' >/dev/null
+  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"}]}}' >/dev/null
 }
 
 stage_mr() {
@@ -459,7 +464,7 @@ stage_mr() {
   if answered_since $1 $ID; then
     mark_handled $1 $ID
     [[ -n "$GLID" ]] && echo $GLID >$GLHANDLED/$1
-    if [[ "$(wt_heads $1)" != "$H0" ]]; then unverify $1; note $1 "your reply answered on MR, new commits pushed, review + verify labels dropped, re-review next: $(cat $LOG_DIR/$1.mr)"; else note $1 "your reply answered on MR: $(cat $LOG_DIR/$1.mr)"; fi
+    if [[ "$(wt_heads $1)" != "$H0" ]]; then unverify $1; note $1 "your reply answered on MR, new commits pushed, verify labels dropped, re-verify next: $(cat $LOG_DIR/$1.mr)"; else note $1 "your reply answered on MR: $(cat $LOG_DIR/$1.mr)"; fi
   else relabel $1 ai-mr ai-fix-failed; note $1 "MR follow-up failed, see \`$LOG_DIR/$1.log\`"; fi
 }
 
@@ -506,13 +511,20 @@ stage_review() {
 }
 
 stage_rfix() {
-  local KEY=$1 H0=$(wt_heads $1)
+  local KEY=$1 H0=$(wt_heads $1) RC MR=$(cat $LOG_DIR/$1.mr 2>/dev/null)
   implement $KEY $2 "--review-fix $LOG_DIR/$1.review.md"
-  if [[ "$(wt_heads $KEY)" != "$H0" ]]; then
-    relabel $KEY ai-review-retry ai-reviewed; note $KEY "review must-fix findings fixed and pushed, verify next: $(cat $LOG_DIR/$KEY.mr 2>/dev/null)"
-  else
-    relabel $KEY ai-review-retry ai-review-findings; note $KEY "review must-fix findings not fixed (no commits pushed), see \`$LOG_DIR/$KEY.review.md\`"
+  if [[ "$(wt_heads $KEY)" == "$H0" ]]; then
+    relabel $KEY ai-review-retry ai-review-findings; note $KEY "review findings not fixed (no commits pushed), see \`$LOG_DIR/$KEY.review.md\`"
+    return 0
   fi
+  review $KEY $2 "$H0"
+  RC=$?
+  unverify $KEY
+  case $RC in
+    0|1) relabel $KEY ai-review-retry ai-reviewed; note $KEY "review findings fixed, re-check $( (( RC )) && echo minor || echo clean ), re-verify next: $MR" ;;
+    4) relabel $KEY ai-review-retry ai-review-findings; note $KEY "review findings fixed, but the re-check still blocks, needs you: $MR" ;;
+    *) relabel $KEY ai-review-retry ai-review-findings; note $KEY "re-check crashed or wrote no verdict, see \`$LOG_DIR/$KEY.log\`" ;;
+  esac
 }
 
 stage_done() {
@@ -649,9 +661,9 @@ else
     MR_REPLIES=$(awk 'NF && !s[$1]++' <<<$MR_REPLIES)
   fi
   RFIX=$(search 'project = DEV AND labels = ai-mr AND labels = ai-review-retry AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$ROWS_JQ")
-  REVIEW=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-reviewed, ai-review-retry, ai-review-findings, ai-verified, ai-verify-failed) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
+  REVIEW=$(search 'project = DEV AND labels = ai-mr AND labels = ai-verified AND labels not in (ai-reviewed, ai-review-retry, ai-review-findings) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
     | while read -r K R; do mr_targets $K $R >/dev/null </dev/null && echo "$K $R"; done)
-  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels in (ai-reviewed, ai-review-findings) AND labels not in (ai-verified, ai-verify-failed) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
+  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed, ai-review-retry) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
     | while read -r K R; do
       if W=$(verify_blocker $K $R </dev/null); then stall_note $K "$W"; else rm -f $STALLED/$K.*; echo "$K $R"; fi
     done)
@@ -673,8 +685,8 @@ WORK=$(
   emit reply "$REPLIES"
   emit mr "$MR_REPLIES"
   emit rfix "$RFIX"
-  emit review "$REVIEW"
   emit verify "$VERIFY"
+  emit review "$REVIEW"
   emit conflict "$CONFLICT"
   emit new "$NEW"
   emit impl "$IMPL"

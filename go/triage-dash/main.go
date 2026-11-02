@@ -91,12 +91,14 @@ func stage(ls []string) string {
 		return "done"
 	case has["ai-review-findings"]:
 		return "review findings"
-	case has["ai-verified"]:
-		return "verified"
 	case has["ai-review-retry"]:
 		return "review fix"
-	case has["ai-reviewed"]:
+	case has["ai-reviewed"] && has["ai-verified"]:
 		return "reviewed"
+	case has["ai-reviewed"]:
+		return "re-verify"
+	case has["ai-verified"]:
+		return "verified"
 	case has["ai-mr"]:
 		return "mr"
 	case has["ai-fix"]:
@@ -110,13 +112,14 @@ func stage(ls []string) string {
 var stageStyle = map[string]struct{ icon, color string }{
 	"plan gate":       {"📋", "33"},
 	"questions":       {"❓", "33"},
-	"verified":        {"✅", "32"},
+	"verified":        {"🧪", "34"},
 	"verify failed":   {"❗", "31"},
 	"analysis failed": {"❌", "31"},
 	"bailed":          {"❌", "31"},
 	"implementing":    {"🔨", "36"},
 	"mr":              {"🔍", "34"},
-	"reviewed":        {"🔎", "34"},
+	"reviewed":        {"✅", "32"},
+	"re-verify":       {"🔁", "36"},
 	"review fix":      {"🔧", "36"},
 	"review findings": {"🔶", "33"},
 	"new":             {"🆕", "36"},
@@ -157,7 +160,7 @@ func group(r row) int {
 		return gTodo
 	case r.parked:
 		return gParked
-	case slices.Contains([]string{"plan gate", "questions", "verified", "verify failed", "review findings", "analysis failed", "bailed"}, r.stage):
+	case slices.Contains([]string{"plan gate", "questions", "reviewed", "verify failed", "review findings", "analysis failed", "bailed"}, r.stage):
 		return gNeeds
 	}
 	return gFlight
@@ -641,7 +644,7 @@ var helpCols = [][]helpSection{
 	},
 }
 
-var legend = []string{"questions", "plan gate", "verified", "verify failed", "review findings", "bailed", "implementing", "mr", "reviewed", "review fix", "new", "done", "RC", "nightly", "todo", "-"}
+var legend = []string{"questions", "plan gate", "reviewed", "verify failed", "review findings", "bailed", "implementing", "mr", "verified", "review fix", "re-verify", "new", "done", "RC", "nightly", "todo", "-"}
 
 func helpLines() []string {
 	const keyW, colW = 9, 34
@@ -1240,7 +1243,9 @@ func (m model) mrURLs() []string {
 	return out
 }
 
-func mrStage(s string) bool { return s == "mr" || s == "reviewed" || s == "review fix" }
+func mrStage(s string) bool {
+	return s == "mr" || s == "verified" || s == "review fix" || s == "re-verify"
+}
 
 func (m model) look(r row) (icon, color, label string) {
 	st := stageStyle[r.stage]

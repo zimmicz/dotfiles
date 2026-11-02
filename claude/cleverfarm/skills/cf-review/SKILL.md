@@ -5,8 +5,9 @@ description: |
   against PLAN.md and the repo standards in a fresh read-only session, every
   finding with a concrete failure scenario. Writes the report (first line
   VERDICT: clean|minor|blocking) and posts one MR note. Never changes code.
-  Invoked headless by triage-worker (stage review); use by hand with
-  "cf-review DEV-XXXX".
+  Runs once per MR, after the holdout verifier passed; with `prior=` + `since=`
+  it only re-checks the commits a review fix pushed. Invoked headless by
+  triage-worker (stages review, rfix); use by hand with "cf-review DEV-XXXX".
 ---
 
 # Independent review of an MR
@@ -29,6 +30,16 @@ You are the reviewer, not the implementer. You did not write this code and must 
       - Fix: <direction, one line>
    ```
 7. Post ONE MR note on the first repo's MR (cwd = its worktree): `glab mr note <iid> -m "<text>"`, listing the other repos' MRs it covered, English, first line = EN 🤖 prefix from `~/.claude/my-voice.md` "Posted by Claude", then the body, built to be skimmed: `**Independent review: <clean|minor|blocking>**`, one count line (`2 must-fix, 1 should-fix`), `**Needs attention**` with one bullet per must-fix, `- 🚫 **<file>:<line>** <title>: <failure scenario>. <fix direction>`, should-fix as `- ⚠️ …` in the same shape. Clean: `No findings.` instead. Each bullet max 2 lines.
+
+## Incremental re-check (`prior=<abs path>.md since=<worktree>@<sha>[,…]` in arguments)
+
+triage-worker runs this right after `rfix` pushed its fixes. Do not review the whole MR again.
+
+1. Read the prior report at `prior=`. Per repo the delta is `git diff <sha>...HEAD` in its worktree (`<sha>` = the head the prior review saw, from `since=`); read the full file only where a prior finding points.
+2. Per prior finding decide: **fixed** (name the commit), **open** (still reproducible, keep its text, do not reword it), or **dropped** (the implementer argued against it in the MR thread / Jira comment and you agree, say so in one line). No new copy of an open finding, no re-grading of an open one.
+3. New findings only from the delta (a bug the fix introduced), grounded like any other. Skip step 3 of the full review (`/mattpocock-skills:code-review`).
+4. Report, same format and `report=` path: every prior finding keeps its number, prefixed `[fixed]`, `[open]` or `[dropped]`; new ones after them as `[new]`. Verdict counts open + new only.
+5. MR note: `**Independent re-check: <clean|minor|blocking>**`, count line `N fixed, M open, K new`, bullets only for open and new, same shape as the full review. All fixed: `All prior findings fixed.`
 
 ## Rules
 
