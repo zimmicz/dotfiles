@@ -1,12 +1,12 @@
 ---
-name: cf-verify-api
+name: cf-holdout-api
 description: |
   Independent differential API verifier for the cf-triage factory, for BE refactors
   (no UI effect). Runs the ticket's request sequences from
   ~/.local/state/cf-triage/holdout/<KEY>.api.md against two throwaway cf-dyn-env envs
   with the same seeded data, one on the baseline (nightly) images and one on the MR
   images, and diffs status + body. Any difference = fail. Never changes code.
-  Invoked headless by triage-worker; use by hand with "cf-verify-api DEV-XXXX".
+  Invoked headless by triage-worker; use by hand with "cf-holdout-api DEV-XXXX".
 ---
 
 # Verify MR against baseline, API level
@@ -45,7 +45,7 @@ Steps run in order, the same on both envs. `-> $v = <jq path>` captures a value 
    - `-base`: the same charts without tags (= nightly).
    `cf-env.sh` needs `TMPDIR=$HOME/cf-env-tmp` (a non-hidden dir under `$HOME`; glab is a snap and can't see `/tmp`). triage-worker sets it; by hand, `mkdir -p ~/cf-env-tmp` and `export TMPDIR=~/cf-env-tmp` first. Start both creates; the pipelines serialize on a resource group, so expect ~2x one create (~15 min each, destroys the same) and poll both `status <pipeline-id>` until done (each call under 10 min). Either fails → `VERDICT: blocked` with the failing job, destroy what was created.
 3. Service URL per env: `https://<chart>.<env>.dev.cleverfarm.cz` for service charts (cf-satellite, agroevidence, farm-management); the gateway is `https://api.<env>.dev.cleverfarm.cz`. Poll `curl -s -o /dev/null -w '%{http_code}' <url>/api-docs` on both envs' service under test until 200 (a pod can answer 502/503 for a few minutes after the create reports success), up to 10 min, else `blocked`. Quote URLs with `?` (zsh).
-4. Run the scenarios with the script, don't hand-roll the requests: `bash ~/.claude/skills/cf-verify-api/run-scenarios.sh ~/.local/state/cf-triage/holdout/<KEY>.api.md <key>-base <key>-mr`. It logs in for the token itself (`token.mjs`: Playwright login on `https://nightly.dev.cleverfarm.cz/login` as `fe-automation@cleverfarm.cz`; the token stays in memory, never write it or the password to disk or the report; `JWT_SOURCE=nightly` makes it valid in both envs), resolves the Given farm by name via `GET https://agroevidence.<env>.dev.cleverfarm.cz/api/farms`, runs each scenario's steps on `-base` then `-mr` and compares status, the `Headers`, and the body minus `Ignore` keys.
+4. Run the scenarios with the script, don't hand-roll the requests: `bash ~/.claude/skills/cf-holdout-api/run-scenarios.sh ~/.local/state/cf-triage/holdout/<KEY>.api.md <key>-base <key>-mr`. It logs in for the token itself (`token.mjs`: Playwright login on `https://nightly.dev.cleverfarm.cz/login` as `fe-automation@cleverfarm.cz`; the token stays in memory, never write it or the password to disk or the report; `JWT_SOURCE=nightly` makes it valid in both envs), resolves the Given farm by name via `GET https://agroevidence.<env>.dev.cleverfarm.cz/api/farms`, runs each scenario's steps on `-base` then `-mr` and compares status, the `Headers`, and the body minus `Ignore` keys.
 5. Read its output: first line `VERDICT: pass|fail|blocked`, then one line per scenario `A1 <name>: pass|fail|blocked — <reason>` (exit 0 / 1 / 4). `fail` = a step differs, the line shows the first differing step. `blocked` = the scenario can't tell anything: Given farm missing, or `Expect: <status>` / `Expect-nonempty: true` not met on BOTH envs (an empty list or an unexpected status on both is no proof). Use its lines verbatim in the report and MR note; exit 3 = login failed → `blocked`. Don't loosen `Expect` or `Ignore`.
 6. Write `~/.local/state/cf-triage/<KEY>.verify-api.md` (absolute path; `Read` it back before posting the note, the note is wrong if the file is missing). First line EXACTLY one of:
    - `VERDICT: pass`

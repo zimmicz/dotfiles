@@ -1,12 +1,12 @@
 ---
-name: cf-verify-ui
+name: cf-holdout-ui
 description: |
   Independent holdout verifier for the cf-triage factory. Runs the ticket's
   Given/When/Then scenarios from ~/.local/state/cf-triage/holdout/<KEY>.md in a
   real browser against the MR's preview (FE-only: Amplify preview; any BE repo,
   also cross-repo: a throwaway cf-dyn-env env with every BE MR image + the FE
   branch) and writes a pass/fail report (+ optional video). Never changes
-  code. Invoked headless by triage-worker; use by hand with "cf-verify-ui DEV-XXXX".
+  code. Invoked headless by triage-worker; use by hand with "cf-holdout-ui DEV-XXXX".
 ---
 
 # Verify MR against holdout scenarios
@@ -23,7 +23,7 @@ You are the verifier, not the implementer. You did not write this code and must 
    - any other repo in `repos` → dyn-env (step 3), which also builds the FE
 3. With the `cf-dyn-env:dyn-env` skill. The `ai-fix` label (or the user's plan approval) is the approval for create + destroy, don't ask. Env name `<key lowercased>-verify`. `SERVICES` = every BE repo's chart at its MR image tag (chart = repo dir, or without the `cf-` prefix when only that form is in the skill's chart list) + `cf-gateway,farm-management` (+ `agroevidence` if a scenario touches farms/parcels), `DB_SEED=data`, `FRONTEND=true`, `FE_BRANCH=<branch>` if cf-farm-frontend is in `repos` (else omit → develop), `GIT_BRANCH=<branch>`. MR image tag per BE repo: the build job of its pipeline (`glab api projects/<project id>/pipelines/<pipeline id>/jobs`, then the job log). Poll `cf-env.sh status <pipeline-id>` until done (each call under 10 min). Target = `https://<env>.dev.cleverfarm.cz`. Destroy the env at the end, pass or fail.
 4. Log in with Playwright MCP (`mcp__playwright__*`, fresh profile): `<target>/login`, user `fe-automation@cleverfarm.cz`, password = `FE_AUTOMATION_PSW` from `~/work/cleverfarm/repos/cf-farm-frontend/.env`, submit `data-testid=login-submit`. Login card re-renders on nightly; re-submit if still on `/login`. Never write the password anywhere.
-4a. `video` set → after login `browser_start_video` (`filename: <video>`, `size: {width: 1280, height: 720}`). Stop it with `browser_stop_video` after the last scenario, also on fail/blocked.
+4a. `video` set → after login `browser_start_video` (`filename: <video>`, `size: {width: 1280, height: 720}`). Stop it with `browser_stop_video` after the last scenario, also on fail/blocked. Then drop the waits (static frames play 9x faster, changes at normal speed): `ffmpeg -v error -y -i <video> -vf mpdecimate=max=8,setpts=N/FRAME_RATE/TB -an <video without .webm>.short.webm` — exactly this, no quotes. From here `<video>` = the `.short.webm`; ffmpeg fails → keep the original.
 5. Per scenario: `video` set → `browser_video_chapter` (`title: "S1 <name>"`) first. Set up Given, do When, check Then literally. `browser_take_screenshot` (`type: jpeg`) as evidence, `browser_console_messages` errors. Unclear step → pick the most literal reading, note it. Can't reach the Given state (data missing, env broken) → `blocked`, not `fail`.
 6. Write `~/.local/state/cf-triage/<KEY>.verify.md`. First line EXACTLY one of:
    - `VERDICT: pass` — every scenario passed

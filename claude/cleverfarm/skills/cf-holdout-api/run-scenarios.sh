@@ -4,7 +4,7 @@ set -u
 FILE=$1 BASE=$2 MR=$3
 HERE=$(cd "$(dirname "$0")" && pwd)
 DOMAIN=dev.cleverfarm.cz
-WORK=$(mktemp -d "${TMPDIR:-$HOME}/cf-verify-api.XXXXXX")
+WORK=$(mktemp -d "${TMPDIR:-$HOME}/cf-holdout-api.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 TOKEN=$(node "$HERE/token.mjs") || { echo "VERDICT: blocked"; echo "token: login failed"; exit 3; }
 

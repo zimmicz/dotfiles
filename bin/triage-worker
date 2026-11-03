@@ -227,10 +227,10 @@ verify() {
   local MCP=$(jq -nc --arg d $MEDIA '{mcpServers:{playwright:{type:"stdio",command:"npx",args:["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--output-dir",$d]}}}')
   local PANE=$(wm_window $WT0 $LOG)
   mkdir -p ~/cf-env-tmp
-  (cd $WT0 && TMUX_PANE=$PANE TMPDIR=$HOME/cf-env-tmp claude -p "/cf-verify-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA/$KEY.webm")" \
+  (cd $WT0 && TMUX_PANE=$PANE TMPDIR=$HOME/cf-env-tmp claude -p "/cf-holdout-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA/$KEY.webm")" \
     --model sonnet \
     --strict-mcp-config --mcp-config "$MCP" \
-    --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(bash $HOME/.claude/skills/cf-verify-api/run-scenarios.sh:*)" \
+    --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(ffmpeg -v error -y -i $MEDIA/$KEY.webm -vf mpdecimate=max=8,setpts=N/FRAME_RATE/TB -an $MEDIA/$KEY.short.webm) Bash(bash $HOME/.claude/skills/cf-holdout-api/run-scenarios.sh:*)" \
     --disallowedTools "Edit Bash(git:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)

@@ -1,8 +1,8 @@
 ---
-name: verify-ui
+name: check-layout
 description: |
   Visually verify changed UI components in a real browser before calling a UI task done.
-  Use when user says "verify ui", "verify-ui", "check visually", "screenshot it", or after
+  Use when user says "check layout", "check-layout", "check visually", "screenshot it", or after
   any frontend change (component, styling, Storybook story) before reporting success.
   Typecheck/lint/unit green is NOT done for UI work.
 ---
@@ -24,10 +24,10 @@ Goal: catch stretched flex children, overflowing widths, double borders, wrong i
    - `browser_resize` 375x800 → `browser_take_screenshot` (same)
    - `browser_console_messages` (errors only)
    - Cover every state: default, hover/focus/open (click via `browser_snapshot` refs), disabled, error, long text, empty.
-5. App route needing auth/VPN (not Storybook): use claude-in-chrome (`mcp__claude-in-chrome__*`, real logged-in session) or give user the URL (`https://<branch>.dev.cleverfarm.cz/...` or localhost path). Playwright MCP has fresh profile, no Auth0 session.
+5. App route needing auth (not Storybook): log in with Playwright MCP yourself, exactly as `/cf-holdout-ui` step 4 (`fe-automation@cleverfarm.cz`, `FE_AUTOMATION_PSW` from cf-farm-frontend `.env`), works on localhost and `https://<branch>.dev.cleverfarm.cz`. Never claim you can't log in or ask the user to; only a failed attempt (state the error) counts.
 6. Compare against Figma frame / Jira designer comments (TICKET.md, PLAN.md) if present. Check: widths, spacing, borders (doubles), icon, alignment, flex stretching, overflow, truncation.
 7. Issues found → fix, re-screenshot, repeat. Shared/DS component glitch → fix in DS + story covering the state, not app override.
-8. Report: table `story/route | viewport | verdict | note`, plus screenshot paths. Cannot verify (no browser, auth wall) → say so explicitly, put it in MR description.
+8. Report: table `story/route | viewport | verdict | note`, plus screenshot paths. Cannot verify (no browser, login attempted and failed) → say so explicitly, put it in MR description.
 
 ## Rules
 
