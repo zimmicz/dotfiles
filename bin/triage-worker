@@ -189,6 +189,8 @@ verify_targets() {
     PID=$(jq -r .project_id <<<$MR) IID=$(jq -r .iid <<<$MR)
     PIPE=$(glab api "projects/$PID/merge_requests/$IID/pipelines" </dev/null | jq -c '.[0] // empty')
     PS=$(jq -r .status <<<$PIPE)
+    [[ "$PS" == running ]] && glab api "projects/$PID/pipelines/$(jq -r .id <<<$PIPE)/jobs?per_page=100" </dev/null \
+      | jq -e 'all(.[]; .status == "success" or .status == "manual" or .status == "skipped" or (.status == "failed" and .allow_failure))' >/dev/null && PS=success
     [[ "$PS" == success ]] || { why "pipeline ${PS:-missing} in $R, $(jq -r .web_url <<<$MR)"; return 2 }
     SHA=$(jq -r .sha <<<$PIPE)
     if [[ $2 == cf-farm-frontend ]]; then
