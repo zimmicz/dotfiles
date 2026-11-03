@@ -55,6 +55,7 @@ type issue struct {
 
 type row struct {
 	key, stage, summary, verdict, mr, last, resume string
+	phase                                          string
 	cost                                           float64
 	seen                                           time.Time
 	running, parked, jira, todo, mrNeeds           bool
@@ -202,11 +203,17 @@ type mrRaw struct {
 	HasConflicts                bool   `json:"has_conflicts"`
 	BlockingDiscussionsResolved bool   `json:"blocking_discussions_resolved"`
 	Reviewers                   []struct{ Username string }
-	HeadPipeline                *struct{ Status string } `json:"head_pipeline"`
+	HeadPipeline                *pipeRaw `json:"head_pipeline"`
+	Gate                        string   `json:"-"`
 	Approved                    bool
 	ApprovalsLeft               int                                        `json:"approvals_left"`
 	ApprovedBy                  []struct{ User struct{ Username string } } `json:"approved_by"`
 	Labels                      []string
+}
+
+type pipeRaw struct {
+	ID          int
+	Status, Sha string
 }
 
 type mrInfo struct {
@@ -229,6 +236,9 @@ func mrStatus(r mrRaw) mrInfo {
 	if len(reviewers) > 0 {
 		detail += " · reviewers " + strings.Join(reviewers, ", ")
 	}
+	if r.Gate != "" {
+		detail += " · gate " + r.Gate
+	}
 	in := mrInfo{detail: detail}
 	switch {
 	case r.State == "merged":
@@ -242,6 +252,8 @@ func mrStatus(r mrRaw) mrInfo {
 		} else if r.Draft && len(r.ApprovedBy) == 0 {
 			in.label, in.icon, in.color = "auto-rebase", "🔧", "36"
 		}
+	case r.Gate == "failed":
+		in.label, in.icon, in.color = "gate failed", "🚫", "31"
 	case pipe == "failed":
 		in.label, in.icon, in.color = "ci failed", "🔴", "31"
 	case r.DetailedMergeStatus == "requested_changes":
@@ -250,6 +262,8 @@ func mrStatus(r mrRaw) mrInfo {
 		in.label, in.icon, in.color = "open threads", "💬", "33"
 	case r.Draft:
 		in.label, in.icon, in.color = "draft", "🚧", "33"
+	case r.Gate == "pending":
+		in.label, in.icon, in.color = "gate pending", "🔒", "36"
 	case pipe == "running" || pipe == "pending" || pipe == "created":
 		in.label, in.icon, in.color = "ci running", "⏳", "36"
 	case r.Approved && r.ApprovalsLeft == 0:
@@ -290,7 +304,19 @@ func fetchMR(u string) (mrInfo, error) {
 			return mrInfo{}, err
 		}
 	}
+	if r.HeadPipeline != nil && r.HeadPipeline.Sha != "" {
+		r.Gate = fetchGate("projects/" + url.PathEscape(m[1]) + "/repository/commits/" + r.HeadPipeline.Sha + "/statuses?name=cf-factory")
+	}
 	return mrStatus(r), nil
+}
+
+func fetchGate(path string) string {
+	var st []pipeRaw
+	out, err := exec.Command("glab", "api", path).Output()
+	if err != nil || json.Unmarshal(out, &st) != nil || len(st) == 0 {
+		return ""
+	}
+	return slices.MaxFunc(st, func(a, b pipeRaw) int { return a.ID - b.ID }).Status
 }
 
 func jiraReq(method, path string, body, out any) error {
@@ -461,6 +487,28 @@ func retryAction(ls []string) (remove, add string) {
 	return "", ""
 }
 
+var phaseNames = map[string]string{"new": "analysing", "reply": "replying", "mr": "MR follow-up", "impl": "implementing", "rfix": "fixing review", "verify": "verifying", "review": "reviewing", "conflict": "rebasing", "done": "closing"}
+
+func parseUnits(out string) map[string]string {
+	m := map[string]string{}
+	for _, l := range strings.Split(out, "\n") {
+		f := strings.Fields(l)
+		if len(f) == 0 {
+			continue
+		}
+		u := strings.TrimSuffix(strings.TrimPrefix(f[0], "cf-triage-"), ".service")
+		if i := strings.LastIndex(u, "-"); i > 0 {
+			m[u[:i]] = or(phaseNames[u[i+1:]], u[i+1:])
+		}
+	}
+	return m
+}
+
+func runningUnits() map[string]string {
+	out, _ := exec.Command("systemctl", "--user", "list-units", "cf-triage-*", "--plain", "--no-legend", "--state=active").Output()
+	return parseUnits(string(out))
+}
+
 func parseLog(r *row, path string) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -508,7 +556,7 @@ func workerBusy() bool {
 	return false
 }
 
-func collect(issues, todos []issue, busy bool) []row {
+func collect(issues, todos []issue, busy bool, units map[string]string) []row {
 	rows := map[string]*row{}
 	for _, i := range todos {
 		r := &row{key: i.Key, stage: "todo", summary: i.Fields.Summary, labels: i.Fields.Labels, jira: true, todo: true}
@@ -539,7 +587,8 @@ func collect(issues, todos []issue, busy bool) []row {
 			rows[key] = r
 		}
 		r.seen = st.ModTime()
-		r.running = busy && time.Since(st.ModTime()) < 90*time.Second
+		r.phase = units[key]
+		r.running = r.phase != "" || busy && time.Since(st.ModTime()) < 90*time.Second
 		parseLog(r, p)
 		if b, err := os.ReadFile(filepath.Join(stateDir, key+".mr")); err == nil {
 			r.mr = strings.TrimSpace(string(b))
@@ -649,7 +698,7 @@ type helpSection struct {
 var helpCols = [][]helpSection{
 	{
 		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log·plan·desc·comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}}},
-		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}}},
+		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}, {"s", "skip merge gate"}}},
 	},
 	{
 		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"l", "log in less"}, {"c", "resume session"}}},
@@ -703,7 +752,7 @@ func helpLines() []string {
 		}
 	}
 	out = append(out, row+fit("\033[32m●\033[0m  running", 22), "", "\033[1;33mMR\033[0m")
-	mrs := [][2]string{{"🚧", "draft"}, {"⏳", "ci running"}, {"🔴", "ci failed"}, {"💥", "conflict: b"}, {"🔧", "auto / queued rebase"}, {"💬", "open threads"}, {"🔁", "changes asked"}, {"📭", "no reviewer"}, {"👀", "in review"}, {"👍", "approved"}, {"🟣", "merged"}, {"⛔", "closed"}}
+	mrs := [][2]string{{"🚧", "draft"}, {"⏳", "ci running"}, {"🔒", "gate pending"}, {"🚫", "gate failed"}, {"🔴", "ci failed"}, {"💥", "conflict: b"}, {"🔧", "auto / queued rebase"}, {"💬", "open threads"}, {"🔁", "changes asked"}, {"📭", "no reviewer"}, {"👀", "in review"}, {"👍", "approved"}, {"🟣", "merged"}, {"⛔", "closed"}}
 	row = "  "
 	for i, s := range mrs {
 		row += fit(s[0]+" "+s[1], 22)
@@ -781,7 +830,7 @@ func (m *model) reload() {
 	m.svc = strings.TrimSpace(string(out))
 	key := m.sel().key
 	m.rows, m.otherN = nil, 0
-	for _, r := range collect(m.issues, m.todos, m.busy) {
+	for _, r := range collect(m.issues, m.todos, m.busy, runningUnits()) {
 		if group(r) == gOther {
 			m.otherN++
 			if !m.showOther {
@@ -1166,6 +1215,13 @@ func (m model) key(k string) (model, tea.Cmd) {
 		}
 		iid := mrIIDRe.FindStringSubmatch(r.mr)[1]
 		m.confirm("let the agent resolve the code conflict in !"+iid+" (adds MR label ai-rebase)?", do("ai-rebase added to !"+iid, func() error { return addMRLabel(r.mr, "ai-rebase") }))
+	case "s":
+		if in, ok := m.mrs[r.mr]; !ok || (in.label != "gate pending" && in.label != "gate failed") {
+			m.status = "s only works on an MR held by the factory gate"
+			break
+		}
+		iid := mrIIDRe.FindStringSubmatch(r.mr)[1]
+		m.confirm("skip the factory gate on !"+iid+" (adds MR label ai-gate-skip, next tick sets it green)?", do("ai-gate-skip added to !"+iid, func() error { return addMRLabel(r.mr, "ai-gate-skip") }))
 	case "f":
 		if !r.todo {
 			m.status = "f feeds a TODO ticket"
@@ -1283,6 +1339,7 @@ func (m model) rowLine(i int) string {
 	icon = or(icon, "  ")
 	if r.running {
 		icon = "\033[32m●\033[0m "
+		label, color = or(r.phase, label), "32"
 	}
 	key, stg, age := fmt.Sprintf("%-9s", r.key), fmt.Sprintf("%-15s", ansi.Truncate(label, 15, "…")), fmt.Sprintf("%4s", ago(r.seen))
 	if i == m.cur {

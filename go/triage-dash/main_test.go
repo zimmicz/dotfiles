@@ -1,6 +1,7 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -89,7 +90,7 @@ func TestWikiToMD(t *testing.T) {
 }
 
 func TestMRStatus(t *testing.T) {
-	pipe := func(s string) *struct{ Status string } { return &struct{ Status string }{s} }
+	pipe := func(s string) *pipeRaw { return &pipeRaw{Status: s} }
 	cases := map[string]mrRaw{
 		"merged":        {State: "merged", BlockingDiscussionsResolved: true},
 		"conflict":      {State: "opened", HasConflicts: true, BlockingDiscussionsResolved: true},
@@ -99,6 +100,8 @@ func TestMRStatus(t *testing.T) {
 		"open threads":  {State: "opened"},
 		"draft":         {State: "opened", Draft: true, BlockingDiscussionsResolved: true, HeadPipeline: pipe("success")},
 		"ci running":    {State: "opened", BlockingDiscussionsResolved: true, HeadPipeline: pipe("running")},
+		"gate pending":  {State: "opened", BlockingDiscussionsResolved: true, HeadPipeline: pipe("running"), Gate: "pending"},
+		"gate failed":   {State: "opened", BlockingDiscussionsResolved: true, HeadPipeline: pipe("failed"), Gate: "failed"},
 		"approved":      {State: "opened", BlockingDiscussionsResolved: true, Approved: true},
 		"in review":     {State: "opened", BlockingDiscussionsResolved: true, ApprovalsLeft: 1, Reviewers: []struct{ Username string }{{"x"}}},
 		"no reviewer":   {State: "opened", BlockingDiscussionsResolved: true, ApprovalsLeft: 1},
@@ -135,5 +138,13 @@ func TestChanged(t *testing.T) {
 	_, ch = changed(base, rows, lbl)
 	if len(ch) != 2 || ch[0] != "A implementing → verify failed" || ch[1] != "C mr → done" {
 		t.Fatalf("got %v", ch)
+	}
+}
+
+func TestParseUnits(t *testing.T) {
+	got := parseUnits("cf-triage-DEV-3536-review.service loaded active running /home/zimmi/bin/triage-worker --run review\ncf-triage-DEV-1-rfix.service loaded active running x\ncf-triage-feat-x-y-conflict.service loaded active running x\n")
+	want := map[string]string{"DEV-3536": "reviewing", "DEV-1": "fixing review", "feat-x-y": "rebasing"}
+	if !maps.Equal(got, want) {
+		t.Errorf("parseUnits = %v, want %v", got, want)
 	}
 }

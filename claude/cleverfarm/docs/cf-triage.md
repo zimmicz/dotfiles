@@ -19,6 +19,16 @@ My job = intent in, decisions at gates, judge results. Agents do the rest.
 
 1. **Plan gate** — Jira comment with PLAN + Given/When/Then scenarios. Wrong/unclear → reply in Jira (answered ≤2 min, instantly if replied via `triage-dash`, PLAN + scenarios updated). Good → add `ai-fix`. The label approves plan AND scenarios — scenarios are what "done" means, read them.
 2. **MR gate** — draft MR with verify verdict note. `ai-verified` → review diff, mark ready, add reviewers, merge. Want changes → comment in Jira, agent pushes to the same MR.
+   **Merge block**: every tick `gate_sync` posts commit status `cf-factory` on each open `ai-mr` MR's head pipeline (merge-ref commit + `pipeline_id`; a status on the branch head commit makes a separate pipeline and blocks nothing). "Pipelines must succeed" then holds the merge / train until the round is done:
+
+   | labels | `cf-factory` | merge |
+   |---|---|---|
+   | MR label `ai-gate-skip` (`s` in `triage-dash`) | success | allowed |
+   | `ai-verified` + `ai-reviewed` | success | allowed |
+   | `ai-verify-failed` / `ai-review-findings` / `ai-fix-failed` | failed | blocked (pipeline red) |
+   | anything else (round in flight) | pending | blocked (pipeline running, `CI_MUST_PASS` = CHECKING) |
+
+   Only changes post (one log line `gate <old> → <new>` in `<KEY>.log`). A finished status can't go back to pending, GitLab adds a new status record on the same pipeline instead. `triage-worker DEV-X --gate` syncs one ticket and prints the state.
 3. **Failures** — `triage-failed` / `ai-fix-failed` / `ai-verify-failed`: read the 🤖 Jira comment or `<KEY>.verify.md`; fix the plan/scenario and re-label (`triage` or `ai-fix`), take it over with `cf-work DEV-X`, or close the ticket.
 
 **Merge conflicts** — every run rechecks ALL my open MRs (any repo, factory or not). Conflicting → rebase onto target in its worktree:
@@ -43,7 +53,7 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 
 | want | how |
 |---|---|
-| all tickets at a glance + act on gates | `triage-dash` TUI: sidebar grouped running / needs you / todo (my sprint To Do, not in factory) / in flight / parked, pane with log / PLAN.md / Jira description / Jira comments (`tab`, markdown rendered). Gates without Jira: `a` approve, `R` reply, `t` retry, `w` run worker, `f` feed a todo (pick repo → `triage` + `repo-<x>`) (all y/n). `c` resumes the session in a tmux window. `?` lists all keys. Mouse: tmux `prefix m` |
+| all tickets at a glance + act on gates | `triage-dash` TUI: sidebar grouped running (green ●, label = active stage from unit `cf-triage-<KEY>-<stage>`: analysing / implementing / verifying / reviewing / fixing review / rebasing …) / needs you / todo (my sprint To Do, not in factory) / in flight / parked, pane with log / PLAN.md / Jira description / Jira comments (`tab`, markdown rendered). Gates without Jira: `a` approve, `R` reply, `t` retry, `w` run worker, `f` feed a todo (pick repo → `triage` + `repo-<x>`), `s` skip merge gate (`ai-gate-skip`) (all y/n). MR rows show 🔒 gate pending / 🚫 gate failed. `c` resumes the session in a tmux window. `?` lists all keys. Mouse: tmux `prefix m` |
 | is something running now | `workmux dashboard` — headless runs show as their `cf-triage` window (working → done) while active; finished ones drop off |
 | watch it live | `tmux switch-client -t cf-triage` (one window per worktree, `tail -f` of the log) or `tail -f ~/.local/state/cf-triage/<KEY>.log` (🔧 tool calls, 💬 agent text, ✅ exit + cost) |
 | ask the agent why it did X | log line `🆔 session <id> — reopen: cd <wt> && claude --resume <id>` → full transcript, interactive, can continue |
@@ -131,6 +141,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | `ai-verified` | holdout scenarios pass on the preview; gates `review`. Dropped (with `ai-verify-failed` / `ai-verify-retry`) when an `mr` follow-up or `rfix` pushes new commits, so `verify` runs again; review labels stay | triage-worker |
 | `ai-verify-failed` | holdout failed after retry, blocked, or verifier crashed | triage-worker |
 | `ai-done` | ticket Done, Sentry issues resolved | triage-worker |
+| `ai-gate-skip` (GitLab MR label) | override: `cf-factory` merge gate goes green whatever the Jira labels | me (`s` in triage-dash) |
 
 ## Files
 
@@ -215,6 +226,7 @@ create ticket ~$0.45 · analysis ~$0.65 · reply ~$0.4 · implement ~$1.6 (opus)
 ## Known gaps
 
 - editing an old non-AI comment counts as a new reply if it's the last one
+- merge gate runs only with the timer (Mon–Fri 07–18): a new head pipeline outside those hours has no `cf-factory` status until the next tick, so it is mergeable meanwhile
 - MCP login expiry → runs fail. sentry-triage without `TRIAGE_DONE` → one Slack note per day (`sentry-failed-noted` stamp) with the `TRIAGE_FAILED` reason; fix Sentry auth via `/mcp` → claude.ai Sentry. Worker failures → `*-failed` labels / logs
 - Persistent catch-up can fire once on Saturday if the laptop was off at Friday's last slot (daily stamp keeps it to one ticket)
 - a `triage-failed` / `ai-fix-failed` ticket blocks new issues until I close or relabel it

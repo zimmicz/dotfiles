@@ -521,6 +521,7 @@
         <div class="card gate"><h3>MR gate</h3><ul>
           <li>Needs <code>ai-verified</code> + <code>ai-reviewed</code>; read the verify and review notes on the MR. <code>ai-review-findings</code> = look at the review first.</li>
           <li>Review, mark ready, add reviewers, merge.</li>
+          <li>Merge is held by commit status <code>cf-factory</code> (pending while verify/review run, failed on a failure label, green on <code>ai-verified</code> + <code>ai-reviewed</code>). Override: MR label <code>ai-gate-skip</code> (<code>s</code> in triage-dash).</li>
           <li>Changes wanted: comment in Jira, <code>mr</code> pushes to the same MR.</li>
         </ul></div>
         <div class="card failc"><h3>Failure labels</h3><ul>
@@ -546,6 +547,7 @@
         <tr><td class="k">review</td><td><code>ai-mr</code> + <code>ai-verified</code>, no review label, not merged, worktree and MR exist</td><td>1 + review</td><td>Opus, read-only, one MR note, once per MR. clean or minor → <code>ai-reviewed</code>; blocking → <code>ai-review-retry</code></td><td>Crash → <span class="bad">ai-review-findings</span></td><td>45 min</td></tr>
         <tr><td class="k">rfix</td><td><code>ai-mr</code> + <code>ai-review-retry</code></td><td>1 + impl + review</td><td>Fixes every finding once (must- and should-fix), then the reviewer re-checks only the pushed delta against the prior report (<code>&lt;KEY&gt;.review.prev.md</code>). Re-check clean or minor → <code>ai-reviewed</code>; verify labels dropped so verify runs again</td><td>Nothing pushed, re-check still blocking, or crash → <span class="bad">ai-review-findings</span> (verify still runs)</td><td>110 min</td></tr>
         <tr><td class="k">conflict</td><td>My open MR with conflicts, head or state changed since last handled</td><td>1</td><td>Rebased, pushed, MR note</td><td>Slack line</td><td>110 min</td></tr>
+        <tr><td class="k">gate</td><td>Every tick, inline in the dispatcher (no unit): each open MR of an <code>ai-mr</code> ticket, not merged</td><td>0</td><td>Commit status <code>cf-factory</code> on the MR head pipeline: <code>ai-gate-skip</code> or <code>ai-verified</code> + <code>ai-reviewed</code> → success, else pending; “Pipelines must succeed” holds the merge / train. Posts only on change</td><td><code>ai-verify-failed</code> / <code>ai-review-findings</code> / <code>ai-fix-failed</code> → failed, pipeline red</td><td>–</td></tr>
         <tr><td class="k">done</td><td>Jira Done, labelled <code>triaged</code> / <code>ai-mr</code> / failure, no <code>ai-done</code> (5 per tick)</td><td>1</td><td>→ <code>ai-done</code>, every <code>sentry-ID</code> resolved</td><td>Retried every tick</td><td>5 min</td></tr>
       </tbody>
     </table></div>
@@ -555,7 +557,7 @@
     <h2>Still not covered</h2>
     <div class="cards">
       <div class="card failc"><h3>Availability</h3><ul>
-        <li>The timer runs Mon–Fri 07–18 and only while I am logged in. A comment outside that window, or while the laptop sleeps, waits.</li>
+        <li>The timer runs Mon–Fri 07–18 and only while I am logged in. A comment outside that window, or while the laptop sleeps, waits. A new MR pipeline in that time has no merge gate status until the next tick, so it can be merged.</li>
         <li>Nothing alerts when the dispatcher itself is dead; a missing “alive” heartbeat is the only sign.</li>
       </ul></div>
       <div class="card failc"><h3>Slots</h3><ul>

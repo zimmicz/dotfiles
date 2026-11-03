@@ -266,6 +266,48 @@ mr_targets() {
   done
 }
 
+gate_state() {
+  local L=" $1 "
+  if [[ " $2 " == *" ai-gate-skip "* ]]; then echo "success ai-gate-skip override"
+  elif [[ $L == *" ai-verify-failed "* || $L == *" ai-review-findings "* || $L == *" ai-fix-failed "* ]]; then echo "failed factory needs Michal"
+  elif [[ $L == *" ai-verified "* && $L == *" ai-reviewed "* ]]; then echo "success verified + reviewed"
+  else echo "pending factory verify/review in flight"
+  fi
+}
+
+gate_sync() {
+  local KEY=$1 R WT MR PID IID HP CUR WANT DESC MSG
+  for R in ${(s:,:)2}; do
+    WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
+    [[ -n "$WT" ]] || continue
+    MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null </dev/null | jq -c '.[0] // empty')
+    [[ -n "$MR" ]] || continue
+    PID=$(jq -r .project_id <<<$MR) IID=$(jq -r .iid <<<$MR)
+    HP=($(glab api "projects/$PID/merge_requests/$IID" </dev/null | jq -r '.head_pipeline // empty | "\(.id) \(.sha)"'))
+    (( ${#HP} == 2 )) || { [[ -n "${GATE_VERBOSE:-}" ]] && echo "$KEY $R !$IID: no head pipeline"; continue }
+    CUR=$(glab api "projects/$PID/repository/commits/${HP[2]}/statuses?name=cf-factory" </dev/null | jq -r 'max_by(.id) | .status // "none"')
+    read -r WANT DESC <<<$(gate_state "$3" "$(jq -r '.labels | join(" ")' <<<$MR)")
+    MSG="$KEY $R !$IID pipeline ${HP[1]}: gate $CUR → $WANT"
+    if [[ $CUR == $WANT ]]; then
+      [[ -n "${GATE_VERBOSE:-}" ]] && echo "$MSG (unchanged)"
+      continue
+    fi
+    if [[ -n "${TRIAGE_DRY:-}" ]]; then echo "would set $MSG"; continue; fi
+    if glab api -X POST "projects/$PID/statuses/${HP[2]}" -f state=$WANT -f name=cf-factory -f pipeline_id=${HP[1]} \
+      -f description="$DESC" -f target_url="https://cleverfarm.atlassian.net/browse/$KEY" </dev/null >/dev/null 2>$LOG_DIR/.gate-err; then
+      echo "$(date '+%T') $MSG" | tee -a $LOG_DIR/$KEY.log
+    else
+      echo "$(date '+%T') $MSG failed: $(<$LOG_DIR/.gate-err)" | tee -a $LOG_DIR/$KEY.log
+    fi
+  done
+}
+
+GATE_JQ='.issues[] | "\(.key) \(.fields.labels | map(select(startswith("repo-")) | ltrimstr("repo-")) | join(",") | if . == "" then "-" else . end) \(.fields.labels | join(" "))"'
+
+gate_all() {
+  search "$1" 50 | jq -r "$GATE_JQ" | while read -r K R L; do gate_sync $K $R "$L" </dev/null; done
+}
+
 ticket_repos() {
   jira GET "/rest/api/3/issue/$1?fields=labels" | jq -r '[.fields.labels[] | select(startswith("repo-")) | ltrimstr("repo-")] | join(",")'
 }
@@ -577,6 +619,11 @@ if [[ "${1:-}" == --run ]]; then
   exit $?
 fi
 
+if [[ "${2:-}" == --gate ]]; then
+  GATE_VERBOSE=1 gate_all "key = ${1:u}"
+  exit 0
+fi
+
 stage_class() { case $1 in impl|mr|verify|review) echo $1 ;; rfix) echo impl ;; esac }
 stage_timeout() { case $1 in impl|mr|rfix|conflict|verify) echo 110min ;; review) echo 45min ;; done) echo 5min ;; *) echo 30min ;; esac }
 
@@ -710,6 +757,7 @@ WORK=$(
   fi
 )
 dispatch <<<"$WORK"
+[[ -z "${1:-}" ]] && gate_all 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected)'
 
 if [[ -n "${1:-}" ]]; then
   (( SPAWNED )) || { echo "nothing spawned: ticket already running, no free slot, or no work for its labels" >&2; exit 75 }
