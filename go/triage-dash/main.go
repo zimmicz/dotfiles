@@ -701,7 +701,7 @@ var helpCols = [][]helpSection{
 		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}, {"s", "skip merge gate"}}},
 	},
 	{
-		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"l", "log in less"}, {"c", "resume session"}}},
+		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"l", "log in less"}, {"e", "edit plan / holdout"}, {"c", "resume session"}}},
 		{"Other", [][2]string{{"r", "refresh Jira"}, {"?", "this help"}, {"q", "quit"}}},
 	},
 }
@@ -1185,6 +1185,55 @@ func (m model) key(k string) (model, tea.Cmd) {
 		return m, loadJira
 	case "l":
 		return m, tea.ExecProcess(exec.Command("less", "+G", filepath.Join(stateDir, r.key+".log")), func(error) tea.Msg { return tickMsg{} })
+	case "e":
+		var files []string
+		switch tabs[m.tab] {
+		case "plan":
+			if p := planPath(r.key); p != "" {
+				files = []string{p}
+			}
+		case "holdout":
+			for _, f := range []string{r.key + ".md", r.key + ".api.md"} {
+				if p := filepath.Join(stateDir, "holdout", f); func() bool { _, err := os.Stat(p); return err == nil }() {
+					files = append(files, p)
+				}
+			}
+			if len(files) == 0 {
+				files = []string{filepath.Join(stateDir, "holdout", r.key+".md")}
+			}
+		}
+		if len(files) == 0 {
+			m.status = "nothing to edit on this tab"
+			break
+		}
+		before := map[string]string{}
+		for _, p := range files {
+			b, _ := os.ReadFile(p)
+			before[p] = string(b)
+		}
+		attach := tabs[m.tab] == "holdout" && jiraKey.MatchString(r.key)
+		return m, tea.ExecProcess(exec.Command("zsh", append([]string{"-ic", `eval "${EDITOR:-vim} ${(q)@}"`, "zsh"}, files...)...), func(err error) tea.Msg {
+			if err != nil || !attach {
+				return doneMsg{"edited", err, false}
+			}
+			var sent []string
+			for _, p := range files {
+				b, rerr := os.ReadFile(p)
+				if rerr != nil || string(b) == before[p] {
+					continue
+				}
+				name := strings.Replace(filepath.Base(p), r.key, "holdout", 1)
+				out, err := exec.Command("jira", "attach", r.key, p, name).CombinedOutput()
+				if err != nil || !bytes.HasPrefix(bytes.TrimSpace(out), []byte("[")) {
+					return doneMsg{"", fmt.Errorf("jira attach %s failed: %s", name, fit(strings.TrimSpace(string(out)), 120)), false}
+				}
+				sent = append(sent, name)
+			}
+			if len(sent) == 0 {
+				return doneMsg{"edited, unchanged", nil, false}
+			}
+			return doneMsg{"edited, attached to Jira: " + strings.Join(sent, ", "), nil, false}
+		})
 	case "c":
 		if r.resume == "" {
 			m.status = "no session in log"
