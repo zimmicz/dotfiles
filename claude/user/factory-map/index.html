@@ -260,7 +260,7 @@
   <rect class="chip-a" x="856" y="190" width="40" height="20" rx="5"/><text class="ca" x="876" y="204" text-anchor="middle">mr</text>
   <text class="tm" x="906" y="204">answers, pushes a fix if asked (own mr slot).</text>
   <text class="tm" x="906" y="218">New commits drop ai-verified / -failed / -retry, review labels stay.</text>
-  <text class="tm" x="906" y="232">No answer posted → ai-fix-failed</text>
+  <text class="tm" x="906" y="232">Stuck w/o comment → worker posts its conclusion, stays ai-mr</text>
 
   <!-- states -->
   <rect class="st" x="20" y="260" width="140" height="92" rx="10"/>
@@ -357,7 +357,7 @@
   <path class="p-hd" d="M640 468 V354" marker-end="url(#arh)"/>
   <text class="tm" x="648" y="408"><tspan class="hum">ME</tspan> re-add</text><text class="tm" x="648" y="422">ai-fix</text>
   <path class="p-f" d="M790 352 C790 430 700 500 656 500" marker-end="url(#arf)"/>
-  <text class="tm" x="716" y="452">mr can’t answer</text>
+  <text class="tm" x="716" y="452">mr crashes</text>
 
   <rect class="st-warn" x="960" y="470" width="150" height="64" rx="10"/>
   <text class="lab" x="1035" y="492" text-anchor="middle">ai-review-retry</text>
@@ -500,11 +500,11 @@
         <thead><tr><th>Ticket</th><th>Last comment</th><th>Handled by</th><th>What happens</th></tr></thead>
         <tbody>
           <tr><td><code>triaged</code> without <code>ai-mr</code>: To Do, or any open ticket with <code>ai-fix</code></td><td class="me">mine, newer than the last handled one</td><td class="k">reply</td><td>Re-analyzes, updates PLAN.md + scenarios, posts a bot answer. <code>impl</code> skips the ticket until it is answered. Failure: <span class="bad">triage-failed</span>, no retry loop.</td></tr>
-          <tr><td><code>ai-mr</code>, not Done and not On nightly / To test / Release candidate / Rejected</td><td class="me">mine, newer than the last handled one</td><td class="k">mr</td><td>Implementer runs again on the same worktree. A question gets a Jira answer; a change request also gets a push to the same MR, which drops <code>ai-verified</code> / <code>ai-verify-failed</code> / <code>ai-verify-retry</code> so verify runs again (review labels stay, no re-review). No bot answer afterwards: <span class="bad">ai-fix-failed</span>.</td></tr>
+          <tr><td><code>ai-mr</code>, not Done and not On nightly / To test / Release candidate / Rejected</td><td class="me">mine, newer than the last handled one</td><td class="k">mr</td><td>Implementer runs again on the same worktree. A question gets a Jira answer; a change request also gets a push to the same MR, which drops <code>ai-verified</code> / <code>ai-verify-failed</code> / <code>ai-verify-retry</code> so verify runs again (review labels stay, no re-review). Ends without a Jira comment (stuck, questions): the worker posts the agent’s final answer as the bot comment, ticket stays <code>ai-mr</code>, my reply re-runs it. Crash with no final answer: <span class="bad">ai-fix-failed</span>.</td></tr>
           <tr><td>any factory ticket</td><td>bot (“AI triage” marker), or already handled</td><td class="k">nobody</td><td>Waits for me. A bot comment posted after mine no longer hides it: pending = newest human comment id above <code>handled/&lt;KEY&gt;</code>.</td></tr>
           <tr><td><code>triage-failed</code>, <code>ai-fix-failed</code></td><td>any</td><td class="k">nobody</td><td>Parked. Re-add <code>triage</code> / <code>ai-fix</code>, or swap <code>ai-fix-failed</code> back to <code>ai-mr</code>, to get it read again.</td></tr>
           <tr><td>Done, or merged (On nightly, To test, Release candidate, Rejected)</td><td>any</td><td class="k">nobody</td><td>Ignored. Only stage <code>done</code> touches Done tickets.</td></tr>
-          <tr><td>GitLab MR threads</td><td>any</td><td class="k">nobody</td><td>The factory reads Jira comments only. Ask for MR changes in Jira.</td></tr>
+          <tr><td>GitLab MR threads of an <code>ai-mr</code> ticket (not merged)</td><td class="me">my MR note (not 🤖), newer than <code>handled-mr/&lt;KEY&gt;</code></td><td class="k">mr</td><td>Checked every 2 min (<code>GL_EVERY</code>). Same follow-up as a Jira comment; the agent also replies in the MR thread, never resolves it. Others’ MR notes are not picked up.</td></tr>
         </tbody>
       </table></div>
       <p class="lede" style="margin-top:8px;font-size:.86rem">Latency: next dispatcher tick, about a minute when a slot is free. Replying from <code>triage-dash</code> answers right away.</p>
@@ -541,7 +541,7 @@
         <tr><td class="k">new</td><td><code>triage</code>, Jira To Do, oldest first</td><td>1</td><td>→ <code>triaged</code>: worktree, PLAN.md, scenarios, Czech bot comment</td><td>→ <span class="bad">triage-failed</span></td><td>30 min</td></tr>
         <tr><td class="k">reply</td><td><code>triaged</code> without <code>ai-mr</code>, To Do or <code>ai-fix</code>, comment newer than the last handled one</td><td>1</td><td>Stays <code>triaged</code>, plan updated, comment id saved in <code>handled/KEY</code></td><td>→ <span class="bad">triage-failed</span></td><td>30 min</td></tr>
         <tr><td class="k">impl</td><td><code>ai-fix</code>, not Done, no unanswered comment</td><td>1 + impl</td><td>→ <code>ai-mr</code> (draft MR, no reviewers). Already fixed elsewhere: closed as duplicate, back to <code>triaged</code></td><td>→ <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
-        <tr><td class="k">mr</td><td><code>ai-mr</code>, not Done or merged, comment newer than the last handled one</td><td>1 + mr</td><td>Stays <code>ai-mr</code>; answer posted, fix pushed if asked (new commits drop the verify labels)</td><td>→ <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
+        <tr><td class="k">mr</td><td><code>ai-mr</code>, not Done or merged, comment newer than the last handled one</td><td>1 + mr</td><td>Stays <code>ai-mr</code>; answer posted, fix pushed if asked (new commits drop the verify labels). Stuck: worker posts the final answer to Jira, stays <code>ai-mr</code></td><td>No final answer → <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
         <tr><td class="k">verify</td><td><code>ai-mr</code> without <code>ai-verified</code> / <code>ai-verify-failed</code> / <code>ai-review-retry</code>, holdout file exists, every repo’s latest pipeline green (frontend: Amplify note for that commit), not merged. Not ready for 4 h: Slack alert with the reason, daily while stuck</td><td>1 + verify</td><td>→ <code>ai-verified</code> (UI scenarios, plus API diff for BE refactors)</td><td>1st fail: <code>ai-verify-retry</code> + fix push. 2nd fail, blocked or crash: <span class="bad">ai-verify-failed</span></td><td>110 min</td></tr>
         <tr><td class="k">review</td><td><code>ai-mr</code> + <code>ai-verified</code>, no review label, not merged, worktree and MR exist</td><td>1 + review</td><td>Opus, read-only, one MR note, once per MR. clean or minor → <code>ai-reviewed</code>; blocking → <code>ai-review-retry</code></td><td>Crash → <span class="bad">ai-review-findings</span></td><td>45 min</td></tr>
         <tr><td class="k">rfix</td><td><code>ai-mr</code> + <code>ai-review-retry</code></td><td>1 + impl + review</td><td>Fixes every finding once (must- and should-fix), then the reviewer re-checks only the pushed delta against the prior report (<code>&lt;KEY&gt;.review.prev.md</code>). Re-check clean or minor → <code>ai-reviewed</code>; verify labels dropped so verify runs again</td><td>Nothing pushed, re-check still blocking, or crash → <span class="bad">ai-review-findings</span> (verify still runs)</td><td>110 min</td></tr>
@@ -562,7 +562,7 @@
         <li>Three long stages (impl, mr, a backend verify, an LLM conflict) can fill all three slots. <code>reply</code> is first in line but cannot preempt.</li>
       </ul></div>
       <div class="card failc"><h3>Visibility</h3><ul>
-        <li>GitLab MR threads are not read, only Jira comments.</li>
+        <li>Only my own MR notes trigger <code>mr</code>; reviewers’ MR notes wait until I comment.</li>
         <li>A fix I push by hand leaves <code>ai-verified</code> standing; verify-fix pushes and pushes answering my comments are not re-reviewed.</li>
         <li>Verify blocked (missing flag, no data) parks the ticket as <code>ai-verify-failed</code> before any review happened; <code>triage-worker KEY --review</code> runs it by hand.</li>
         <li><code>triage-dash</code> still judges “needs you” by the last comment, not the handled id.</li>

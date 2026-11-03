@@ -76,6 +76,8 @@ Stop and ask only when: the plan / root cause doesn't hold in the code, the chan
 
 No user present — never ask, never wait, no checkpoints. The user approved `PLAN.md` by adding label `ai-fix`.
 
+Every headless run ends with its ONE Jira comment, also when stuck (a command fails, a decision is needed): what you did, what failed (exact error), the command to run by hand, numbered questions each with a recommended answer. Questions only in the final answer never reach anyone; the next human Jira reply re-runs you.
+
 1. Phases 0–1: skip. Goal = `TICKET.md` + `PLAN.md`. Worktree already exists.
 2. Phase 2: no new plan, no Jira comment. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win. `~/.local/state/cf-triage/holdout/<KEY>.md` = acceptance scenarios an independent verifier runs against the preview after the MR exists. Read them, make the change satisfy them; never edit that file.
 3. Phase 3: implement all plan steps in one go. Stay strictly in plan scope.

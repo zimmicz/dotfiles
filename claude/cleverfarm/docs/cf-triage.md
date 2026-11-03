@@ -126,7 +126,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | `ai-reviewed` | independent review done (runs once per MR, after `ai-verified`): clean, should-fix only, or its findings were fixed once and the delta re-check passed. Survives `mr` follow-up pushes (no re-review) | triage-worker |
 | `ai-review-retry` | reviewer found must-fix issues, `rfix` will fix every finding once, then re-check the delta | triage-worker |
 | `ai-review-findings` | findings still open after the one fix round (nothing pushed, or re-check still blocking) or the reviewer crashed: read the MR note / `<KEY>.review.md`. Remove the label to re-run the review | triage-worker |
-| `ai-fix-failed` | agent bailed out (see its Jira comment) or no MR | triage-worker |
+| `ai-fix-failed` | agent bailed out (see its Jira comment) or no MR. A run that ended without a Jira comment gets one posted by the worker (its final answer). `mr` follow-up stuck like that stays `ai-mr`, my next reply re-runs it | triage-worker |
 | `ai-verify-retry` | holdout failed once, fix pushed, waiting for re-verify | triage-worker |
 | `ai-verified` | holdout scenarios pass on the preview; gates `review`. Dropped (with `ai-verify-failed` / `ai-verify-retry`) when an `mr` follow-up or `rfix` pushes new commits, so `verify` runs again; review labels stay | triage-worker |
 | `ai-verify-failed` | holdout failed after retry, blocked, or verifier crashed | triage-worker |

@@ -68,6 +68,17 @@ answered_since() {
     | jq -e --arg m "$AI_MARK" --argjson id ${2:-0} "$HUMAN_JQ"' any(.comments[]; (human | not) and ((.id | tonumber) > $id))' >/dev/null
 }
 
+fallback_comment() {
+  answered_since $1 $2 && return 1
+  local R=$(jq -r 'select(.type == "result") | .result // empty' $LOG_DIR/$1.stream.jsonl 2>/dev/null)
+  [[ -n "$R" ]] || return 1
+  jira add-comment $1 "🤖 _${AI_MARK}. Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._
+Běh skončil bez komentáře v Jiře, tady je jeho závěr:
+{noformat}
+$R
+{noformat}" >/dev/null
+}
+
 reply_filter() {
   jq -r --arg m "$AI_MARK" --argjson w $1 --argjson H "$(handled_json)" "$HUMAN_JQ"' .issues[]
     | select((.fields.comment.comments // []) as $c
@@ -160,7 +171,7 @@ implement() {
     --model $TIER $DIRS \
     --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
     --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**)" \
-    --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
+    --output-format stream-json --verbose </dev/null 2>>$LOG | tee $LOG_DIR/$KEY.stream.jsonl | stream >>$LOG)
   local MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null | jq -r '.[0].web_url // empty')
   [[ -n "$MR" ]] && echo "  mr -> $MR" | tee -a $LOG && echo "$MR" >$LOG_DIR/$KEY.mr
 }
@@ -447,7 +458,7 @@ stage_reply() {
 
 stage_impl() {
   local ID=$(snap_human $1)
-  if implement $1 $2; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; note $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; note $1 "already fixed, closed as duplicate, Sentry resolves next run"; else relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
+  if implement $1 $2; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; note $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; note $1 "already fixed, closed as duplicate, Sentry resolves next run"; else fallback_comment $1 $ID; relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
 }
 
 wt_heads() {
@@ -467,6 +478,7 @@ stage_mr() {
     mark_handled $1 $ID
     [[ -n "$GLID" ]] && echo $GLID >$GLHANDLED/$1
     if [[ "$(wt_heads $1)" != "$H0" ]]; then unverify $1; note $1 "your reply answered on MR, new commits pushed, verify labels dropped, re-verify next: $(cat $LOG_DIR/$1.mr)"; else note $1 "your reply answered on MR: $(cat $LOG_DIR/$1.mr)"; fi
+  elif fallback_comment $1 $ID; then mark_handled $1 $ID; note $1 "MR follow-up stuck, its conclusion posted to Jira, reply there: $(cat $LOG_DIR/$1.mr)"
   else relabel $1 ai-mr ai-fix-failed; note $1 "MR follow-up failed, see \`$LOG_DIR/$1.log\`"; fi
 }
 
