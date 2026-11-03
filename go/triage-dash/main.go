@@ -373,9 +373,48 @@ func fetchIssue(key string) (string, string, error) {
 	}
 	var b strings.Builder
 	for _, c := range out.Fields.Comment.Comments {
-		fmt.Fprintf(&b, "\n---\n\n**%s · %s**\n\n%s\n", c.Author.DisplayName, strings.Replace(c.Created[:min(16, len(c.Created))], "T", " ", 1), wikiToMD(strings.ReplaceAll(c.Body, "\r", "")))
+		fmt.Fprintf(&b, "\n---\n\n**%s · %s**\n\n%s\n", c.Author.DisplayName, strings.Replace(c.Created[:min(16, len(c.Created))], "T", " ", 1), wikiToMD(mentions(strings.ReplaceAll(c.Body, "\r", ""))))
 	}
-	return wikiToMD(strings.ReplaceAll(out.Fields.Description, "\r", "")), b.String(), nil
+	return wikiToMD(mentions(strings.ReplaceAll(out.Fields.Description, "\r", ""))), b.String(), nil
+}
+
+var (
+	mentionRe = regexp.MustCompile(`\[~accountid:([^\]]+)\]`)
+	usersMu   sync.Mutex
+	userNames map[string]string
+)
+
+func userName(id string) string {
+	usersMu.Lock()
+	defer usersMu.Unlock()
+	p := filepath.Join(stateDir, "users.json")
+	if userNames == nil {
+		userNames = map[string]string{}
+		if b, err := os.ReadFile(p); err == nil {
+			json.Unmarshal(b, &userNames)
+		}
+	}
+	if n, ok := userNames[id]; ok {
+		return n
+	}
+	var u struct{ DisplayName string }
+	if jiraReq("GET", "/rest/api/2/user?accountId="+url.QueryEscape(id), nil, &u) != nil || u.DisplayName == "" {
+		return ""
+	}
+	userNames[id] = u.DisplayName
+	if b, err := json.MarshalIndent(userNames, "", "  "); err == nil {
+		os.WriteFile(p, b, 0o644)
+	}
+	return u.DisplayName
+}
+
+func mentions(s string) string {
+	return mentionRe.ReplaceAllStringFunc(s, func(m string) string {
+		if n := userName(mentionRe.FindStringSubmatch(m)[1]); n != "" {
+			return "**@" + n + "**"
+		}
+		return m
+	})
 }
 
 var wikiRules = []struct {
