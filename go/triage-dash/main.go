@@ -688,7 +688,7 @@ type sideLine struct {
 	row  int
 }
 
-var tabs = []string{"log", "plan", "description", "comments"}
+var tabs = []string{"log", "plan", "holdout", "description", "comments"}
 
 type helpSection struct {
 	title string
@@ -697,7 +697,7 @@ type helpSection struct {
 
 var helpCols = [][]helpSection{
 	{
-		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log·plan·desc·comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}}},
+		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log·plan·holdout·desc·comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}}},
 		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}, {"s", "skip merge gate"}}},
 	},
 	{
@@ -869,6 +869,18 @@ func (m *model) loadBody() {
 		if p := planPath(key); p != "" {
 			b, _ := os.ReadFile(p)
 			src = "`" + p + "`\n\n" + string(b)
+		}
+	case "holdout":
+		src = "_(no holdout scenarios for " + key + ")_"
+		var parts []string
+		for _, f := range []string{key + ".md", key + ".api.md"} {
+			p := filepath.Join(stateDir, "holdout", f)
+			if b, err := os.ReadFile(p); err == nil {
+				parts = append(parts, "`"+p+"`\n\n"+string(b))
+			}
+		}
+		if len(parts) > 0 {
+			src = strings.Join(parts, "\n\n---\n\n")
 		}
 	case "comments":
 		src = or(m.comments[key], "_loading…_")
