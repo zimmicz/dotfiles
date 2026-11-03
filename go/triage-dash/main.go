@@ -1525,7 +1525,7 @@ func (m model) View() string {
 		if i < len(pane) {
 			p = pane[i]
 		}
-		view = append(view, fit(s, sideW)+"\033[2m │\033[0m  "+fit(p, m.paneW()))
+		view = append(view, fit(s, sideW)+"\033[2m │\033[0m  "+fit(p, m.paneW())+"\033[0m")
 	}
 	foot := fit(" \033[2m? help   q quit\033[0m", 20) + m.status
 	if m.ask != "" {
