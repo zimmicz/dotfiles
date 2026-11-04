@@ -174,7 +174,7 @@ func search(jql string) ([]issue, error) {
 }
 
 func fetchJira() ([]issue, []issue, error) {
-	issues, err := search("project = DEV AND labels in (" + labels + ") AND (statusCategory != Done OR updated >= -3d) ORDER BY updated DESC")
+	issues, err := search("project = DEV AND (assignee = currentUser() OR assignee is EMPTY) AND labels in (" + labels + ") AND (statusCategory != Done OR updated >= -3d) ORDER BY updated DESC")
 	if err != nil {
 		return nil, nil, err
 	}

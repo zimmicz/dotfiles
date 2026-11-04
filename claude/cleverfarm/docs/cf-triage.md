@@ -60,7 +60,7 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 | verify result | `~/.local/state/cf-triage/<KEY>.verify.md` (+ screenshot paths), video `<KEY>.verify-media/<KEY>.webm` (one chapter per scenario), MR note with uploaded video link |
 | did the timer run / crash | `journalctl --user -u cf-triage --since today` (dispatcher); a stage: `journalctl --user -u cf-triage-<KEY>-<stage>`; running stages: `systemctl --user list-units 'cf-triage-*'` |
 | re-run one stage | `triage-worker DEV-X` (analyze / implement if `ai-fix`), `triage-worker DEV-X --verify`. Spawns the stage detached; no free slot or ticket already running → exit 75 |
-| why wasn't X picked up | slots below: all `SLOTS` busy, or X is `impl`/`mr` and `impl-*` is full, or X is `verify` and its preview isn't ready (pipeline not green / Amplify note missing) → retried next tick |
+| why wasn't X picked up | X assigned to someone else (factory + triage-dash only take tickets assigned to me or unassigned; reassign = hand-off), or slots below: all `SLOTS` busy, or X is `impl`/`mr` and `impl-*` is full, or X is `verify` and its preview isn't ready (pipeline not green / Amplify note missing) → retried next tick |
 | kill one stage | `systemctl --user stop cf-triage-<KEY>-<stage>` |
 
 **Slots** (`cf-triage.service` = dispatcher on an every-minute timer; it picks work, spawns each stage as its own transient unit `cf-triage-<KEY>-<stage>` via `systemd-run --user` and exits within seconds, so a long stage blocks nothing but its own slot):

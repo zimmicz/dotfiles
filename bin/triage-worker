@@ -25,7 +25,8 @@ STREAM_JQ='(now | localtime | strftime("%T")) as $t
 stream() { jq --unbuffered -r "$STREAM_JQ" }
 
 search() {
-  jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=labels,comment&maxResults=$2"
+  local Q=${1/#project = DEV AND /project = DEV AND (assignee = currentUser() OR assignee is EMPTY) AND }
+  jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$Q" '$q|@uri')&fields=labels,comment&maxResults=$2"
 }
 
 HUMAN_JQ='def human: (.body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not;'
