@@ -210,7 +210,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|mcp__lean-ctx__ctx_shell",
         "hooks": [
           {
             "type": "command",
