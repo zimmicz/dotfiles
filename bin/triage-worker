@@ -44,7 +44,7 @@ snap_human() {
 mark_handled() { echo ${2:-0} >$HANDLED/$1 }
 
 has_label() {
-  search "key = $1" 1 | jq -e --arg l "$2" '.issues[0].fields.labels | index($l) != null' >/dev/null
+  jira GET "/rest/api/2/issue/$1?fields=labels" | jq -e --arg l "$2" '.fields.labels | index($l) != null' >/dev/null
 }
 
 grill_outcome() { head -1 $LOG_DIR/$1.grill 2>/dev/null; }
@@ -488,6 +488,7 @@ stage_new() {
 
 stage_reply() {
   echo "--- follow-up $1"
+  has_label $1 ai-mr && { echo "  already ai-mr (stale search index), left for MR follow-up"; return 0 }
   local ID=$(snap_human $1) CUR=triaged
   [[ -n "${GRILL:-}" ]] && has_label $1 needs-answer && CUR=needs-answer
   if analyze $1 $2; then
