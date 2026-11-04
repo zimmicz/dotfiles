@@ -1,3 +1,4 @@
 --ignore-dir=dist
+--ignore-dir=.worktrees
 --type-set=ts:ext:ts
 --type-set=tsdef:match:/.+\.d\.ts/
