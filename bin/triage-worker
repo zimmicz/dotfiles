@@ -194,9 +194,19 @@ verify_targets() {
       | jq -e 'all(.[]; .status == "success" or .status == "manual" or .status == "skipped" or (.status == "failed" and .allow_failure))' >/dev/null && PS=success
     [[ "$PS" == success ]] || { why "pipeline ${PS:-missing} in $R, $(jq -r .web_url <<<$MR)"; return 2 }
     SHA=$(jq -r .sha <<<$PIPE)
-    if [[ $2 == cf-farm-frontend ]]; then
-      glab api "projects/$PID/merge_requests/$IID/notes?per_page=100" </dev/null \
-        | jq -e --arg s "${SHA[1,8]}" 'any(.[]; (.body | contains("amplify-preview-url")) and (.body | contains("@ " + $s)))' >/dev/null || { why "Amplify preview note missing for ${SHA[1,8]} in $R"; return 2 }
+    if [[ $2 == cf-farm-frontend ]] && ! glab api "projects/$PID/merge_requests/$IID/notes?per_page=100" </dev/null \
+        | jq -e --arg s "${SHA[1,8]}" 'any(.[]; (.body | contains("amplify-preview-url")) and (.body | contains("@ " + $s)))' >/dev/null; then
+      AJ=($(glab api "projects/$PID/pipelines/$(jq -r .id <<<$PIPE)/jobs?per_page=100" </dev/null | jq -r '.[] | select(.name == "use Nightly backend") | "\(.id) \(.status) \(.web_url)"'))
+      if [[ ${AJ[2]} != failed ]]; then
+        why "Amplify preview note missing for ${SHA[1,8]} in $R"
+      elif [[ -z "${TRIAGE_DRY:-}" && "$(cat $LOG_DIR/$KEY.amplify-retry 2>/dev/null)" != ${SHA[1,8]} ]] \
+          && glab api -X POST "projects/$PID/jobs/${AJ[1]}/retry" </dev/null >/dev/null; then
+        echo ${SHA[1,8]} >$LOG_DIR/$KEY.amplify-retry
+        why "Amplify preview job failed for ${SHA[1,8]} in $R, retried once: ${AJ[3]}"
+      else
+        why "Amplify preview job failed for ${SHA[1,8]} in $R, retry did not help, needs Michal: ${AJ[3]}"
+      fi
+      return 2
     fi
     echo "$R:$PID:$IID:$(jq -r .id <<<$PIPE):${SHA[1,8]}"
   done
