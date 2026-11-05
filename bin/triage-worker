@@ -199,12 +199,15 @@ verify_targets() {
       AJ=($(glab api "projects/$PID/pipelines/$(jq -r .id <<<$PIPE)/jobs?per_page=100" </dev/null | jq -r '.[] | select(.name == "use Nightly backend") | "\(.id) \(.status) \(.web_url)"'))
       if [[ ${AJ[2]} != failed ]]; then
         why "Amplify preview note missing for ${SHA[1,8]} in $R"
-      elif [[ -z "${TRIAGE_DRY:-}" && "$(cat $LOG_DIR/$KEY.amplify-retry 2>/dev/null)" != ${SHA[1,8]} ]] \
-          && glab api -X POST "projects/$PID/jobs/${AJ[1]}/retry" </dev/null >/dev/null; then
+      elif [[ "$(cat $LOG_DIR/$KEY.amplify-retry 2>/dev/null)" == ${SHA[1,8]} ]]; then
+        why "Amplify preview job failed for ${SHA[1,8]} in $R, retry did not help, needs Michal: ${AJ[3]}"
+      elif [[ -n "${TRIAGE_DRY:-}" ]]; then
+        why "Amplify preview job failed for ${SHA[1,8]} in $R, would retry: ${AJ[3]}"
+      elif glab api -X POST "projects/$PID/jobs/${AJ[1]}/retry" </dev/null >/dev/null; then
         echo ${SHA[1,8]} >$LOG_DIR/$KEY.amplify-retry
         why "Amplify preview job failed for ${SHA[1,8]} in $R, retried once: ${AJ[3]}"
       else
-        why "Amplify preview job failed for ${SHA[1,8]} in $R, retry did not help, needs Michal: ${AJ[3]}"
+        why "Amplify preview job failed for ${SHA[1,8]} in $R, retry call failed: ${AJ[3]}"
       fi
       return 2
     fi
