@@ -10,6 +10,7 @@ Read by the independent reviewer (`/mattpocock-skills:code-review` in `/cf-ticke
 - Self-contained JSX chunk with its styling → own component/file, not a growing parent. `renderXxx()` helpers → real JSX components — evidence: !3503, !1476 ("Nestálo by za to udělat tohle jako samostatnou komponentu?") — lint: no
 - Don't wrap trivial JSX in a local variable/helper; inline it — evidence: !3098 ("Proč to neinlinovat do toho jsx?") — lint: no
 - Key mapped elements by stable id, not array index — evidence: !1463 — lint: react/no-array-index-key (off)
+- Generic input behaviour (blur padding, wheel blur, clamp/round) lives in the base field (`NumberFieldBase`), not in per-consumer handlers (`BulkYield` onBlur) — evidence: session 2026-11-05, !4428 ("Why didn't we put this on the Base component?") — lint: no
 
 ## state & data fetching
 
@@ -18,6 +19,8 @@ Read by the independent reviewer (`/mattpocock-skills:code-review` in `/cf-ticke
 - Query keys on the factory root (`xKeys.all()`), not separate global params — evidence: !3142 — lint: cleverfarm/no-raw-query-keys (partial)
 - Async race / stale state → simplest first: block UI while in flight (`inert`/disabled), reuse loaded data. No extra fetches (`ensureQueryData`), token refs, latest-request guards — evidence: "wouldnt it be easier to disable the form fields while some async call is in flight?" — lint: no
 - No custom hook wrapping `useQuery` + `useMemo` derivation; export the `xQuery()` queryOptions, derive via `select` at use site. Raw `fetch` queryFn → throw on `!res.ok` / unexpected shape, never return error body as data — evidence: session 2026-11-04, !4416 ("just export the query, errors not handled, why useMemo") — lint: no
+- No imperative `queryClient.refetchQueries` after mutations; global MutationCache invalidates, awaited refresh via `meta.awaits` prefix key — evidence: session 2026-11-05, !4423 (imperative refetch note), DEV-3604 — lint: no-restricted-syntax (planned in DEV-3604)
+- `useSuspenseQuery` consumer → own `Suspense` (with fallback) + `ErrorBoundary`, wrapping only the data-dependent part; controls/headers (selects, season picker) stay mounted. No fallback-less `Suspense` unmounting a whole panel — evidence: session 2026-11-05, !4423 ("error/pending state"), DEV-3594 — lint: no
 
 ## types
 
