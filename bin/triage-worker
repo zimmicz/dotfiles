@@ -47,7 +47,9 @@ search() {
   jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$Q" '$q|@uri')&fields=labels,comment&maxResults=$2"
 }
 
-HUMAN_JQ='def human: (.body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m) | not;'
+JME=$(jira GET /rest/api/3/myself | jq -r '.accountId // empty')
+[[ -n "$JME" ]] || { echo "lookup failed: jira myself (accountId), refusing to read comments"; exit 1 }
+HUMAN_JQ="def ai: (.body // \"\" | if type == \"string\" then . else [.. | .text? // empty] | join(\"\") end) | contains(\$m); def human: (ai | not) and .author.accountId == \"$JME\";"
 
 handled_json() {
   local F
@@ -84,7 +86,7 @@ grill_remind() {
 
 answered_since() {
   jira GET "/rest/api/3/issue/$1/comment?maxResults=1000" \
-    | jq -e --arg m "$AI_MARK" --argjson id ${2:-0} "$HUMAN_JQ"' any(.comments[]; (human | not) and ((.id | tonumber) > $id))' >/dev/null
+    | jq -e --arg m "$AI_MARK" --argjson id ${2:-0} "$HUMAN_JQ"' any(.comments[]; ai and ((.id | tonumber) > $id))' >/dev/null
 }
 
 fallback_comment() {
@@ -104,7 +106,7 @@ reply_filter() {
       | ($c | map(select(human)) | last) as $h
       | (if $h == null then false
          elif $H[.key] != null then (($h.id | tonumber) > $H[.key])
-         else ($c | last | human) end) == $w)' \
+         else (($h.id | tonumber) > ($c | map(select(ai) | .id | tonumber) | max // 0)) end) == $w)' \
     | jq -rs "{issues: .} | $ROWS_JQ"
 }
 

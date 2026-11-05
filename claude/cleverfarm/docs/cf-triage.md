@@ -214,6 +214,7 @@ Pick up manually instead: `cd ~/work/cleverfarm/repos/<repo> && cf-work DEV-XXXX
 - Implement: denied `git push --force/-f`, push to develop/staging/production, `reset --hard`, `glab mr merge/approve`. Protected branches enforce it server-side too.
 - Implementation only after I add `ai-fix`. MR always draft, no reviewers.
 - Agent bails (comment, no MR) if root cause doesn't hold, scope grows, or tests can't go green.
+- Only my comments are instructions: a Jira comment counts as human only when `author.accountId` = `jira GET /rest/api/3/myself` (worker exits with `lookup failed` if that call fails), MR notes only with my GitLab username. Comments by others never start a run and land in `TICKET.md` under `## Comments by others` as context only.
 - Context per stage: every `claude -p` gets `--settings` disabling the plugins no stage uses (caveman, ponytail, slack, cf-planning, cf-release, cf-kb, cf-eod, cf-bug-report, cf-cli-skill, cf-investigator, cf-cc, typescript-lsp; `HEADLESS_SETTINGS` in triage-worker). impl / review / conflict / verify run `--strict-mcp-config` with lean-ctx + codegraph only (`mcp_config`; Playwright added for impl's `/check-layout` and for verify). `new` / `reply` keep every MCP server: Sentry is a claude.ai connector and strict mode drops connectors. First-turn context ≈ 50K tokens instead of 63K; headless skills are split from the interactive ones so no checkpoint / plan-mode text is loaded.
 
 ## Notifications
