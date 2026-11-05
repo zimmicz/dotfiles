@@ -736,11 +736,11 @@ type helpSection struct {
 
 var helpCols = [][]helpSection{
 	{
-		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log·plan·holdout·desc·comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}}},
+		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log·plan·holdout·desc·comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}, {"Z", "zoom pane"}}},
 		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}, {"s", "skip merge gate"}}},
 	},
 	{
-		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"l", "log in less"}, {"e", "edit plan / holdout"}, {"c", "resume session"}}},
+		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"y", "copy tab text"}, {"l", "log in less"}, {"e", "edit plan / holdout"}, {"c", "resume session"}}},
 		{"Other", [][2]string{{"r", "refresh Jira"}, {"?", "this help"}, {"q", "quit"}}},
 	},
 }
@@ -805,27 +805,27 @@ func helpLines() []string {
 }
 
 type model struct {
-	issues, todos   []issue
-	rows            []row
-	otherN          int
-	body            []string
-	bodySrc         string
-	comments, descs map[string]string
-	cur, off        int
-	tab, scroll     int
-	w, h            int
-	busy, help      bool
-	showOther       bool
-	pickKey         string
-	pickQ           string
-	pickCur         int
-	svc, status     string
-	ask             string
-	pending         tea.Cmd
-	jiraErr         error
-	jiraAt          time.Time
-	mrs             map[string]mrInfo
-	labels          map[string]string
+	issues, todos    []issue
+	rows             []row
+	otherN           int
+	body             []string
+	bodySrc, src     string
+	comments, descs  map[string]string
+	cur, off         int
+	tab, scroll      int
+	w, h             int
+	busy, help, zoom bool
+	showOther        bool
+	pickKey          string
+	pickQ            string
+	pickCur          int
+	svc, status      string
+	ask              string
+	pending          tea.Cmd
+	jiraErr          error
+	jiraAt           time.Time
+	mrs              map[string]mrInfo
+	labels           map[string]string
 }
 
 func changed(prev map[string]string, rows []row, label func(row) string) (map[string]string, []string) {
@@ -926,6 +926,7 @@ func (m *model) loadBody() {
 	case "description":
 		src = or(m.descs[key], "_loading…_")
 	}
+	m.src = src
 	cache := fmt.Sprint(m.tab, w, src)
 	if cache == m.bodySrc {
 		return
@@ -1013,6 +1014,9 @@ func (m model) sel() row {
 }
 
 func (m model) paneW() int {
+	if m.zoom {
+		return max(m.w-2, 10)
+	}
 	return max(m.w-sideW-4, 10)
 }
 
@@ -1023,7 +1027,7 @@ func (m model) bottomAnchored() bool {
 func (m model) wrapped() []string {
 	var out []string
 	for _, l := range m.body {
-		out = append(out, strings.Split(ansi.Hardwrap(l, m.paneW(), true), "\n")...)
+		out = append(out, strings.Split(ansi.Wrap(l, m.paneW(), ""), "\n")...)
 	}
 	return out
 }
@@ -1117,7 +1121,7 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 			return jiraReq("POST", "/rest/api/2/issue/"+msg.key+"/comment", map[string]string{"body": text}, nil)
 		}))
 	case tea.MouseMsg:
-		side := msg.X < sideW
+		side := !m.zoom && msg.X < sideW
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
 			if side {
@@ -1185,6 +1189,9 @@ func (m model) key(k string) (model, tea.Cmd) {
 		return m, tea.Quit
 	case "?":
 		m.help = true
+	case "Z":
+		m.zoom = !m.zoom
+		m.scrollBody(0)
 	case "z":
 		m.showOther = !m.showOther
 		m.reload()
@@ -1222,6 +1229,13 @@ func (m model) key(k string) (model, tea.Cmd) {
 		delete(m.comments, r.key)
 		m.jiraAt = time.Now()
 		return m, loadJira
+	case "y":
+		src, tab := m.src, tabs[m.tab]
+		return m, do(tab+" copied", func() error {
+			c := exec.Command("xclip", "-selection", "clipboard")
+			c.Stdin = strings.NewReader(src)
+			return c.Run()
+		})
 	case "l":
 		return m, tea.ExecProcess(exec.Command("less", "+G", filepath.Join(stateDir, r.key+".log")), func(error) tea.Msg { return tickMsg{} })
 	case "e":
@@ -1251,7 +1265,7 @@ func (m model) key(k string) (model, tea.Cmd) {
 			before[p] = string(b)
 		}
 		attach := tabs[m.tab] == "holdout" && jiraKey.MatchString(r.key)
-		return m, tea.ExecProcess(exec.Command("zsh", append([]string{"-ic", `eval "${EDITOR:-vim} ${(q)@}"`, "zsh"}, files...)...), func(err error) tea.Msg {
+		return m, tea.ExecProcess(editCmd(files...), func(err error) tea.Msg {
 			if err != nil || !attach {
 				return doneMsg{"edited", err, false}
 			}
@@ -1307,7 +1321,13 @@ func (m model) key(k string) (model, tea.Cmd) {
 			break
 		}
 		f.Close()
-		return m, tea.ExecProcess(exec.Command("zsh", "-ic", `eval "${EDITOR:-vim} ${(q)1}"`, "zsh", f.Name()), func(error) tea.Msg { return editedMsg{r.key, f.Name()} })
+		return m, tea.ExecProcess(editCmd(f.Name()), func(err error) tea.Msg {
+			if err != nil {
+				os.Remove(f.Name())
+				return doneMsg{"", err, false}
+			}
+			return editedMsg{r.key, f.Name()}
+		})
 	case "b":
 		if in, ok := m.mrs[r.mr]; !ok || in.label != "conflict" {
 			m.status = "b only works on an MR in conflict"
@@ -1564,7 +1584,12 @@ func (m model) View() string {
 		if i < len(pane) {
 			p = pane[i]
 		}
-		view = append(view, fit(s, sideW)+"\033[2m │\033[0m  "+fit(p, m.paneW())+"\033[0m")
+		if m.zoom {
+			s = " "
+		} else {
+			s = fit(s, sideW) + "\033[2m │\033[0m  "
+		}
+		view = append(view, s+fit(p, m.paneW())+"\033[0m")
 	}
 	foot := fit(" \033[2m? help   q quit\033[0m", 20) + m.status
 	if m.ask != "" {
@@ -1580,7 +1605,22 @@ func (m model) View() string {
 	return strings.Join(view, "\n")
 }
 
+var editor = sync.OnceValue(func() []string {
+	out, _ := exec.Command("zsh", "-ic", `e=${EDITOR:-vim}; print -r -- ${aliases[$e]:-$e}`).Output()
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if f := strings.Fields(lines[len(lines)-1]); len(f) > 0 {
+		return f
+	}
+	return []string{"vi"}
+})
+
+func editCmd(files ...string) *exec.Cmd {
+	e := editor()
+	return exec.Command(e[0], append(slices.Clone(e[1:]), files...)...)
+}
+
 func main() {
+	go editor()
 	if _, err := tea.NewProgram(model{comments: map[string]string{}, descs: map[string]string{}, mrs: map[string]mrInfo{}}, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
