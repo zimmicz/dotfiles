@@ -27,7 +27,7 @@ Goal: catch stretched flex children, overflowing widths, double borders, wrong i
 5. App route needing auth (not Storybook): log in with Playwright MCP yourself, exactly as `/cf-holdout-ui` step 4 (`fe-automation@cleverfarm.cz`, `FE_AUTOMATION_PSW` from cf-farm-frontend `.env`), works on localhost and `https://<branch>.dev.cleverfarm.cz`. Never claim you can't log in or ask the user to; only a failed attempt (state the error) counts.
 6. Compare against Figma frame / Jira designer comments (TICKET.md, PLAN.md) if present. Check: widths, spacing, borders (doubles), icon, alignment, flex stretching, overflow, truncation.
 7. Issues found → fix, re-screenshot, repeat. Shared/DS component glitch → fix in DS + story covering the state, not app override.
-8. Report: table `story/route | viewport | verdict | note`, plus screenshot paths. Cannot verify (no browser, login attempted and failed) → say so explicitly, put it in MR description.
+8. Report: table `story/route | viewport | verdict | note`, plus screenshot paths. Skip only after an actual attempt failed: quote the exact error (command + output) in the report and MR description. "Headless", "no logged-in browser", "will run in CI/preview" are never valid reasons — Playwright MCP runs headless and logs in per step 5.
 
 ## Rules
 

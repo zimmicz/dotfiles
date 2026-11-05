@@ -48,7 +48,8 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 ## Phase 4: Verify
 
 11. Run tests, lint, typecheck (`nr test`, `nr lint`, `nr typecheck` or project equivalents). Fix failures.
-11a. If diff touches UI files (`*.tsx`, `*.css`, stories), run `/check-layout` — screenshots at desktop + mobile, all states. UI is not verified until this passes. Include the verdict table in the MR description; if something couldn't be checked, say so there with the reason.
+11a. If diff touches UI files (`*.tsx`, `*.css`, stories), run `/check-layout` — screenshots at desktop + mobile, all states. UI is not verified until this passes. Include the verdict table in the MR description; if something couldn't be checked, say so there with the exact error of the failed attempt.
+11b. New or changed E2E scenarios → run them locally (repo's E2E command, filtered to those scenarios) with `CI=true TARGET=http://localhost:<this worktree's dev server port>`. E2E logs in by itself from `.env` — no logged-in browser needed. Skip only with the failing command + output quoted in the MR description; "headless" / "will run in CI/preview" is never a reason.
 
 ## Phase 5: Independent review
 
@@ -81,7 +82,7 @@ Every headless run ends with its ONE Jira comment, also when stuck (a command fa
 1. Phases 0–1: skip. Goal = `TICKET.md` + `PLAN.md`. Worktree already exists.
 2. Phase 2: no new plan, no Jira comment. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win. `~/.local/state/cf-triage/holdout/<KEY>.md` = acceptance scenarios an independent verifier runs against the preview after the MR exists. Read them, make the change satisfy them; never edit that file.
 3. Phase 3: implement all plan steps in one go. Stay strictly in plan scope.
-4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix. UI diff → `/check-layout` (Playwright, headless; auth routes → log in per its step 5); anything still unverified → list it in the MR description and Jira comment with the reason.
+4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix. UI diff → `/check-layout` (Playwright, headless; auth routes → log in per its step 5); new/changed E2E scenarios → run locally per step 11b; anything still unverified → list it in the MR description and Jira comment with the exact error of the failed attempt.
 4a. **Build tool not in the shell allowlist** (BE: `./gradlew`, `mvn`) → CI is the build gate. Never ask to widen the allowlist, never bail for it. Only local static checks (read the diff, `git diff --check`). Commit in plan order (a pinning/characterization test first, then the change), push the branch, open the draft MR early (`/cf-mr --headless`). Poll the MR pipeline with `glab api projects/<id>/merge_requests/<iid>/pipelines` and the jobs of each child pipeline via `.../pipelines/<pid>/bridges` → downstream `.../pipelines/<child>/jobs`. Failed job → `glab api projects/<id>/jobs/<job>/trace`, fix, push. Max 3 red rounds per phase 4, then bail out with the last failing trace excerpt. Phase 4 is green only when every job of the latest pipeline (check/test + lint) is green. A pinning test pushed first must be green on its own pipeline before the refactor commit is pushed.
 5. Phase 5: steps 12–14 on the diff.
 6. Phase 6: `/cf-mr --headless`. No holdout verify here — triage-worker runs it once the preview is up.
