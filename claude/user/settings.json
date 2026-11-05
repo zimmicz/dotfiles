@@ -79,7 +79,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "sonnet",
+  "model": "opus",
   "deniedMcpServers": [
     {
       "serverName": "claude.ai Atlassian MCP"
