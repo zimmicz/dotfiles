@@ -14,15 +14,33 @@ SLOTDIR=$LOG_DIR/slots
 HANDLED=$LOG_DIR/handled
 STALLED=$LOG_DIR/stalled
 GLHANDLED=$LOG_DIR/handled-mr
-mkdir -p $LOG_DIR $HOLDOUT $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED
+TNOTES=$LOG_DIR/notes
+mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED
 
-STREAM_JQ='(now | localtime | strftime("%T")) as $t
-  | (if .type == "system" and .subtype == "init" then "🆔 session \(.session_id) — reopen: cd \(.cwd) && claude --resume \(.session_id)"
-  elif .type == "assistant" then (.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
-  elif .type == "result" then "✅ exit error=\(.is_error) cost=$\(.total_cost_usd)\n\(.result // "")" else empty end)
-  | "\($t) \(.)"'
+HEADLESS_SETTINGS='{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false,"slack@claude-plugins-official":false,"cf-planning@cleverfarm":false,"cf-release@cleverfarm":false,"cf-kb@cleverfarm":false,"cf-eod@cleverfarm":false,"cf-bug-report@cleverfarm":false,"cf-cli-skill@cleverfarm":false,"cf-investigator@cleverfarm":false,"cf-cc@cleverfarm":false,"typescript-lsp@claude-plugins-official":false}}'
+PW_ARGS='["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools"]'
 
-stream() { jq --unbuffered -r "$STREAM_JQ" }
+mcp_config() {
+  local PW=${1:-}; shift
+  jq -nc --arg pw "$PW" --argjson pwargs "$PW_ARGS" --slurpfile c ~/.claude.json --args '
+    ($c[0].mcpServers | with_entries(select(.key | IN($ARGS.positional[])))) as $m
+    | {mcpServers: ($m + (if $pw == "" then {} else {playwright: {type: "stdio", command: "npx", args: ($pwargs + ["--output-dir", $pw])}} end))}' "$@"
+}
+
+STREAM_JQ='def ctx: ((.message.usage.input_tokens // 0) + (.message.usage.cache_read_input_tokens // 0) + (.message.usage.cache_creation_input_tokens // 0));
+foreach inputs as $m ({b: 0, n: 0, c: 0, peak: 0};
+  (if $m.type == "assistant" then .n += 1 | .c = ($m | ctx) | .peak = ([.peak, .c] | max) | .nb = ((.c / 50000) | floor) else .nb = .b end)
+  | .lines = ((now | localtime | strftime("%T")) as $t
+    | [ (if $m.type == "system" and $m.subtype == "init" then "🆔 session \($m.session_id) — reopen: cd \($m.cwd) && claude --resume \($m.session_id) — transcript ~/.claude/projects/\($m.cwd | gsub("[/.]"; "-"))/\($m.session_id).jsonl"
+        elif $m.type == "system" and $m.subtype == "compact_boundary" then "🧹 compacted (\($m.compactMetadata.trigger // "?"), \((($m.compactMetadata.preTokens // 0) / 1000) | floor)K before)"
+        elif $m.type == "assistant" then ($m.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
+        elif $m.type == "result" then "✅ exit error=\($m.is_error) cost=$\($m.total_cost_usd) turns=\(.n) peak=\((.peak / 1000) | floor)K\n\($m.result // "")" else empty end),
+        (if .nb > .b then "📏 ctx \((.c / 1000) | floor)K (turn \(.n))" else empty end)
+      ] | map("\($t) \(.)"))
+  | .b = (if $m.type == "system" and $m.subtype == "compact_boundary" then 0 else ([.b, .nb] | max) end);
+  .lines[])'
+
+stream() { jq --unbuffered -nr "$STREAM_JQ" }
 
 search() {
   local Q=${1/#project = DEV AND /project = DEV AND (assignee = currentUser() OR assignee is EMPTY) AND }
@@ -121,7 +139,7 @@ analyze() {
     echo "  no repo '$REPO'" | tee -a $LOG
     return 1
   fi
-  local SETUP=$(cd $REPOS/$REPO && cf-work $KEY --no-launch --no-claim 2>&1)
+  local SETUP=$(cd $REPOS/$REPO && cf-work $KEY --no-launch --no-claim --comments-after $(<$HANDLED/$KEY 2>/dev/null || echo 0) 2>&1)
   echo "$SETUP" >>$LOG
   local WT=($REPOS/$REPO/.worktrees/${KEY}-*(N/[1]))
   local TIER=$(grep -oP 'claude --model \K\w+' <<<"$SETUP" || echo sonnet)
@@ -136,9 +154,9 @@ analyze() {
     rm -f $LOG_DIR/$KEY.grill
     GARGS=" --grill --round $(( $(<$LOG_DIR/$KEY.round 2>/dev/null || echo 0) + 1 )) --max-rounds ${GRILL_MAX_ROUNDS:-3}"
   fi
-  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work $KEY --headless$GARGS" \
-    --model $TIER $DIRS \
-    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$LOG_DIR/$KEY.grill) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) Write(/$HOLDOUT/$KEY.api.md) Edit(/$HOLDOUT/$KEY.api.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
+  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work-headless $KEY$GARGS" \
+    --model $TIER $DIRS --settings "$HEADLESS_SETTINGS" \
+    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$LOG_DIR/$KEY.grill) Write(/$TNOTES/$KEY.md) Edit(/$TNOTES/$KEY.md) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) Write(/$HOLDOUT/$KEY.api.md) Edit(/$HOLDOUT/$KEY.api.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) && [[ -f $WT/PLAN.md || "$(grill_outcome $KEY)" == ASK ]] \
     && echo "  ok -> $WT/PLAN.md${$(grill_outcome $KEY):+ (grill: $(grill_outcome $KEY))}" | tee -a $LOG
   local RC=$? F
@@ -161,16 +179,16 @@ implement() {
   local KEY=$1 REPO=${2-} LOG=$LOG_DIR/$1.log
   echo "=== implement $KEY ($REPO) $(date -Iseconds)" | tee -a $LOG
   [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] || { echo "  no repo '$REPO'" | tee -a $LOG; return 1; }
-  local SETUP=$(cd $REPOS/$REPO && cf-work $KEY --no-launch 2>&1)
+  local SETUP=$(cd $REPOS/$REPO && cf-work $KEY --no-launch --comments-after $(<$HANDLED/$KEY 2>/dev/null || echo 0) 2>&1)
   echo "$SETUP" >>$LOG
   local WT=($REPOS/$REPO/.worktrees/${KEY}-*(N/[1]))
   local TIER=$(grep -oP 'claude --model \K\w+' <<<"$SETUP" || echo sonnet)
   local DIRS=(); for D in ${(u)${(f)"$(grep -oP -- '--add-dir \K\S+' <<<"$SETUP")"}}; do DIRS+=(--add-dir $D); done
   [[ -n "$WT" && -f $WT/PLAN.md ]] || { echo "  no worktree/PLAN.md" | tee -a $LOG; return 1; }
   local PANE=$(wm_window $WT $LOG)
-  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-ticket $KEY --headless ${3:-}" \
-    --model $TIER $DIRS \
-    --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
+  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-ticket-headless $KEY ${3:-}" \
+    --model $TIER $DIRS --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config $LOG_DIR/$KEY.layout-media lean-ctx codegraph)" \
+    --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__playwright Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
     --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | tee $LOG_DIR/$KEY.stream.jsonl | stream >>$LOG)
   local MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null | jq -r '.[0].web_url // empty')
@@ -251,14 +269,14 @@ verify() {
   local MEDIA=$LOG_DIR/$KEY.verify-media
   rm -rf $OUT $MEDIA
   local CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-env/*' 2>/dev/null | sort -V | tail -1)
-  local MCP=$(jq -nc --arg d $MEDIA '{mcpServers:{playwright:{type:"stdio",command:"npx",args:["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--output-dir",$d]}}}')
+  local MCP=$(mcp_config $MEDIA)
   local PANE=$(wm_window $WT0 $LOG)
   mkdir -p ~/cf-env-tmp
-  (cd $WT0 && TMUX_PANE=$PANE TMPDIR=$HOME/cf-env-tmp claude -p "/cf-holdout-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA/$KEY.webm")" \
-    --model sonnet \
+  (cd $WT0 && TMUX_PANE=$PANE TMPDIR=$HOME/cf-env-tmp claude -p "/cf-holdout-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA/$KEY.webm")${4:+ failed=$4}" \
+    --model sonnet --settings "$HEADLESS_SETTINGS" \
     --strict-mcp-config --mcp-config "$MCP" \
     --allowedTools "Read Skill Write(/$OUT) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(ffmpeg -v error -y -i $MEDIA/$KEY.webm -vf mpdecimate=max=8,setpts=N/FRAME_RATE/TB -an $MEDIA/$KEY.short.webm) Bash(bash $HOME/.claude/skills/cf-holdout-api/run-scenarios.sh:*)" \
-    --disallowedTools "Edit Bash(git:*)" \
+    --disallowedTools "Edit Bash(git:*) Read(/$TNOTES/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)
   echo "  ${VERDICT:-no report}" | tee -a $LOG
@@ -364,9 +382,9 @@ review() {
   rm -f $OUT
   local PANE=$(wm_window $WT0 $LOG)
   (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-review $KEY repos=${(j:,:)${(f)T}} branch=${WT0:t} report=$OUT$PRIOR" \
-    --model opus \
+    --model opus --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '' lean-ctx codegraph)" \
     --allowedTools "Read Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Write(/$OUT) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git merge-base:*) Bash(git fetch:*) Bash(glab mr note:*) Bash(glab api:*) Bash(jq:*)" \
-    --disallowedTools "Edit Bash(git push:*) Bash(git commit:*) Bash(git checkout:*) Bash(git reset:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*)" \
+    --disallowedTools "Edit Bash(git push:*) Bash(git commit:*) Bash(git checkout:*) Bash(git reset:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)
   echo "  ${VERDICT:-no report}" | tee -a $LOG
@@ -454,7 +472,7 @@ resolve_conflict() {
     fi
     local PANE=$(wm_window $WT $LOG)
     (cd $WT && TMUX_PANE=$PANE claude -p "Rebase of branch $BR onto origin/$TGT is in progress in this worktree and stopped on conflicts. No human present, never ask. Run /mattpocock-skills:resolving-merge-conflicts. Intent of this branch: its MR $URL + PLAN.md / TICKET.md here if present. Intent of the other side: the commits on origin/$TGT touching each conflicted file (git log origin/$TGT -- <file>) and their MRs (glab api). Keep both intents. pnpm-lock.yaml: never hand-merge, git checkout --ours it, then pnpm install --lockfile-only. Continue with GIT_EDITOR=true git rebase --continue until the rebase is finished. Then run the repo's lint, typecheck and the tests touching the conflicted files (per its CLAUDE.md), fix only what the resolution broke, amend into the rebased commits. Never push, never skip or drop commits. Not confident about a hunk → stop. Write $REPORT: first line exactly RESOLVED or FAILED: <reason>, then markdown bullets for a reviewer skimming an MR note, one per conflicted file: - \`<path>\`: kept <X>, dropped <Y>, <why in one short clause> (max 2 lines each, no paragraphs). If the resolution forced a follow-up edit in a file that did not conflict, one more bullet for it. Last bullet: - Checks: <what ran, result>." \
-      --model opus \
+      --model opus --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '' lean-ctx codegraph)" \
       --allowedTools "Read Edit Write Skill mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Bash(git:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Bash(glab api:*) Bash(glab mr view:*) Bash(jq:*)" \
       --disallowedTools "Bash(git push:*) Bash(git reset --hard:*) Bash(git rebase --skip:*) Bash(git rebase --abort:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**)" \
       --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
@@ -541,10 +559,13 @@ stage_mr() {
   else relabel $1 ai-mr ai-fix-failed; note $1 "MR follow-up failed, see \`$LOG_DIR/$1.log\`"; fi
 }
 
+failed_scenarios() { sed -nE 's/^(S[0-9]+) [^—]*: fail.*/\1/p' $1 2>/dev/null | paste -sd, - }
+
 stage_verify() {
-  local KEY=$1 REPO=$2 RC REPORT=$LOG_DIR/$1.verify.md
+  local KEY=$1 REPO=$2 RC H0 FAILED="" REPORT=$LOG_DIR/$1.verify.md
   has_label $KEY ai-verified ai-verify-failed ai-review-retry && { echo "  already verified or in rfix (stale search index), skipped"; return 0 }
-  verify $KEY $REPO ui
+  has_label $KEY ai-verify-retry && FAILED=$(failed_scenarios $REPORT)
+  verify $KEY $REPO ui "$FAILED"
   RC=$?
   (( RC == 2 )) && return 2
   if (( RC == 0 )) && [[ -f $HOLDOUT/$KEY.api.md ]]; then
@@ -556,15 +577,17 @@ stage_verify() {
   if (( RC == 0 )); then
     relabel $KEY ai-verify-retry ai-verified; note $KEY "holdout scenarios pass: $(cat $LOG_DIR/$KEY.mr)"
   elif (( RC == 3 )); then
-    relabel $KEY "" ai-verify-failed; note $KEY "verifier crashed, see \`$LOG_DIR/$KEY.log\`"
+    relabel $KEY "" ai-verify-failed; note $KEY "verifier crashed or died mid-run, see \`$REPORT\` + \`$LOG_DIR/$KEY.log\`"
   elif (( RC == 4 )); then
     relabel $KEY "" ai-verify-failed; note $KEY "verify blocked (env/data), see \`$REPORT\`"
   elif has_label $KEY ai-verify-retry; then
     relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios still fail after retry, see \`$REPORT\`"
   else
     relabel $KEY "" ai-verify-retry
+    H0=$(wt_heads $KEY)
     implement $KEY ${REPO%%,*} "--verify-fix $REPORT"
-    note $KEY "holdout scenarios failed, fix pushed, re-verify next run"
+    if [[ "$(wt_heads $KEY)" == "$H0" ]]; then relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios failed, fix round pushed nothing, needs you: \`$REPORT\` + Jira comment"
+    else note $KEY "holdout scenarios failed, fix pushed, re-verify next run ($(failed_scenarios $REPORT) first)"; fi
   fi
   return 0
 }
@@ -746,7 +769,7 @@ else
     | while read -r K R; do mr_targets $K $R >/dev/null </dev/null && echo "$K $R"; done)
   VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed, ai-review-retry) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
     | while read -r K R; do
-      if W=$(verify_blocker $K $R </dev/null); then stall_note $K "$W"; else rm -f $STALLED/$K.*; echo "$K $R"; fi
+      if W=$(verify_blocker $K $R </dev/null); then stall_note $K "$W"; else rm -f $STALLED/$K.*(N); echo "$K $R"; fi
     done)
   DONE=$(search 'project = DEV AND labels in (triaged, ai-mr, triage-failed, ai-fix-failed) AND labels not in (ai-done) AND status = Done' 5 \
     | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')

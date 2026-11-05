@@ -1,15 +1,17 @@
 #!/bin/zsh
-# Usage: cf-work DEV-1234 [base-branch] [--repos a,b] [--no-launch] [--no-claim]
+# Usage: cf-work DEV-1234 [base-branch] [--repos a,b] [--no-launch] [--no-claim] [--comments-after <id>]
 # Scripted worktree setup (Jira REST, no headless claude), then launches claude with ticket context.
 # Env: JIRA_EMAIL, JIRA_TOKEN required. CF_MODEL overrides model tier.
 # Repos: --repos > ticket labels repo-<dir> > REPO_MAP labels > cwd git repo. One worktree per repo, same branch.
 # Multi-repo: claude starts in the primary worktree (cf-farm-frontend if present, else first) with --add-dir for the rest.
 # --no-launch: do everything but print the launch command instead of exec-ing claude.
 # --no-claim: skip assigning to me + In Progress transition (headless triage).
+# --comments-after: Jira comment id already answered (triage-worker passes handled/<KEY>); human comments above it land in "## New comments" right after the description, 🤖 comments are stubbed except the last.
 
 set -e
 
 MY_ACCOUNT_ID="712020:d8b09ea3-beb7-4afc-af06-6d7119474a4f"
+AI_MARK="AI triage (Claude, headless)"
 REPOS_ROOT=~/work/cleverfarm/repos
 typeset -A REPO_MAP=(
   frontend      cf-farm-frontend
@@ -28,11 +30,14 @@ typeset -A REPO_MAP=(
 NO_LAUNCH=""
 NO_CLAIM=""
 REPOS_ARG=""
+COMMENTS_AFTER=0
 ARGS=()
 while (( $# )); do
   case "$1" in
     --no-launch) NO_LAUNCH=1 ;;
     --no-claim) NO_CLAIM=1 ;;
+    --comments-after) COMMENTS_AFTER="$2"; shift ;;
+    --comments-after=*) COMMENTS_AFTER="${1#--comments-after=}" ;;
     --repos) REPOS_ARG="$2"; shift ;;
     --repos=*) REPOS_ARG="${1#--repos=}" ;;
     *) ARGS+=("$1") ;;
@@ -42,7 +47,7 @@ done
 TICKET="${ARGS[1]:u}"
 BASE_ARG="${ARGS[2]}"
 if [[ -z "$TICKET" ]]; then
-  echo "Usage: cf-work DEV-1234 [base-branch] [--repos a,b] [--no-launch] [--no-claim]"
+  echo "Usage: cf-work DEV-1234 [base-branch] [--repos a,b] [--no-launch] [--no-claim] [--comments-after <id>]"
   exit 1
 fi
 if [[ -z "$JIRA_EMAIL" || -z "$JIRA_TOKEN" ]]; then
@@ -213,17 +218,26 @@ for I in {1..${#WORKTREES}}; do
   REPOS_MD+="- ${REPO_DIRS[$I]:t}$TAG: ${WORKTREES[$I]}"$'\n'
 done
 
-echo "→ Writing TICKET.md..."
+echo "→ Writing TICKET.md (human comments after id $COMMENTS_AFTER = new)..."
 TICKET_MD=$(jq -r '
-  "# \(.key): \(.fields.summary)\n" +
+  def cm: "\n### 👤 \(.author.displayName) — \(.created[0:16]) (id \(.id))\n\n\(.body)\n";
+  def block: if length == 0 then "\n(none)\n" else map(cm) | join("") end;
+  (.fields.comment.comments) as $c
+  | ($c | map(select(.body | contains($m) | not))) as $h
+  | ($c | map(select(.body | contains($m)))) as $a
+  | "# \(.key): \(.fields.summary)\n" +
   "\n**Status:** \(.fields.status.name) | **Type:** \(.fields.issuetype.name) | **Priority:** \(.fields.priority.name // "-") | **Labels:** \(.fields.labels | join(", "))\n" +
   "\n## Description\n\n\(.fields.description // "(empty)")\n" +
+  "\n## New comments (human, not answered yet)\n" + ($h | map(select((.id | tonumber) > $after)) | block) +
   $parents +
   $links +
   $repos +
-  "\n## Comments (\(.fields.comment.comments | length))\n" +
-  (.fields.comment.comments | map("\n### \(.author.displayName) — \(.created[0:16])\n\n\(.body)") | join("\n"))
-' --arg parents "$PARENTS_MD" --arg links "$LINKS_MD" --arg repos "$REPOS_MD" <<<"$ISSUE")
+  "\n## Earlier comments (human, already answered)\n" + ($h | map(select((.id | tonumber) <= $after)) | block) +
+  "\n## Factory comments (🤖, \($a | length); full body: jira GET /rest/api/2/issue/\(.key)/comment/<id>)\n" +
+  (if ($a | length) == 0 then "\n(none)\n" else
+    ($a[:-1] | map("- 🤖 \(.created[0:16]) id \(.id): \(.body | split("\n") | map(select(length > 0)) | .[1] // "" | .[0:80])") | join("\n")) +
+    ($a[-1] | "\n\n### 🤖 last — \(.created[0:16]) (id \(.id))\n\n\(.body)\n") end)
+' --arg parents "$PARENTS_MD" --arg links "$LINKS_MD" --arg repos "$REPOS_MD" --arg m "$AI_MARK" --argjson after "$COMMENTS_AFTER" <<<"$ISSUE")
 for WT in $WORKTREES; do
   print -r -- "$TICKET_MD" > "$WT/TICKET.md"
 done

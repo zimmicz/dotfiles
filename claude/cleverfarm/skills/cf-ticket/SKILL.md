@@ -1,18 +1,11 @@
 ---
 name: cf-ticket
 description: |
-  Full ticket lifecycle. Use when user says "start ticket", "work on ticket",
-  "cf-ticket", or provides a ticket ID (e.g. DEV-XXXX) to work on end-to-end.
-  Interactive: two checkpoints only (plan + holdout scenarios approval, draft MR
-  verified on preview); `--step` adds a stop after every plan step.
-  With `--headless` (triage-worker, ticket labelled ai-fix): implements PLAN.md
-  unattended, verifies (tests, lint, typecheck, visual check via /check-layout for UI
-  changes; BE build/tests not runnable locally → via MR pipeline), independent review vs standards + PLAN.md, opens a draft MR without reviewers. On a ticket labelled
-  ai-mr: answers new human Jira comments by pushing fixes to the existing MR.
-  With `--verify-fix <report>`: fixes failed holdout scenarios on the existing MR.
-  With `--review-fix <report>`: fixes every finding (must-fix and should-fix) of
-  the independent reviewer (cf-review) on the existing MR, once.
-  Plan says already fixed elsewhere: links Duplicate, moves ticket to Done, no MR.
+  Full ticket lifecycle, interactive. Use when user says "start ticket", "work on
+  ticket", "cf-ticket", or provides a ticket ID (e.g. DEV-XXXX) to work on
+  end-to-end. Two checkpoints only (plan + holdout scenarios approval, draft MR
+  verified on preview); `--step` adds a stop after every plan step. Unattended
+  factory runs (triage-worker, label ai-fix) use /cf-ticket-headless instead.
 ---
 
 # Full ticket lifecycle
@@ -36,7 +29,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 
 4. Run `/cf-work` — its `[?]` items are answered in the same conversation, not a separate gate
 5. If `PLAN.md` exists in worktree root, read it first — it may contain a prior plan or user notes. Incorporate, don't overwrite blindly. If it is already a confirmed full plan (goal, decisions, steps) and the session was just cleared/restarted for implementation, skip 6–9 and go to Phase 3 with `PLAN.md` as the plan.
-6. Call `EnterPlanMode`, then create a detailed stepped plan of implementation, including holdout scenarios (format + rules as in `/cf-work` headless step 3a). Session runs on `opusplan`: Opus plans, Sonnet implements.
+6. Call `EnterPlanMode`, then create a detailed stepped plan of implementation, including holdout scenarios (format + rules as in `/cf-work-headless` step 4a). Session runs on `opusplan`: Opus plans, Sonnet implements.
 7. **CHECKPOINT 1** — `ExitPlanMode` with the full plan text + scenarios is the approval gate. User picks "clear context and implement" → Sonnet continues with the approved plan text.
 8. Right after approval (plan mode blocks edits, so not before), write the confirmed plan to `PLAN.md` in worktree root **verbatim, not a summary**: goal, every grilling/`[?]`/`[!]` decision (with concrete numbers, rules, test ids), every step with its detail, verify + eyeball URLs. Fold in answers given after the plan was shown. `PLAN.md` is the single source for implementation. Write the scenarios to `~/.local/state/cf-triage/holdout/<KEY>.md`; from here on never edit that file. Then attach them to the ticket: `jira attach <KEY> ~/.local/state/cf-triage/holdout/<KEY>.md holdout.md` (and `<KEY>.api.md` as `holdout.api.md` if it exists); it replaces an older attachment of the same name.
 9. Post ONE Czech Jira comment (via `~/bin/jira add-comment <ticket-id>`) that is a **Czech rendering of `PLAN.md`** + scenarios: same sections, same decisions, same steps, one-to-one — nothing added, dropped or merged. Before posting, diff comment vs `PLAN.md` item by item and fix gaps. Jira wiki markup (`h3.`, `#`, `*`, `{{code}}`). First line = CZ 🤖 prefix from `~/.claude/my-voice.md` "Posted by Claude". This is the only Jira comment in the flow. If `PLAN.md` changes later, edit that comment (`jira PUT /rest/api/2/issue/<id>/comment/<commentId>`), don't post a new one.
@@ -61,6 +54,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 
 15. Run `/cf-mr --headless` — draft MR, no reviewers, FE preview on Nightly.
 16. Holdout verify: wait for the preview (every repo's latest MR pipeline green; FE-only also the bot note `<!-- amplify-preview-url -->` showing `@ <its short sha>`), then run `/cf-holdout-ui <KEY> repos=<repo>:<project id>:<mr iid>:<pipeline id>:<short sha>,… branch=…` in a fresh `Agent` sub-agent (pass only those args, no context from this session). `holdout/<KEY>.api.md` exists (BE refactor) → after it passes, same for `/cf-holdout-api <KEY> repos=… branch=…`. Fail → fix once (same rules as headless `--verify-fix`), push, verify again.
+16a. Rewrite `~/.local/state/cf-triage/notes/<KEY>.md` as in `/cf-ticket-headless` step 9 (change map, decisions, deviations, gotchas, rounds), so a later factory round, or you after a break, starts from what was actually built.
 17. **CHECKPOINT 2** — MR link, review findings fixed, verify verdict, anything deviating from the plan. Only on the user's explicit OK: `glab mr update <iid> --ready` + reviewers per `/cf-mr` step 6, ticket to review per `/cf-mr` step 8, then `/cf-mr` steps 11–12 (time log, retro). Then: "Come back after merge and run `/cf-feedback`."
 
 ## Stop rules (between checkpoints)
@@ -72,28 +66,4 @@ Stop and ask only when: the plan / root cause doesn't hold in the code, the chan
 - Never skip a checkpoint
 - If user wants to skip a phase (e.g. already has worktree), jump to the right phase
 - Keep context concise between phases — summarize, don't repeat everything
-
-## Headless mode (`--headless` in arguments)
-
-No user present — never ask, never wait, no checkpoints. The user approved `PLAN.md` by adding label `ai-fix`.
-
-Every headless run ends with its ONE Jira comment, also when stuck (a command fails, a decision is needed): what you did, what failed (exact error), the command to run by hand, numbered questions each with a recommended answer. Questions only in the final answer never reach anyone; the next human Jira reply re-runs you.
-
-1. Phases 0–1: skip. Goal = `TICKET.md` + `PLAN.md`. Worktree already exists.
-2. Phase 2: no new plan, no Jira comment. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win. `~/.local/state/cf-triage/holdout/<KEY>.md` = acceptance scenarios an independent verifier runs against the preview after the MR exists. Read them, make the change satisfy them; never edit that file.
-3. Phase 3: implement all plan steps in one go. Stay strictly in plan scope.
-4. Phase 4: tests, lint, typecheck must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix. UI diff → `/check-layout` (Playwright, headless; auth routes → log in per its step 5); new/changed E2E scenarios → run locally per step 11b; anything still unverified → list it in the MR description and Jira comment with the exact error of the failed attempt.
-4a. **Build tool not in the shell allowlist** (BE: `./gradlew`, `mvn`) → CI is the build gate. Never ask to widen the allowlist, never bail for it. Only local static checks (read the diff, `git diff --check`). Commit in plan order (a pinning/characterization test first, then the change), push the branch, open the draft MR early (`/cf-mr --headless`). Poll the MR pipeline with `glab api projects/<id>/merge_requests/<iid>/pipelines` and the jobs of each child pipeline via `.../pipelines/<pid>/bridges` → downstream `.../pipelines/<child>/jobs`. Failed job → `glab api projects/<id>/jobs/<job>/trace`, fix, push. Max 3 red rounds per phase 4, then bail out with the last failing trace excerpt. Phase 4 is green only when every job of the latest pipeline (check/test + lint) is green. A pinning test pushed first must be green on its own pipeline before the refactor commit is pushed.
-5. Phase 5: steps 12–14 on the diff.
-6. Phase 6: `/cf-mr --headless`. No holdout verify here — triage-worker runs it once the preview is up.
-7. Post ONE Jira comment (`jira add-comment`, Czech, my voice, Jira wiki markup, first line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`): MR link, what changed, how to verify (preview/screen URL for FE), anything deviating from the plan. If the ticket has `sentry-*` labels: those Sentry issues resolve automatically once the ticket is Done (list them by short id).
-
-**No code change** — `PLAN.md` concludes the bug is already fixed elsewhere (duplicate of ticket `<FIX>`) and you verified the fix in code (commit in a released tag): skip steps 3–6. Link `jira POST /rest/api/3/issueLink '{"type":{"name":"Duplicate"},"inwardIssue":{"key":"<KEY>"},"outwardIssue":{"key":"<FIX>"}}'`, then move to Done (transition named `Done` from `jira GET /rest/api/3/issue/<KEY>/transitions`). Post ONE Jira comment, same first line as step 7: evidence (commit, tag), closed as duplicate of `<FIX>`, Sentry resolves automatically (if `sentry-*` labels). Not a bail out.
-
-**MR follow-up** — MR for this branch already exists (ticket labelled `ai-mr`, triage-worker re-runs on a human Jira comment newer than the last 🤖 one): skip steps 3–6 above. Read every human comment after the last 🤖 comment, plus every human MR note with id above `--mr-notes-after <id>` from the arguments (without it: since the last 🤖 MR note): general and diff notes, resolved or not, images included (`glab api projects/<pid>/merge_requests/<iid>/notes?per_page=100`, skip `system` notes and 🤖 ones). Answer an MR note on the MR too: reply in its discussion (`glab api -X POST projects/<pid>/merge_requests/<iid>/discussions/<discussion_id>/notes -f body=…`, 🤖 prefix), never resolve threads. The `## Comments` section is at the END of a long `TICKET.md`: read the file to the end (`tail`, or Read with an offset), never `head` it, or use `jira GET /rest/api/2/issue/<KEY>/comment`. Apply what they ask on the existing branch (scope = those comments), run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). A question gets an answer, not a code change. Then post ONE Jira comment, same first line as step 7: what changed per comment, the answer, or why not.
-
-**Verify fix** — `--verify-fix <report>` in arguments (MR exists, the holdout verifier failed): skip steps 3–6 above. Read the report (failed scenarios, observed vs expected, screenshots) and the scenarios file. Fix the code on the existing branch so the failed scenarios pass — never edit the scenarios. Run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). Post ONE Jira comment, same first line as step 7: which scenarios failed, what you changed. Scenario itself looks wrong (contradicts `PLAN.md` / ticket) → no code change, say so in the comment.
-
-**Review fix** — `--review-fix <report>` in arguments (MR exists, the independent reviewer `cf-review` found blocking issues): skip steps 3–6 above. Read the report. Fix EVERY finding on the existing branch, must-fix and should-fix alike (scope = the report); this is the only automatic fix round, whatever stays open goes to a human, so never skip a finding as "should-fix only" or "out of scope". A finding you disagree with after reading the code (contradicts `PLAN.md` / the ticket, or the failure cannot happen): no code change, say why in the Jira comment and reply in the reviewer's MR thread (🤖 prefix). Run phases 4–5 again, commit and push to the same branch (no new MR, no force-push). Post ONE Jira comment, same first line as step 7: per finding what you changed, or why not.
-
-**Bail out** — no MR, just the Jira comment explaining why — when: root cause in `PLAN.md` doesn't hold in the code, the fix needs scope beyond the plan, or phase 4 can't go green (incl. 3 red CI rounds, step 4a). Never push to develop/staging/production, never force-push, never merge or approve.
+- Unattended factory runs (triage-worker): `/cf-ticket-headless`, nothing here applies to them

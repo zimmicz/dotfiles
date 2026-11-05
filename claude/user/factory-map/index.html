@@ -145,7 +145,7 @@
 
   <path class="p-a" d="M160 146 H288" marker-end="url(#g-ara)"/>
   <rect class="chip-a" x="190" y="135" width="64" height="22" rx="6"/><text class="ca" x="222" y="151" text-anchor="middle">new</text>
-  <text class="tm" x="224" y="174" text-anchor="middle">cf-work --grill</text>
+  <text class="tm" x="224" y="174" text-anchor="middle">/cf-work-headless --grill</text>
 
   <rect class="st-ask" x="290" y="100" width="180" height="92" rx="10"/>
   <text class="lab" x="380" y="124" text-anchor="middle">blocking gaps?</text>
@@ -205,7 +205,7 @@
   <text class="tm" x="878" y="347">• questions are facts the code cannot answer, never lookups</text>
 </svg>
     </div>
-    <figcaption>Amber boxes belong to the grill phase. The worker and the skill hand over through <code>&lt;KEY&gt;.grill</code> (<code>ASK</code> or <code>READY</code>) and <code>&lt;KEY&gt;.round</code> in the state dir.</figcaption>
+    <figcaption>Amber boxes belong to the grill phase. The worker and the skill hand over through <code>&lt;KEY&gt;.grill</code> (<code>ASK</code> or <code>READY</code>) and <code>&lt;KEY&gt;.round</code> in the state dir; what the code revealed persists in <code>notes/KEY.md</code> (<code>## Analysis</code>), so a round does not re-explore it.</figcaption>
   </figure>
 
   <figure>
@@ -309,7 +309,7 @@
   <path class="p" d="M160 306 H264" marker-end="url(#ar)"/>
   <rect class="chip-a" x="181" y="295" width="64" height="22" rx="6"/><text class="ca" x="213" y="311" text-anchor="middle">new</text>
   <text class="tm" x="213" y="334" text-anchor="middle">analyze</text>
-  <text class="tm" x="213" y="348" text-anchor="middle">(/cf-work)</text>
+  <text class="tm" x="213" y="348" text-anchor="middle">(/cf-work-headless)</text>
 
   <path class="p-h" d="M406 306 H510" marker-end="url(#arh)"/>
   <rect class="chip-h" x="427" y="295" width="64" height="22" rx="6"/><text class="ch" x="459" y="311" text-anchor="middle">ME</text>
@@ -319,7 +319,7 @@
   <path class="p" d="M652 306 H756" marker-end="url(#ar)"/>
   <rect class="chip-a" x="673" y="295" width="64" height="22" rx="6"/><text class="ca" x="705" y="311" text-anchor="middle">impl</text>
   <text class="tm" x="705" y="334" text-anchor="middle">implement</text>
-  <text class="tm" x="705" y="348" text-anchor="middle">(/cf-ticket)</text>
+  <text class="tm" x="705" y="348" text-anchor="middle">(/cf-ticket-headless)</text>
 
   <path class="p" d="M898 306 H973" marker-end="url(#ar)"/>
   <rect class="chip-a" x="900" y="295" width="72" height="22" rx="6"/><text class="ca" x="936" y="311" text-anchor="middle">verify</text>
@@ -376,8 +376,8 @@
 
   <rect class="st-warn" x="775" y="570" width="150" height="64" rx="10"/>
   <text class="lab" x="850" y="592" text-anchor="middle">ai-verify-retry</text>
-  <text class="tm" x="850" y="610" text-anchor="middle">failed once, fix pushed</text>
-  <text class="tm" x="850" y="624" text-anchor="middle">by impl, verify again</text>
+  <text class="tm" x="850" y="610" text-anchor="middle">failed once, fix pushed by impl;</text>
+  <text class="tm" x="850" y="624" text-anchor="middle">re-verify, failed scenarios first</text>
   <path class="p" d="M830 352 V568" marker-end="url(#ar)"/>
   <text class="tm" x="836" y="400">verify fails</text><text class="tm" x="836" y="414">first time</text>
   <path class="p" d="M870 568 V450 H1020 V354" marker-end="url(#ar)"/>
@@ -385,10 +385,10 @@
 
   <rect class="st-fail" x="1180" y="570" width="150" height="64" rx="10"/>
   <text class="lab flt" x="1255" y="592" text-anchor="middle">ai-verify-failed</text>
-  <text class="tm" x="1255" y="610" text-anchor="middle">failed twice, blocked</text>
-  <text class="tm" x="1255" y="624" text-anchor="middle">or verifier crashed</text>
+  <text class="tm" x="1255" y="610" text-anchor="middle">failed twice, blocked, crash,</text>
+  <text class="tm" x="1255" y="624" text-anchor="middle">or fix round pushed nothing</text>
   <path class="p-f" d="M925 602 H1178" marker-end="url(#arf)"/>
-  <text class="tm" x="944" y="596">fails again / blocked / crash</text>
+  <text class="tm" x="944" y="596">fails again / blocked / crash / no push</text>
   <text class="tm" x="1255" y="652" text-anchor="middle"><tspan class="hum">ME</tspan> read verify report, fix scenario, re-label</text>
 
   <g transform="translate(0,110)">
@@ -490,7 +490,7 @@
   </g>
 </svg>
     </div>
-    <figcaption>Left to right is the happy path. Stage pills sit on the arrow they drive; every pill is one unit started by the dispatcher and holds one slot until it finishes, so a long <code>impl</code> no longer delays <code>verify</code>, <code>reply</code> or <code>conflict</code>. Verify runs first, once the MR pipeline is green (and, for frontend, the Amplify preview note matches that commit); not ready for 4 h raises a Slack alert naming the reason. Review runs once per MR after verify passed; a blocking verdict gets one automatic fix round that fixes every finding, then an incremental re-check of only the pushed delta. A push answering my comment re-runs verify, never the review. Tickets already On nightly, To test, Release candidate or Rejected are ignored by <code>verify</code> and <code>mr</code>.</figcaption>
+    <figcaption>Left to right is the happy path. Stage pills sit on the arrow they drive; every pill is one unit started by the dispatcher and holds one slot until it finishes, so a long <code>impl</code> no longer delays <code>verify</code>, <code>reply</code> or <code>conflict</code>. Verify runs first, once the MR pipeline is green (and, for frontend, the Amplify preview note matches that commit); not ready for 4 h raises a Slack alert naming the reason. Review runs once per MR after verify passed; a blocking verdict gets one automatic fix round that fixes every finding, then an incremental re-check of only the pushed delta. A push answering my comment re-runs verify, never the review. Tickets already On nightly, To test, Release candidate or Rejected are ignored by <code>verify</code> and <code>mr</code>. Every stage starts claude with only what it uses: plugins it never calls are disabled, impl / review / conflict / verify see only lean-ctx + codegraph (plus Playwright where a browser is needed), new / reply keep the claude.ai Sentry connector; the headless skills <code>cf-work-headless</code> / <code>cf-ticket-headless</code> carry no interactive checkpoint text.</figcaption>
   </figure>
 
   <div class="grid">
@@ -507,7 +507,7 @@
           <tr><td>GitLab MR threads of an <code>ai-mr</code> ticket (not merged)</td><td class="me">my MR note (not 🤖), newer than <code>handled-mr/&lt;KEY&gt;</code></td><td class="k">mr</td><td>Checked every 2 min (<code>GL_EVERY</code>). Same follow-up as a Jira comment; the agent also replies in the MR thread, never resolves it. Others’ MR notes are not picked up.</td></tr>
         </tbody>
       </table></div>
-      <p class="lede" style="margin-top:8px;font-size:.86rem">Latency: next dispatcher tick, about a minute when a slot is free. Replying from <code>triage-dash</code> answers right away.</p>
+      <p class="lede" style="margin-top:8px;font-size:.86rem">Latency: next dispatcher tick, about a minute when a slot is free. Replying from <code>triage-dash</code> answers right away. Each stage gets a fresh <code>TICKET.md</code>: unanswered human comments first (<code>## New comments</code>, ids above <code>handled/KEY</code>), the factory’s own comments stubbed except the last.</p>
     </section>
 
     <section class="panel">
@@ -539,11 +539,11 @@
       <thead><tr><th>Stage</th><th>Picks up</th><th>Slots</th><th>On success</th><th>On failure</th><th>Timeout</th></tr></thead>
       <tbody>
         <tr><td class="k">sentry</td><td>Once per workday, only if no Sentry ticket is still open (retry ≥15 min after a failed run)</td><td>1</td><td>DEV bug with <code>triage</code>, <code>sentry-ID</code>, <code>repo-x</code></td><td>Slack note, retry</td><td>30 min</td></tr>
-        <tr><td class="k">new</td><td><code>triage</code>, Jira To Do, oldest first</td><td>1</td><td>→ <code>triaged</code>: worktree, PLAN.md, scenarios, Czech bot comment</td><td>→ <span class="bad">triage-failed</span></td><td>30 min</td></tr>
+        <tr><td class="k">new</td><td><code>triage</code>, Jira To Do, oldest first</td><td>1</td><td>→ <code>triaged</code>: worktree, PLAN.md, scenarios (Given = fixture id + real-id path from <code>tests/FIXTURES.md</code>), Czech bot comment</td><td>→ <span class="bad">triage-failed</span></td><td>30 min</td></tr>
         <tr><td class="k">reply</td><td><code>triaged</code> without <code>ai-mr</code>, To Do or <code>ai-fix</code>, comment newer than the last handled one</td><td>1</td><td>Stays <code>triaged</code>, plan updated, comment id saved in <code>handled/KEY</code></td><td>→ <span class="bad">triage-failed</span></td><td>30 min</td></tr>
-        <tr><td class="k">impl</td><td><code>ai-fix</code>, not Done, no unanswered comment</td><td>1 + impl</td><td>→ <code>ai-mr</code> (draft MR, no reviewers). Already fixed elsewhere: closed as duplicate, back to <code>triaged</code></td><td>→ <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
+        <tr><td class="k">impl</td><td><code>ai-fix</code>, not Done, no unanswered comment</td><td>1 + impl</td><td>→ <code>ai-mr</code> (draft MR, no reviewers) + <code>notes/KEY.md</code> (change map, decisions, gotchas; every later impl round reads it first, review and verify cannot). Already fixed elsewhere: closed as duplicate, back to <code>triaged</code></td><td>→ <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
         <tr><td class="k">mr</td><td><code>ai-mr</code>, not Done or merged, comment newer than the last handled one</td><td>1 + mr</td><td>Stays <code>ai-mr</code>; answer posted, fix pushed if asked (new commits drop the verify labels). Stuck: worker posts the final answer to Jira, stays <code>ai-mr</code></td><td>No final answer → <span class="bad">ai-fix-failed</span></td><td>110 min</td></tr>
-        <tr><td class="k">verify</td><td><code>ai-mr</code> without <code>ai-verified</code> / <code>ai-verify-failed</code> / <code>ai-review-retry</code>, holdout file exists, every repo’s latest pipeline green (frontend: Amplify note for that commit; <code>use Nightly backend</code> job failed, e.g. AWS rate limit → dispatcher retries it once per commit, still failing → reason says needs Michal), not merged, labels re-checked on the issue at start (search index lags). Not ready for 4 h: Slack alert with the reason, daily while stuck</td><td>1 + verify</td><td>→ <code>ai-verified</code> (UI scenarios, plus API diff for BE refactors)</td><td>1st fail: <code>ai-verify-retry</code> + fix push. 2nd fail, blocked or crash: <span class="bad">ai-verify-failed</span></td><td>110 min</td></tr>
+        <tr><td class="k">verify</td><td><code>ai-mr</code> without <code>ai-verified</code> / <code>ai-verify-failed</code> / <code>ai-review-retry</code>, holdout file exists, every repo’s latest pipeline green (frontend: Amplify note for that commit; <code>use Nightly backend</code> job failed, e.g. AWS rate limit → dispatcher retries it once per commit, still failing → reason says needs Michal), not merged, labels re-checked on the issue at start (search index lags). Not ready for 4 h: Slack alert with the reason, daily while stuck</td><td>1 + verify</td><td>→ <code>ai-verified</code> (UI scenarios, plus API diff for BE refactors). Report <code>&lt;KEY&gt;.verify.md</code> rewritten after every scenario (<code>VERDICT: running</code> until done)</td><td>1st fail: <code>ai-verify-retry</code> + fix push; re-verify runs the failed scenarios first, one still failing → rest not run. Fix round pushed nothing, 2nd fail, blocked or crash: <span class="bad">ai-verify-failed</span></td><td>110 min</td></tr>
         <tr><td class="k">review</td><td><code>ai-mr</code> + <code>ai-verified</code>, no review label, not merged, worktree and MR exist, labels re-checked on the issue at start (search index lags)</td><td>1 + review</td><td>Opus, read-only, one MR note, once per MR. clean or minor → <code>ai-reviewed</code>; blocking → <code>ai-review-retry</code></td><td>Crash → <span class="bad">ai-review-findings</span></td><td>45 min</td></tr>
         <tr><td class="k">rfix</td><td><code>ai-mr</code> + <code>ai-review-retry</code>, label re-checked on the issue at start (search index lags)</td><td>1 + impl + review</td><td>Fixes every finding once (must- and should-fix), then the reviewer re-checks only the pushed delta against the prior report (<code>&lt;KEY&gt;.review.prev.md</code>). Re-check clean or minor → <code>ai-reviewed</code>; verify labels dropped so verify runs again</td><td>Nothing pushed, re-check still blocking, or crash → <span class="bad">ai-review-findings</span> (verify still runs)</td><td>110 min</td></tr>
         <tr><td class="k">conflict</td><td>My open MR with conflicts, head or state changed since last handled</td><td>1</td><td>Rebased, pushed, MR note</td><td>Slack line</td><td>110 min</td></tr>

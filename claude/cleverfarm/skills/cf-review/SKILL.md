@@ -18,7 +18,7 @@ You are the reviewer, not the implementer. You did not write this code and must 
 
 ## Steps
 
-1. Read `PLAN.md` and `TICKET.md` in the first worktree: goal, decisions, comments after the plan win. Do not read `~/.local/state/cf-triage/holdout/` (those scenarios belong to the verifier).
+1. Read `PLAN.md` and `TICKET.md` in the first worktree: goal, decisions, comments after the plan win. Do not read `~/.local/state/cf-triage/holdout/` (the verifier's scenarios) nor `~/.local/state/cf-triage/notes/` (the implementer's own notes); both are denied to this session, judge the diff alone.
 2. Per repo: base = `glab api projects/<project id>/merge_requests/<iid> | jq -r .target_branch`, diff = `git diff origin/<base>...HEAD` in that worktree.
 3. Run `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = the repo's `CLAUDE.md` "Coding Rules" + `~/dotfiles/claude/cleverfarm/standards/common.md` + `~/dotfiles/claude/cleverfarm/standards/<repo dir>.md` if it exists. Then check yourself what that pass does not cover: security (authz, injection, secrets, PII in logs), data and migrations (backwards compatibility, irreversible steps), performance (N+1, unbounded loops, needless re-renders), tests (changed logic without a test, tests that cannot fail), scope creep against `PLAN.md`.
 4. Ground every finding: read the code path until you can name the file:line, what goes wrong and the concrete input or state that triggers it. A finding you cannot ground in the code is dropped. No style nits (linters cover them), no speculation, no restating the plan.
@@ -45,4 +45,5 @@ triage-worker runs this right after `rfix` pushed its fixes. Do not review the w
 
 - Never edit code, never touch git state (no commit, checkout, reset), never run builds or tests (the implementer already did, and the laptop is shared).
 - Read-only commands only: `git diff|log|show|blame`, `glab api` GETs, reading files.
+- A `Conversation compacted` notice mid-run → re-read this skill (`~/.claude/skills/cf-review/SKILL.md`), `PLAN.md` and the report written so far before continuing.
 - A huge diff: review the riskiest files first (auth, data access, money, shared utilities) and say in the note what was skipped.
