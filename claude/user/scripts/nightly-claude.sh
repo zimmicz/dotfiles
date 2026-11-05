@@ -52,6 +52,14 @@ if [ "$DRY_RUN" = 0 ] && [ "$(date +%u)" = 1 ]; then
   else
     echo "factory-stats failed"
   fi
+  echo "--- factory compare"
+  if CMP=$("$HOME/bin/factory-compare"); then
+    printf '%s\n' "$CMP"
+    printf '%s\n' "$CMP" | "$SCRIPTS/slack-post.sh" "Factory before/after"
+    echo "slack exit: $?"
+  else
+    echo "factory-compare failed"
+  fi
 fi
 
 find "$USAGE_DIR" -name 'report-*.md' -mtime +30 -delete 2>/dev/null

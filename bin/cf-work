@@ -241,6 +241,7 @@ TICKET_MD=$(jq -r '
 for WT in $WORKTREES; do
   print -r -- "$TICKET_MD" > "$WT/TICKET.md"
 done
+echo "→ TICKET.md ${#TICKET_MD} bytes"
 
 for WT in $WORKTREES; do
   if [[ -f "$WT/package.json" && ! -d "$WT/node_modules" ]]; then

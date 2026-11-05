@@ -1,0 +1,81 @@
+#!/bin/zsh
+# Usage: factory-compare [cutover ISO timestamp]   (default: the context-waste commit, 2026-11-05 13:35)
+# Before/after medians per stage from ~/.local/state/cf-triage/<KEY>.log. Peak context of runs that
+# predate the 📏/peak= log lines comes from the Claude Code transcript (session id on the 🆔 line),
+# cached in peaks.tsv so it is computed once.
+set -uo pipefail
+export LC_NUMERIC=C
+
+CUTOVER=${1:-2026-11-05T13:35:00+01:00}
+LOG_DIR=~/.local/state/cf-triage
+PEAKS=$LOG_DIR/peaks.tsv
+touch $PEAKS
+CUT=$(date -d "$CUTOVER" +%s)
+
+RUNS=$(gawk '
+function flush() { if (h && cost != "") printf "%s\x1f%s\x1f%s\x1f%s\x1f%d\x1f%d\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n", key, stage, ts, pipe, tools, shot, cost, turns, peak, sid, fctx, tmd; h = 0 }
+/^=== / { flush(); h = 1; tools = 0; shot = 0; cost = ""; turns = ""; peak = ""; sid = ""; fctx = ""; tmd = ""; pipe = ""; ts = $NF
+  if ($2 ~ /^DEV-/) { stage = "analyze"; key = $2 }
+  else if ($2 ~ /^http/) { stage = "conflict"; key = "-" }
+  else { stage = $2; key = $3; if (stage ~ /^verify/ && match($0, /\(([^)]*)\)/)) { split(substr($0, RSTART + 1, RLENGTH - 2), p, ":"); pipe = p[4] } }
+  next }
+!h { next }
+/🔧/ { tools++; if (!shot && /browser_take_screenshot/) shot = tools }
+/🆔 session/ { match($0, /session [0-9a-f-]+/); sid = substr($0, RSTART + 8, RLENGTH - 8) }
+/📏 ctx/ && fctx == "" { match($0, /ctx [0-9]+K/); fctx = substr($0, RSTART + 4, RLENGTH - 5) }
+/→ TICKET.md [0-9]+ bytes/ { match($0, /[0-9]+ bytes/); tmd = substr($0, RSTART, RLENGTH - 6) }
+/✅ exit/ { match($0, /cost=\$[0-9.]+/); cost = substr($0, RSTART + 6, RLENGTH - 6)
+  if (match($0, /turns=[0-9]+/)) turns = substr($0, RSTART + 6, RLENGTH - 6)
+  if (match($0, /peak=[0-9]+K/)) peak = substr($0, RSTART + 5, RLENGTH - 6)
+  flush() }
+END { flush() }' $LOG_DIR/DEV-*.log)
+
+peak_of() {
+  local SID=$1 L F
+  L=$(gawk -F'\t' -v s=$SID '$1 == s { print $2 "\t" $3; exit }' $PEAKS)
+  [[ -n "$L" ]] && { print -r -- "$L"; return }
+  F=(~/.claude/projects/*/$SID.jsonl(N[1]))
+  if [[ -n "$F" ]]; then
+    L=$(jq -r 'select(.type == "assistant") | .message.usage | ((.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0))' $F 2>/dev/null \
+      | gawk 'NR == 1 { f = $1 } $1 > m { m = $1 } END { if (NR) printf "%d\t%d", m / 1000, f / 1000; else printf "-\t-" }')
+  else
+    L=$'-\t-'
+  fi
+  printf '%s\t%s\n' $SID "$L" >>$PEAKS
+  print -r -- "$L"
+}
+
+ROWS=$(while IFS=$'\x1f' read -r KEY STAGE TS PIPE TOOLS SHOT COST TURNS PEAK SID FCTX TMD; do
+  [[ -z "$KEY" ]] && continue
+  if [[ -z "$PEAK" && -n "$SID" ]]; then
+    IFS=$'\t' read -r PEAK F2 <<<"$(peak_of $SID)"
+    [[ -z "$FCTX" ]] && FCTX=$F2
+  fi
+  PERIOD=before; (( $(date -d "$TS" +%s 2>/dev/null || echo 0) >= CUT )) && PERIOD=after
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$KEY" "$STAGE" "$TS" "$PIPE" "$TOOLS" "$SHOT" "$COST" "$TURNS" "${PEAK:--}" "$SID" "${FCTX:--}" "${TMD:--}" "$PERIOD"
+done <<<"$RUNS")
+
+med() { grep -vx -- '-' | grep -v '^$' | sort -n | gawk '{ a[NR] = $1 } END { if (!NR) { print "-"; exit } m = NR % 2 ? a[(NR + 1) / 2] : (a[NR / 2] + a[NR / 2 + 1]) / 2; p = a[int(NR * 0.9 + 0.5) > NR ? NR : int(NR * 0.9 + 0.5)]; if (NR < 5) printf "%.4g\n", m; else printf "%.4g (p90 %.4g)\n", m, p }' }
+col() { gawk -F'\t' -v p=$1 -v s=$2 -v c=$3 '$13 == p && ($2 == s || s == "*") && $c != "" && $c != "-" { print $c }' <<<"$ROWS" }
+cnt() { gawk -F'\t' -v p=$1 -v s=$2 '$13 == p && $2 == s' <<<"$ROWS" | wc -l }
+per_ticket() { gawk -F'\t' -v p=$1 -v s=$2 '$13 == p && $2 == s { n[$1]++ } END { for (k in n) print n[k] }' <<<"$ROWS" | med }
+same_pipe() { gawk -F'\t' -v p=$1 '$13 == p && $2 == "verify-ui" && $4 != "" { n[$1 ":" $4]++ } END { s = 0; for (k in n) if (n[k] > 1) s += n[k] - 1; print s }' <<<"$ROWS" }
+notes_after() { gawk -F'\t' '$13 == "after" && $2 == "implement" { k[$1] = 1 } END { for (x in k) print x }' <<<"$ROWS" | { T=0 N=0; while read -r K; do (( T++ )); [[ -f $LOG_DIR/notes/$K.md ]] && (( N++ )); done; echo "$N of $T tickets"; } }
+
+row() { printf '| %s | %s | %s |\n' "$1" "$2" "$3" }
+printf 'Factory before/after cutover %s (per-run medians; runs: before %d, after %d)\n\n' "$CUTOVER" $(gawk -F'\t' '$13 == "before"' <<<"$ROWS" | wc -l) $(gawk -F'\t' '$13 == "after"' <<<"$ROWS" | wc -l)
+printf '| metric | before | after |\n|---|---|---|\n'
+for S in analyze implement verify-ui review; do
+  row "$S runs" "$(cnt before $S)" "$(cnt after $S)"
+  row "$S cost \$" "$(col before $S 7 | med)" "$(col after $S 7 | med)"
+  row "$S tool calls" "$(col before $S 5 | med)" "$(col after $S 5 | med)"
+  row "$S peak ctx K" "$(col before $S 9 | med)" "$(col after $S 9 | med)"
+  row "$S first-turn ctx K" "$(col before $S 11 | med)" "$(col after $S 11 | med)"
+done
+row "verify calls before 1st screenshot" "$(col before verify-ui 6 | med)" "$(col after verify-ui 6 | med)"
+row "verify runs per ticket" "$(per_ticket before verify-ui)" "$(per_ticket after verify-ui)"
+row "same-pipeline re-verifies" "$(same_pipe before)" "$(same_pipe after)"
+row "implement rounds per ticket" "$(per_ticket before implement)" "$(per_ticket after implement)"
+row "analyze runs per ticket" "$(per_ticket before analyze)" "$(per_ticket after analyze)"
+row "TICKET.md bytes at stage start" "$(col before '*' 12 | med)" "$(col after '*' 12 | med)"
+row "notes file for tickets implemented" "-" "$(notes_after)"
