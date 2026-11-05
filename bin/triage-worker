@@ -44,7 +44,7 @@ snap_human() {
 mark_handled() { echo ${2:-0} >$HANDLED/$1 }
 
 has_label() {
-  jira GET "/rest/api/2/issue/$1?fields=labels" | jq -e --arg l "$2" '.fields.labels | index($l) != null' >/dev/null
+  jira GET "/rest/api/2/issue/$1?fields=labels" | jq -e '.fields.labels as $l | any($ARGS.positional[]; . as $x | $l | index($x) != null)' --args "${@:2}" >/dev/null
 }
 
 grill_outcome() { head -1 $LOG_DIR/$1.grill 2>/dev/null; }
@@ -530,6 +530,7 @@ stage_mr() {
 
 stage_verify() {
   local KEY=$1 REPO=$2 RC REPORT=$LOG_DIR/$1.verify.md
+  has_label $KEY ai-verified ai-verify-failed ai-review-retry && { echo "  already verified or in rfix (stale search index), skipped"; return 0 }
   verify $KEY $REPO ui
   RC=$?
   (( RC == 2 )) && return 2
@@ -545,7 +546,7 @@ stage_verify() {
     relabel $KEY "" ai-verify-failed; note $KEY "verifier crashed, see \`$LOG_DIR/$KEY.log\`"
   elif (( RC == 4 )); then
     relabel $KEY "" ai-verify-failed; note $KEY "verify blocked (env/data), see \`$REPORT\`"
-  elif search "key = $KEY AND labels = ai-verify-retry" 1 | jq -e '.issues | length > 0' >/dev/null; then
+  elif has_label $KEY ai-verify-retry; then
     relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios still fail after retry, see \`$REPORT\`"
   else
     relabel $KEY "" ai-verify-retry
@@ -557,6 +558,7 @@ stage_verify() {
 
 stage_review() {
   local KEY=$1 RC MR
+  has_label $KEY ai-verified && ! has_label $KEY ai-reviewed ai-review-retry ai-review-findings || { echo "  not ai-verified or already reviewed (stale search index), skipped"; return 0 }
   review $KEY $2
   RC=$?
   (( RC == 2 )) && return 2
@@ -572,6 +574,7 @@ stage_review() {
 
 stage_rfix() {
   local KEY=$1 H0=$(wt_heads $1) RC MR=$(cat $LOG_DIR/$1.mr 2>/dev/null)
+  has_label $KEY ai-review-retry || { echo "  no ai-review-retry (stale search index), skipped"; return 0 }
   implement $KEY $2 "--review-fix $LOG_DIR/$1.review.md"
   if [[ "$(wt_heads $KEY)" == "$H0" ]]; then
     relabel $KEY ai-review-retry ai-review-findings; note $KEY "review findings not fixed (no commits pushed), see \`$LOG_DIR/$KEY.review.md\`"
