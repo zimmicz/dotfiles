@@ -40,7 +40,7 @@ func TestGroup(t *testing.T) {
 		{row{stage: "questions", jira: true}, gNeeds},
 		{row{stage: "bailed", jira: true}, gNeeds},
 		{row{stage: "mr", jira: true}, gFlight},
-		{row{stage: "RC", parked: true, jira: true}, gParked},
+		{row{stage: "nightly", parked: true, jira: true}, gParked},
 		{row{stage: "todo", jira: true, todo: true}, gTodo},
 		{row{stage: "-"}, gOther},
 	}
@@ -125,7 +125,7 @@ func TestLookConflict(t *testing.T) {
 }
 
 func TestChanged(t *testing.T) {
-	rows := []row{{key: "A", stage: "verify failed", jira: true}, {key: "B", stage: "implementing", jira: true}, {key: "C", stage: "done", jira: true, parked: true}}
+	rows := []row{{key: "A", stage: "verify failed", jira: true}, {key: "B", stage: "implementing", jira: true}, {key: "C", stage: "nightly", jira: true, parked: true}}
 	lbl := func(r row) string { return r.stage }
 	base, ch := changed(nil, rows, lbl)
 	if len(ch) != 0 {
@@ -136,7 +136,7 @@ func TestChanged(t *testing.T) {
 	}
 	base["A"], base["B"], base["C"] = "implementing", "plan", "mr"
 	_, ch = changed(base, rows, lbl)
-	if len(ch) != 2 || ch[0] != "A implementing → verify failed" || ch[1] != "C mr → done" {
+	if len(ch) != 1 || ch[0] != "A implementing → verify failed" {
 		t.Fatalf("got %v", ch)
 	}
 }

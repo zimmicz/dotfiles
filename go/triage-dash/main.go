@@ -635,6 +635,9 @@ func collect(issues, todos []issue, busy bool, units map[string]string) []row {
 	}
 	out := make([]row, 0, len(rows))
 	for _, r := range rows {
+		if r.stage == "RC" || r.stage == "done" {
+			continue
+		}
 		out = append(out, *r)
 	}
 	sort.Slice(out, func(a, b int) bool {
@@ -745,7 +748,7 @@ var helpCols = [][]helpSection{
 	},
 }
 
-var legend = []string{"questions", "plan gate", "reviewed", "verify failed", "review findings", "bailed", "implementing", "mr", "verified", "review fix", "re-verify", "new", "done", "RC", "nightly", "todo", "-"}
+var legend = []string{"questions", "plan gate", "reviewed", "verify failed", "review findings", "bailed", "implementing", "mr", "verified", "review fix", "re-verify", "new", "nightly", "todo", "-"}
 
 func helpLines() []string {
 	const keyW, colW = 9, 34
@@ -836,7 +839,7 @@ func changed(prev map[string]string, rows []row, label func(row) string) (map[st
 		if prev == nil || prev[r.key] == l {
 			continue
 		}
-		if group(r) == gNeeds || r.stage == "done" {
+		if group(r) == gNeeds {
 			out = append(out, r.key+" "+or(prev[r.key], "new")+" → "+l)
 		}
 	}
