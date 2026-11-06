@@ -24,6 +24,7 @@ Run inside a worktree created by the launcher script or `/cf-worktree`.
    - **Assumptions**: API shape, component reuse, routing, state management
    - **Dependencies**: other services, APIs, tickets, BE changes needed
    - **Scope boundaries**: what's OUT that someone might expect IN?
+   - **Terms** (only if `GLOSSARY.md` exists at the repo root; read it first): Czech ticket words → EN term via `_CZ_`; concept with no entry → proposed entry as `[!]`; ticket contradicts a definition → `[?]`. No writes here, `/cf-ticket` handles the glossary.
 
    Format: concise bullets, max 2-3 per lens, skip empty lenses. Mark each:
    - `[?]` = needs your answer before coding

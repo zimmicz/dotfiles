@@ -24,7 +24,7 @@ Ticket: $ARGUMENTS
 7. Read `~/dotfiles/claude/cleverfarm/standards/<repo dir>.md` (create with a `# <repo> review standards` heading if missing) and the repo `CLAUDE.md` "Coding Rules". Already covered → add the MR to that rule's evidence instead of a new line.
 8. Present extracted lessons for confirmation. User can edit/reject/add.
 9. Append confirmed lessons to the standards file under the matching category, format: `- <rule> — evidence: !<iid> — lint: <rule|no>`
-10. Lint-enforceable lesson → offer a separate Jira ticket for the ESLint rule (don't create it unasked). Team-relevant rule → suggest adding it to the repo `CLAUDE.md` via ticket + MR.
+10. Lint-enforceable lesson → offer a separate Jira ticket for the ESLint rule (don't create it unasked). Team-relevant rule → suggest adding it to the repo `CLAUDE.md` via ticket + MR. A naming / vocabulary lesson in a repo with `GLOSSARY.md` → a glossary entry or `_Avoid_` word there (via ticket + MR), not a standards line.
 
 ## Rules
 

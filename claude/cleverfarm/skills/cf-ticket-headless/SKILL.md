@@ -33,6 +33,7 @@ A `Conversation compacted` notice mid-run → before the next step re-read this 
 ## Implement
 
 4. All plan steps in one go. Stay strictly in plan scope.
+4a. `GLOSSARY.md` at the repo root exists → read it first. `PLAN.md` has `## Terms` → add or update those entries in `GLOSSARY.md` verbatim (same format as the file, alphabetical within its group), part of the same commits as the code. New identifiers, test names, UI copy and the MR title use the glossary's EN terms; never introduce an `_Avoid_` word. No `GLOSSARY.md` → nothing here applies. Never create ADRs.
 
 ## Verify
 
@@ -44,7 +45,7 @@ A `Conversation compacted` notice mid-run → before the next step re-read this 
 
 ## Review
 
-6. `/code-review` on the diff (correctness bugs). Then `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = the repo's `CLAUDE.md` "Coding Rules" + `~/dotfiles/claude/cleverfarm/standards/common.md` + `~/dotfiles/claude/cleverfarm/standards/<repo dir>.md` if it exists. Its Standards + Spec sub-agents see only the diff and those files, not your reasoning — don't pass them your own justification. Fix what both passes found, re-run step 5.
+6. `/code-review` on the diff (correctness bugs). Then `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = the repo's `CLAUDE.md` "Coding Rules" + `~/dotfiles/claude/cleverfarm/standards/common.md` + `~/dotfiles/claude/cleverfarm/standards/<repo dir>.md` if it exists + the repo's `GLOSSARY.md` if it exists. Its Standards + Spec sub-agents see only the diff and those files, not your reasoning — don't pass them your own justification. Fix what both passes found, re-run step 5.
 
 ## MR + comment
 

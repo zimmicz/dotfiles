@@ -16,7 +16,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 
 ## Phase 0: Goal
 
-1. Run `/mattpocock-skills:grilling` — focus the grilling on: what is the actual goal, what problem does this solve, what does success look like, what are the constraints. Fold the setup questions (base branch, phase 1) into the same rounds. No separate confirmation stop — the agreed goal goes into the plan.
+1. Run `/mattpocock-skills:grill-with-docs` (grilling + domain-modeling: challenges terms against the repo's `GLOSSARY.md`, writes resolved terms into it inline, `_CZ_` line per the repo's `docs/agents/domain.md`; no `GLOSSARY.md` in the repo → behaves as plain grilling, don't create one) — focus the grilling on: what is the actual goal, what problem does this solve, what does success look like, what are the constraints. Fold the setup questions (base branch, phase 1) into the same rounds. No separate confirmation stop — the agreed goal goes into the plan.
 
 ## Phase 1: Setup
 
@@ -29,7 +29,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 
 4. Run `/cf-work` — its `[?]` items are answered in the same conversation, not a separate gate
 5. If `PLAN.md` exists in worktree root, read it first — it may contain a prior plan or user notes. Incorporate, don't overwrite blindly. If it is already a confirmed full plan (goal, decisions, steps) and the session was just cleared/restarted for implementation, skip 6–9 and go to Phase 3 with `PLAN.md` as the plan.
-6. Call `EnterPlanMode`, then create a detailed stepped plan of implementation, including holdout scenarios (format + rules as in `/cf-work-headless` step 4a). Session runs on `opusplan`: Opus plans, Sonnet implements.
+6. Call `EnterPlanMode`, then create a detailed stepped plan of implementation, including holdout scenarios (format + rules as in `/cf-work-headless` step 4a) and, in a glossary repo, `## Terms` (as in `/cf-work-headless` step 4; implemented per `/cf-ticket-headless` step 4a). Session runs on `opusplan`: Opus plans, Sonnet implements.
 7. **CHECKPOINT 1** — `ExitPlanMode` with the full plan text + scenarios is the approval gate. User picks "clear context and implement" → Sonnet continues with the approved plan text.
 8. Right after approval (plan mode blocks edits, so not before), write the confirmed plan to `PLAN.md` in worktree root **verbatim, not a summary**: goal, every grilling/`[?]`/`[!]` decision (with concrete numbers, rules, test ids), every step with its detail, verify + eyeball URLs. Fold in answers given after the plan was shown. `PLAN.md` is the single source for implementation. Write the scenarios to `~/.local/state/cf-triage/holdout/<KEY>.md`; from here on never edit that file. Then attach them to the ticket: `jira attach <KEY> ~/.local/state/cf-triage/holdout/<KEY>.md holdout.md` (and `<KEY>.api.md` as `holdout.api.md` if it exists); it replaces an older attachment of the same name.
 9. Post ONE Czech Jira comment (via `~/bin/jira add-comment <ticket-id>`) that is a **Czech rendering of `PLAN.md`** + scenarios: same sections, same decisions, same steps, one-to-one — nothing added, dropped or merged. Before posting, diff comment vs `PLAN.md` item by item and fix gaps. Jira wiki markup (`h3.`, `#`, `*`, `{{code}}`). First line = CZ 🤖 prefix from `~/.claude/my-voice.md` "Posted by Claude". This is the only Jira comment in the flow. If `PLAN.md` changes later, edit that comment (`jira PUT /rest/api/2/issue/<id>/comment/<commentId>`), don't post a new one.
@@ -47,7 +47,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 ## Phase 5: Independent review
 
 12. Run `/code-review` on the diff — correctness bugs
-13. Run `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = repo `CLAUDE.md` "Coding Rules" + `~/dotfiles/claude/cleverfarm/standards/common.md` + `~/dotfiles/claude/cleverfarm/standards/<repo dir>.md` if it exists. Its Standards + Spec sub-agents see only the diff and those files, not your reasoning — don't pass them your own justification.
+13. Run `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = repo `CLAUDE.md` "Coding Rules" + `~/dotfiles/claude/cleverfarm/standards/common.md` + `~/dotfiles/claude/cleverfarm/standards/<repo dir>.md` if it exists + the repo's `GLOSSARY.md` if it exists. Its Standards + Spec sub-agents see only the diff and those files, not your reasoning — don't pass them your own justification.
 14. Fix issues found from both passes, re-run phase 4.
 
 ## Phase 6: MR → CHECKPOINT 2

@@ -93,18 +93,18 @@ DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentr
 [needs-answer]  Czech Jira comment: Zjištěno + numbered Otázky, each with a recommended answer; no PLAN.md, blocks ai-fix
   │  I reply "ok" / "ok, 3 jinak: …"  →  analysis re-runs: more questions → next round (≤ GRILL_MAX_ROUNDS), none ↓
   ▼  no gaps (or GRILL off): straight here
-[triaged]  worktree + PLAN.md (first section: Belongs in Sentry? → filter fix if no) + holdout scenarios + Czech Jira comment (🤖 + "AI triage" marker)
+[triaged]  worktree + PLAN.md (first section: Belongs in Sentry? → filter fix if no; repo has `GLOSSARY.md`: `## Terms` = entries to add, Czech ticket words mapped via `_CZ_`) + holdout scenarios + Czech Jira comment (🤖 + "AI triage" marker)
   │  I reply in Jira  →  next run (≤2 min) answers, updates PLAN.md + scenarios   (To Do tickets any age, plus any not-Done ticket labelled `ai-fix`, so a comment can't deadlock behind `impl`)
   │  I add label ai-fix  (= approves plan AND scenarios)
   ▼  triage-worker          `IMPL_SLOTS` at a time: cf-work (claims) → claude -p "/cf-ticket-headless KEY"
-[ai-mr]  draft MR, no reviewers, assigned to me + Jira comment with MR link
+[ai-mr]  draft MR, no reviewers, assigned to me + Jira comment with MR link (glossary repo: `## Terms` written into `GLOSSARY.md` in the same commits, names follow its EN terms)
   │  triage-worker          every repo-* MR's latest pipeline green (FE-only: + Amplify bot note for that sha); tickets already On nightly / To test / Release candidate / Rejected (merged) are never looked at, neither by `verify` nor by `mr` follow-ups (comment on a merged ticket = nothing happens)
   ▼                         → fresh claude -p "/cf-holdout-ui" runs holdout scenarios in Playwright (any BE repo / cross-repo: one throwaway dyn-env, all BE MR images + FE branch)
   │  triage-worker          BE refactor (holdout/KEY.api.md exists): after UI verify passes → "/cf-holdout-api" runs the same requests on 2 dyn-envs (nightly vs MR images, same seed), any diff = fail
 [ai-verified]  MR note with per-scenario verdicts
   │  fail → 1 retry: "/cf-ticket-headless KEY --verify-fix <report>" pushes fix [ai-verify-retry] → re-verify, failed scenarios first (`failed=S3,S5`), one still failing → rest not run. Fix round pushed nothing → [ai-verify-failed], no re-verify
   │  fail again / blocked / crash → [ai-verify-failed] = needs me, no review happens (`triage-worker KEY --review` by hand)
-  │  triage-worker          stage review, ONCE per MR: fresh claude -p "/cf-review" (opus, read-only) reads the MR diff vs PLAN.md + repo standards, every finding with a failure scenario, posts ONE MR note
+  │  triage-worker          stage review, ONCE per MR: fresh claude -p "/cf-review" (opus, read-only) reads the MR diff vs PLAN.md + repo standards (+ `GLOSSARY.md` where one exists: `_Avoid_` words / synonym drift = should-fix, never blocking), every finding with a failure scenario, posts ONE MR note
   │                         clean / should-fix only → [ai-reviewed]. blocking → [ai-review-retry] → stage rfix ("/cf-ticket-headless --review-fix <report>", impl slot) fixes EVERY finding once, then "/cf-review … prior=<KEY>.review.prev.md since=<heads>" re-checks only the pushed delta (fixed / open / new per prior finding)
   │                         re-check clean or minor → [ai-reviewed] + verify labels dropped (verify runs again on the fixed code). pushed nothing / still blocking / crash → [ai-review-findings] = needs me (verify still runs)
 [ai-reviewed]  (+ ai-verified)
@@ -187,6 +187,10 @@ Prereqs (already done):
 | `systemctl --user start cf-triage.service` | run now |
 | `systemctl --user disable --now cf-triage.timer` | turn off |
 | `tail -f ~/.local/state/cf-triage/DEV-XXXX.log` | live per-ticket progress: 🔧 tool calls, 💬 agent text, 📏 context size, ✅ exit + cost + turns + peak |
+| `git -C ~/dotfiles tag -a cf-triage-<label>-<date> -m "…"` | snapshot before a factory change (bin + skills + docs are symlinks, so the tag is the whole factory; note the mattpocock-skills version in the message). Last: `cf-triage-pre-glossary-2026-11-06` |
+| `git -C ~/dotfiles checkout cf-triage-<label>-<date> -- bin claude/cleverfarm` | roll the factory back to that snapshot (takes effect at once; `go build` only if `go/triage-dash` changed). Back to head: `git checkout master -- bin claude/cleverfarm` |
+
+Glossary (mattpocock `domain-modeling`, FE only for now): `GLOSSARY.md` at the repo root of cf-farm-frontend, format + `_CZ_` rule in its `docs/agents/domain.md`. Read at `new`/`reply` (PLAN.md `## Terms`), written at `impl`, checked at `review`. Repos without the file: nothing changes. Interactive `/cf-ticket` phase 0 runs `grill-with-docs` (grilling + domain-modeling) instead of plain grilling.
 
 ## Test one ticket by hand
 
