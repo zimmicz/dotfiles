@@ -563,6 +563,7 @@
       </ul></div>
       <div class="card failc"><h3>Slots</h3><ul>
         <li>Three long stages (impl, mr, a backend verify, an LLM conflict) can fill all three slots. <code>reply</code> is first in line but cannot preempt.</li>
+        <li>A ticket whose stage waits for its class slot (e.g. <code>mr</code> behind <code>mr-1</code>) is held for that tick: its <code>verify</code> / <code>review</code> don't start on code a pending answer is about to change.</li>
       </ul></div>
       <div class="card failc"><h3>Visibility</h3><ul>
         <li>Only my own MR notes trigger <code>mr</code>; reviewers’ MR notes wait until I comment.</li>

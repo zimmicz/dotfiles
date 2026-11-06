@@ -728,7 +728,10 @@ dispatch() {
   while read -r S KEY ARGS; do
     [[ -z "$S" ]] && continue
     spawn_stage $S $KEY ${=ARGS}
-    (( $? == 3 )) && { echo "no free slot ($SLOTS busy), rest waits for next tick"; return }
+    case $? in
+      3) echo "no free slot ($SLOTS busy), rest waits for next tick"; return ;;
+      4) RUNNING+=(cf-triage-${KEY//[^A-Za-z0-9_.-]/-}-held) ;;
+    esac
   done
 }
 
