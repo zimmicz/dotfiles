@@ -21,6 +21,7 @@ Read by the independent reviewer (`/mattpocock-skills:code-review` in `/cf-ticke
 - No custom hook wrapping `useQuery` + `useMemo` derivation; export the `xQuery()` queryOptions, derive via `select` at use site. Raw `fetch` queryFn → throw on `!res.ok` / unexpected shape, never return error body as data — evidence: session 2026-11-04, !4416 ("just export the query, errors not handled, why useMemo") — lint: no
 - No imperative `queryClient.refetchQueries` after mutations; global MutationCache invalidates, awaited refresh via `meta.awaits` prefix key — evidence: session 2026-11-05, !4423 (imperative refetch note), DEV-3604 — lint: no-restricted-syntax (planned in DEV-3604)
 - `useSuspenseQuery` consumer → own `Suspense` (with fallback) + `ErrorBoundary`, wrapping only the data-dependent part; controls/headers (selects, season picker) stay mounted. No fallback-less `Suspense` unmounting a whole panel — evidence: session 2026-11-05, !4423 ("error/pending state"), DEV-3594 — lint: no
+- `set-state-in-effect` violation → derive during render (`impersonated ? farm : currentFarm`) or reset local state via `key` on an inner component; sync state is the last option, never `eslint-disable`. Two wrappers with identical sync logic → one shared component — evidence: session 2026-11-06, DEV-3583/DEV-3586 grill plans accepted ("ok"), !4429, !4441 — lint: react-hooks/set-state-in-effect (flags only, fix pattern not enforced)
 
 ## types
 
