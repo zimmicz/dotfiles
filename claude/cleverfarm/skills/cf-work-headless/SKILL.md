@@ -6,15 +6,15 @@ description: |
   PLAN.md (root cause for bugs, "Belongs in Sentry?" for Sentry tickets) + plan +
   holdout scenarios (+ `## Terms` from the repo's GLOSSARY.md where one exists),
   posts one Czech Jira comment, never asks. Re-run after a
-  human reply: answers it, updates PLAN.md + scenarios. With `--grill --round N
-  --max-rounds M` (opt-in, GRILL=1): before planning, asks blocking questions in a
+  human reply: answers it, updates PLAN.md + scenarios. With `--grill --round N`
+  (opt-in, GRILL=1): before planning, asks blocking questions in a
   Jira comment (numbered, each with a recommended answer) and writes no plan
   until they are answered.
 ---
 
 # Analyze a ticket, unattended
 
-Arguments: `<KEY> [--grill --round N --max-rounds M]`
+Arguments: `<KEY> [--grill --round N]`
 
 No user present — never ask, never wait. cwd = the worktree `cf-work` created (`TICKET.md` in its root). Read-only on code: writes are `PLAN.md`, the holdout files, the grill outcome file and `~/.local/state/cf-triage/notes/<KEY>.md` (ticket memory, step 3). A `Conversation compacted` notice mid-run → re-read this skill (`~/.claude/skills/cf-work-headless/SKILL.md`), `TICKET.md` and the notes file before the next step.
 
@@ -66,7 +66,7 @@ Michal replied (only his comments land in `## New comments`; `## Comments by oth
 3. Update `PLAN.md` in place (`## Implementation` included; missing in an older plan → write it now, step 4 format), and the holdout scenarios file if replies change behaviour or acceptance.
 4. Post ONE reply comment, same format + 🤖 prefix + marker: what changed in the plan, remaining `[?]` if any. Nothing to change → short confirmation.
 
-## Grill mode (`--grill --round N --max-rounds M`)
+## Grill mode (`--grill --round N`)
 
 Passed only by triage-worker when the grill phase is on. Without these args nothing in this section applies. The worker reads the outcome file to decide the next label, so always write it.
 
@@ -75,11 +75,10 @@ Goal: the human answers questions in Jira instead of a session. One round = one 
 1. Steps 1–3 (read `TICKET.md` and the notes file, explore only what `## Analysis` does not settle, update it). Facts the code can answer are never questions.
 2. Blocking gap = the answer would change PLAN.md or the holdout scenarios: unclear goal, two plausible behaviours, no testable acceptance criteria, missing dependency decision. Everything else becomes a `[!]` assumption in the plan.
 3. `sentry-*` ticket: ask only if the root cause is still unconfirmed after exploring. Otherwise no questions.
-4. `N > M`: never ask. Plan with the leftovers as `[!]`.
-5. Gaps found → **ASK**: write no `PLAN.md`, no holdout files; the notes file yes (step 3), the next round starts from it. Post ONE Czech comment, same marker line + wiki markup as step 5:
+4. Gaps found → **ASK**: write no `PLAN.md`, no holdout files; the notes file yes (step 3), the next round starts from it. Post ONE Czech comment, same marker line + wiki markup as step 5:
    * `h3. Zjištěno`: facts from the code and decisions settled in earlier rounds, one bullet each.
    * `h3. Otázky`: `#` numbered, the whole frontier at once (a question depending on an unanswered one waits for the next round). Each: short bold title, body with a concrete example when it helps, then `➡️` recommended answer with a one-line tradeoff. Worded so "ano" accepts the recommendation.
    * Last line: `Odpověď "ok" = beru všechna doporučení, "ok, 3 jinak: …" = výjimky.`
    Then write the single line `ASK` to `~/.local/state/cf-triage/<KEY>.grill` (absolute path).
-6. No gaps → steps 4–5 as normal (settled decisions in Requirements, new assumptions as `[!]`), then write the single line `READY` to the same file.
-7. Round > 1 (no `PLAN.md`, last AI comment has `Otázky`): read the human reply in `TICKET.md` `## New comments`. `ok` accepts every `➡️`; `N jinak: X` overrides question N; free text answers what it addresses. Fold decisions into Zjištěno, recompute the frontier, then step 5 or 6.
+5. No gaps → steps 4–5 as normal (settled decisions in Requirements, new assumptions as `[!]`), then write the single line `READY` to the same file.
+6. Round > 1 (no `PLAN.md`, last AI comment has `Otázky`): read the human reply in `TICKET.md` `## New comments`. `ok` accepts every `➡️`; `N jinak: X` overrides question N; free text answers what it addresses. Fold decisions into Zjištěno, recompute the frontier, then step 4 or 5. No round cap: ask as long as blocking gaps remain.

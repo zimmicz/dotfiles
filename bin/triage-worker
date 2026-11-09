@@ -156,7 +156,7 @@ analyze() {
   local PANE=$(wm_window $WT $LOG) GARGS=""
   if [[ -n "${GRILL:-}" ]]; then
     rm -f $LOG_DIR/$KEY.grill
-    GARGS=" --grill --round $(( $(<$LOG_DIR/$KEY.round 2>/dev/null || echo 0) + 1 )) --max-rounds ${GRILL_MAX_ROUNDS:-3}"
+    GARGS=" --grill --round $(( $(<$LOG_DIR/$KEY.round 2>/dev/null || echo 0) + 1 ))"
   fi
   (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work-headless $KEY$GARGS" \
     --model $TIER $DIRS --settings "$HEADLESS_SETTINGS" \
@@ -711,7 +711,7 @@ spawn_stage() {
   if [[ -n "${TRIAGE_DRY:-}" ]]; then
     echo "would spawn $UNIT (slots ${SLOT:t} ${CAP:t})"
   else
-    systemd-run --user --collect --quiet --unit=$UNIT "--setenv=PATH=$PATH" ${GRILL:+--setenv=GRILL=$GRILL} ${GRILL_MAX_ROUNDS:+--setenv=GRILL_MAX_ROUNDS=$GRILL_MAX_ROUNDS} \
+    systemd-run --user --collect --quiet --unit=$UNIT "--setenv=PATH=$PATH" ${GRILL:+--setenv=GRILL=$GRILL} \
       -p EnvironmentFile=$HOME/.config/cf-triage.env -p RuntimeMaxSec=$(stage_timeout $S) \
       -p SuccessExitStatus="2 75" $CMD || return 1
     echo "spawned $UNIT (slots ${SLOT:t} ${CAP:t})"
