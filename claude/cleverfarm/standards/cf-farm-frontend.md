@@ -11,6 +11,7 @@ Read by the independent reviewer (`/mattpocock-skills:code-review` in `/cf-ticke
 - Don't wrap trivial JSX in a local variable/helper; inline it — evidence: !3098 ("Proč to neinlinovat do toho jsx?") — lint: no
 - Key mapped elements by stable id, not array index — evidence: !1463 — lint: react/no-array-index-key (off)
 - Generic input behaviour (blur padding, wheel blur, clamp/round) lives in the base field (`NumberFieldBase`), not in per-consumer handlers (`BulkYield` onBlur) — evidence: session 2026-11-05, !4428 ("Why didn't we put this on the Base component?") — lint: no
+- Field callback emitting a parsed value (`number | ""`, not an event) → `onValueChange`, not `onChange`, matching DS fields (`CheckboxField`, `DatePicker`, `MultiSearchSelectBox`, `NumberField`); `onChange` stays for event handlers — evidence: session 2026-11-06, !4440 (rename to `onChange` reverted: "keep `onValueChange`") — lint: no
 
 ## state & data fetching
 
