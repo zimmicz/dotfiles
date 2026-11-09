@@ -46,8 +46,8 @@ while IFS=$'\t' read -r KEY CREATED LABELSTR; do
     ENC=$(jq -rn --arg p "$PROJ" '$p|@uri')
     MR=$(glab api "projects/$ENC/merge_requests/$IID" 2>/dev/null)
     MRSTATE=$(jq -r '.state // "?"' <<<$MR)
-    NOTES=$(glab api "projects/$ENC/merge_requests/$IID/notes?per_page=100" 2>/dev/null \
-      | jq --arg me $ME '[.[] | select(.system | not) | select(.author.username != $me) | select(.author.username | test("bot|GitLabDuo") | not)] | length')
+    NOTES=$(glab api --paginate "projects/$ENC/merge_requests/$IID/notes?per_page=100" 2>/dev/null \
+      | jq -s --arg me $ME 'add | [.[] | select(.system | not) | select(.author.username != $me) | select(.author.username | test("bot|GitLabDuo") | not)] | length')
     if [[ $MRSTATE == merged ]]; then
       TTM=$(printf '%.1f' $(( ($(date -d "$(jq -r .merged_at <<<$MR)" +%s) - $(date -d "$CREATED" +%s)) / 86400.0 )))
       DAYS_TO_MERGE+=($TTM)

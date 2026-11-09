@@ -215,8 +215,8 @@ verify_targets() {
       | jq -e 'all(.[]; .status == "success" or .status == "manual" or .status == "skipped" or (.status == "failed" and .allow_failure))' >/dev/null && PS=success
     [[ "$PS" == success ]] || { why "pipeline ${PS:-missing} in $R, $(jq -r .web_url <<<$MR)"; return 2 }
     SHA=$(jq -r .sha <<<$PIPE)
-    if [[ $2 == cf-farm-frontend ]] && ! grep -q '^NONE:' $HOLDOUT/$KEY.md 2>/dev/null && ! glab api "projects/$PID/merge_requests/$IID/notes?per_page=100" </dev/null \
-        | jq -e --arg s "${SHA[1,8]}" 'any(.[]; (.body | contains("amplify-preview-url")) and (.body | contains("@ " + $s)))' >/dev/null; then
+    if [[ $2 == cf-farm-frontend ]] && ! grep -q '^NONE:' $HOLDOUT/$KEY.md 2>/dev/null && ! glab api --paginate "projects/$PID/merge_requests/$IID/notes?per_page=100" </dev/null \
+        | jq -se --arg s "${SHA[1,8]}" 'add | any(.[]; (.body | contains("amplify-preview-url")) and (.body | contains("@ " + $s)))' >/dev/null; then
       AJ=($(glab api "projects/$PID/pipelines/$(jq -r .id <<<$PIPE)/jobs?per_page=100" </dev/null | jq -r '.[] | select(.name == "use Nightly backend") | "\(.id) \(.status) \(.web_url)"'))
       if [[ ${AJ[2]} != failed ]]; then
         why "Amplify preview note missing for ${SHA[1,8]} in $R"
@@ -356,8 +356,8 @@ gl_human_max() {
   [[ -n "$GLME" ]] || return 1
   for L in ${(f)T}; do
     P=(${(s.:.)L})
-    N=$(glab api "projects/${P[2]}/merge_requests/${P[3]}/notes?per_page=100" </dev/null \
-      | jq -r --arg me "$GLME" '[.[] | select((.system | not) and .author.username == $me and (.body | contains("writing on Michal") | not)) | .id] | max // 0') || return 1
+    N=$(glab api --paginate "projects/${P[2]}/merge_requests/${P[3]}/notes?per_page=100" </dev/null \
+      | jq -sr --arg me "$GLME" 'add | [.[] | select((.system | not) and .author.username == $me and (.body | contains("writing on Michal") | not)) | .id] | max // 0') || return 1
     (( N > ID )) && ID=$N
   done
   echo $ID
