@@ -4,5 +4,5 @@ Description=Claude Code nightly reflection + usage report
 [Service]
 Type=oneshot
 Environment=PATH=%h/.local/bin:%h/bin:/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-EnvironmentFile=-%h/.config/cf-triage.env
+EnvironmentFile=-%h/.config/sw-factory.env
 ExecStart=%h/.claude/scripts/nightly-claude.sh

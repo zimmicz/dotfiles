@@ -4,7 +4,7 @@ description: |
   Analyze a Jira ticket's requirements and surface gaps, interactive. Use when
   user says "analyze ticket", "analyze requirements", "check gaps", "cf-work",
   or "requirements". For end-to-end ticket work use cf-ticket instead. Unattended
-  factory analysis (triage-worker, label triage) uses /cf-work-headless instead.
+  factory analysis (factory-worker, label triage) uses /cf-work-headless instead.
 ---
 
 # Analyze ticket requirements
@@ -34,4 +34,4 @@ Run inside a worktree created by the launcher script or `/cf-worktree`.
 
 > No Jira comment here — `/cf-ticket` posts one consolidated Czech comment (requirements + assumptions + plan) after the plan is confirmed. Standalone use: post only if the user asks.
 
-> Unattended factory analysis (triage-worker): `/cf-work-headless`, nothing here applies to it.
+> Unattended factory analysis (factory-worker): `/cf-work-headless`, nothing here applies to it.

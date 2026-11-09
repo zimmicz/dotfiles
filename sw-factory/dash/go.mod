@@ -1,4 +1,4 @@
-module triage-dash
+module factory-dash
 
 go 1.25.0
 

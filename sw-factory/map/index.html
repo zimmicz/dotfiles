@@ -116,7 +116,7 @@
 <main>
   <header>
     <h1>Software factory: how a ticket moves</h1>
-    <p class="lede">The cf-triage pipeline as it runs today. The first figure shows the grill phase (on with <code>GRILL=1</code>), the second the full pipeline. Every box is a Jira label (the ticket’s state), every pill is the stage that moves it on, amber is where I act. One dispatcher tick per minute decides which stage runs next. The bottom band shows the two modes I drive myself.</p>
+    <p class="lede">The sw-factory pipeline as it runs today. The first figure shows the grill phase (on with <code>GRILL=1</code>), the second the full pipeline. Every box is a Jira label (the ticket’s state), every pill is the stage that moves it on, amber is where I act. One dispatcher tick per minute decides which stage runs next. The bottom band shows the two modes I drive myself.</p>
     <div class="legend" aria-label="Legend">
       <span><i class="sw state"></i>Jira label (state)</span>
       <span><i class="sw auto"></i>stage, runs in a slot</span>
@@ -200,7 +200,7 @@
   <text class="mono b" x="878" y="254">RULES</text>
   <text class="tm" x="878" y="275">• no round cap: asks until no blocking gap is left</text>
   <text class="tm" x="878" y="293">• no answer for 24 h → one Slack reminder per round</text>
-  <text class="tm" x="878" y="311">• triage-dash lists needs-answer under NEEDS YOU as ❓ questions</text>
+  <text class="tm" x="878" y="311">• factory-dash lists needs-answer under NEEDS YOU as ❓ questions</text>
   <text class="tm" x="878" y="329">• GRILL unset = the whole phase is off, today’s flow unchanged</text>
   <text class="tm" x="878" y="347">• questions are facts the code cannot answer, never lookups</text>
 </svg>
@@ -211,7 +211,7 @@
   <figure>
     <h2>The full pipeline</h2>
     <div class="scroll">
-<svg class="fig" viewBox="0 0 1650 1290" role="img" aria-label="State machine of the software factory, with the two interactive modes (cf-ticket with two checkpoints, cf-epic with three) in the bottom band. A Sentry issue or my triage label creates a triage ticket. Stage new produces triaged. My ai-fix label starts stage impl, which opens a draft MR labelled ai-mr. Stage verify produces ai-verified or a one-time retry, then ai-verify-failed. Stage review (opus, read-only, once per MR) then produces ai-reviewed; a blocking finding gets one auto-fix round (ai-review-retry) with an incremental re-check, then ai-review-findings. I pass the cf-quiz comprehension quiz (Q in triage-dash), which sets ai-quizzed and turns the merge gate green; new commits drop it. I merge and release, then stage done sets ai-done. Replies in Jira loop back through stages reply and mr. A dispatcher with three slots runs the stages, and a separate conflict stage rebases my open MRs.">
+<svg class="fig" viewBox="0 0 1650 1290" role="img" aria-label="State machine of the software factory, with the two interactive modes (cf-ticket with two checkpoints, cf-epic with three) in the bottom band. A Sentry issue or my triage label creates a triage ticket. Stage new produces triaged. My ai-fix label starts stage impl, which opens a draft MR labelled ai-mr. Stage verify produces ai-verified or a one-time retry, then ai-verify-failed. Stage review (opus, read-only, once per MR) then produces ai-reviewed; a blocking finding gets one auto-fix round (ai-review-retry) with an incremental re-check, then ai-review-findings. I pass the cf-quiz comprehension quiz (Q in factory-dash), which sets ai-quizzed and turns the merge gate green; new commits drop it. I merge and release, then stage done sets ai-done. Replies in Jira loop back through stages reply and mr. A dispatcher with three slots runs the stages, and a separate conflict stage rebases my open MRs.">
   <defs>
     <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-fg" d="M0 0 L10 5 L0 10 z"/></marker>
     <marker id="ara" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-a" d="M0 0 L10 5 L0 10 z"/></marker>
@@ -440,7 +440,7 @@
   <path class="p" d="M570 821 H610" marker-end="url(#ar)"/>
   <rect class="chip-n" x="612" y="786" width="824" height="70" rx="8"/>
   <text x="628" y="810"><tspan class="b">Slack only:</tspan> <tspan class="hum">ME</tspan> resolve by hand. A failed agent resolve also aborts the rebase and posts to Slack.</text>
-  <text class="tm" x="628" y="828">retry the same head: rm ~/.local/state/cf-triage/conflicts/&lt;project id&gt;-&lt;iid&gt;</text>
+  <text class="tm" x="628" y="828">retry the same head: rm ~/.local/state/sw-factory/conflicts/&lt;project id&gt;-&lt;iid&gt;</text>
 
   <!-- interactive modes -->
   <rect class="band" x="20" y="894" width="1430" height="270" rx="10"/>
@@ -519,7 +519,7 @@
           <tr><td>GitLab MR threads of an <code>ai-mr</code> ticket (not merged)</td><td class="me">my MR note (not 🤖), newer than <code>handled-mr/&lt;KEY&gt;</code></td><td class="k">mr</td><td>Checked every 2 min (<code>GL_EVERY</code>). Same follow-up as a Jira comment; the agent also replies in the MR thread, never resolves it. Others’ MR notes are not picked up.</td></tr>
         </tbody>
       </table></div>
-      <p class="lede" style="margin-top:8px;font-size:.86rem">Latency: next dispatcher tick, about a minute when a slot is free. Replying from <code>triage-dash</code> answers right away. Each stage gets a fresh <code>TICKET.md</code>: unanswered human comments first (<code>## New comments</code>, ids above <code>handled/KEY</code>), the factory’s own comments stubbed except the last.</p>
+      <p class="lede" style="margin-top:8px;font-size:.86rem">Latency: next dispatcher tick, about a minute when a slot is free. Replying from <code>factory-dash</code> answers right away. Each stage gets a fresh <code>TICKET.md</code>: unanswered human comments first (<code>## New comments</code>, ids above <code>handled/KEY</code>), the factory’s own comments stubbed except the last.</p>
     </section>
 
     <section class="panel">
@@ -532,9 +532,9 @@
         </ul></div>
         <div class="card gate"><h3>MR gate</h3><ul>
           <li>Needs <code>ai-verified</code> + <code>ai-reviewed</code>; read the verify and review notes on the MR. <code>ai-review-findings</code> = look at the review first.</li>
-          <li>Quiz: <code>Q</code> in triage-dash (🎓 row) opens <code>/cf-quiz</code> (sonnet, interactive): 4–6 open-book why / predict / blast-radius / alternative questions on diff + PLAN.md, every one must end correct. Pass → <code>ai-quizzed</code>. New commits drop it; re-quiz asks only about the delta.</li>
+          <li>Quiz: <code>Q</code> in factory-dash (🎓 row) opens <code>/cf-quiz</code> (sonnet, interactive): 4–6 open-book why / predict / blast-radius / alternative questions on diff + PLAN.md, every one must end correct. Pass → <code>ai-quizzed</code>. New commits drop it; re-quiz asks only about the delta.</li>
           <li>Review, mark ready, add reviewers, merge.</li>
-          <li>Merge is held by commit status <code>cf-factory</code> (pending while verify/review run and until I pass the quiz, failed on a failure label, green on <code>ai-verified</code> + <code>ai-reviewed</code> + <code>ai-quizzed</code>). Override: MR label <code>ai-gate-skip</code> (<code>s</code> in triage-dash).</li>
+          <li>Merge is held by commit status <code>cf-factory</code> (pending while verify/review run and until I pass the quiz, failed on a failure label, green on <code>ai-verified</code> + <code>ai-reviewed</code> + <code>ai-quizzed</code>). Override: MR label <code>ai-gate-skip</code> (<code>s</code> in factory-dash).</li>
           <li>Changes wanted: comment in Jira, <code>mr</code> pushes to the same MR.</li>
         </ul></div>
         <div class="card failc"><h3>Failure labels</h3><ul>
@@ -580,8 +580,8 @@
       <div class="card failc"><h3>Visibility</h3><ul>
         <li>Only my own MR notes trigger <code>mr</code>; reviewers’ MR notes wait until I comment.</li>
         <li>A fix I push by hand leaves <code>ai-verified</code> standing; verify-fix pushes and pushes answering my comments are not re-reviewed.</li>
-        <li>Verify blocked (missing flag, no data) parks the ticket as <code>ai-verify-failed</code> before any review happened; <code>triage-worker KEY --review</code> runs it by hand.</li>
-        <li><code>triage-dash</code> still judges “needs you” by the last comment, not the handled id.</li>
+        <li>Verify blocked (missing flag, no data) parks the ticket as <code>ai-verify-failed</code> before any review happened; <code>factory-worker KEY --review</code> runs it by hand.</li>
+        <li><code>factory-dash</code> still judges “needs you” by the last comment, not the handled id.</li>
       </ul></div>
     </div>
   </section>

@@ -143,7 +143,7 @@ func TestChanged(t *testing.T) {
 }
 
 func TestParseUnits(t *testing.T) {
-	got := parseUnits("cf-triage-DEV-3536-review.service loaded active running /home/zimmi/bin/triage-worker --run review\ncf-triage-DEV-1-rfix.service loaded active running x\ncf-triage-feat-x-y-conflict.service loaded active running x\n")
+	got := parseUnits("sw-factory-DEV-3536-review.service loaded active running /home/zimmi/bin/factory-worker --run review\nsw-factory-DEV-1-rfix.service loaded active running x\nsw-factory-feat-x-y-conflict.service loaded active running x\n")
 	want := map[string]string{"DEV-3536": "reviewing", "DEV-1": "fixing review", "feat-x-y": "rebasing"}
 	if !maps.Equal(got, want) {
 		t.Errorf("parseUnits = %v, want %v", got, want)

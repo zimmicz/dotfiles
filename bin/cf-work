@@ -6,7 +6,7 @@
 # Multi-repo: claude starts in the primary worktree (cf-farm-frontend if present, else first) with --add-dir for the rest.
 # --no-launch: do everything but print the launch command instead of exec-ing claude.
 # --no-claim: skip assigning to me + In Progress transition (headless triage).
-# --comments-after: Jira comment id already answered (triage-worker passes handled/<KEY>); human comments above it land in "## New comments" right after the description, 🤖 comments are stubbed except the last.
+# --comments-after: Jira comment id already answered (factory-worker passes handled/<KEY>); human comments above it land in "## New comments" right after the description, 🤖 comments are stubbed except the last.
 
 set -e
 

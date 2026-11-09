@@ -1,0 +1,9 @@
+[Unit]
+Description=sw-factory dispatcher: picks work, spawns each stage as its own sw-factory-<KEY>-<stage> unit within the slot caps
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:%h/.fnm/aliases/default/bin:%h/bin:/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=%h/.config/sw-factory.env
+ExecStart=%h/bin/factory-worker
+TimeoutStartSec=10min

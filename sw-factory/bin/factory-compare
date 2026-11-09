@@ -1,13 +1,13 @@
 #!/bin/zsh
 # Usage: factory-compare [cutover ISO timestamp]   (default: the context-waste commit, 2026-11-05 13:35)
-# Before/after medians per stage from ~/.local/state/cf-triage/<KEY>.log. Peak context of runs that
+# Before/after medians per stage from ~/.local/state/sw-factory/<KEY>.log. Peak context of runs that
 # predate the 📏/peak= log lines comes from the Claude Code transcript (session id on the 🆔 line),
 # cached in peaks.tsv so it is computed once.
 set -uo pipefail
 export LC_NUMERIC=C
 
 CUTOVER=${1:-2026-11-05T13:35:00+01:00}
-LOG_DIR=~/.local/state/cf-triage
+LOG_DIR=~/.local/state/sw-factory
 PEAKS=$LOG_DIR/peaks.tsv
 touch $PEAKS
 CUT=$(date -d "$CUTOVER" +%s)

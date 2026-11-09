@@ -3,7 +3,7 @@ set -uo pipefail
 export LC_NUMERIC=C
 
 DAYS=${1:-7}
-LOG_DIR=~/.local/state/cf-triage
+LOG_DIR=~/.local/state/sw-factory
 ME=michal.zimmermann1
 LABELS='triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-verify-retry, ai-verified, ai-verify-failed, ai-done'
 

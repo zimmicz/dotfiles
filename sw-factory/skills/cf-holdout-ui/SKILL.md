@@ -1,12 +1,12 @@
 ---
 name: cf-holdout-ui
 description: |
-  Independent holdout verifier for the cf-triage factory. Runs the ticket's
-  Given/When/Then scenarios from ~/.local/state/cf-triage/holdout/<KEY>.md in a
+  Independent holdout verifier for the sw-factory factory. Runs the ticket's
+  Given/When/Then scenarios from ~/.local/state/sw-factory/holdout/<KEY>.md in a
   real browser against the MR's preview (FE-only: Amplify preview; any BE repo,
   also cross-repo: a throwaway cf-dyn-env env with every BE MR image + the FE
   branch) and writes a pass/fail report (+ optional narrated Czech video). Never changes
-  code. Invoked headless by triage-worker; use by hand with "cf-holdout-ui DEV-XXXX".
+  code. Invoked headless by factory-worker; use by hand with "cf-holdout-ui DEV-XXXX".
 ---
 
 # Verify MR against holdout scenarios
@@ -17,7 +17,7 @@ You are the verifier, not the implementer. You did not write this code and must 
 
 ## Steps
 
-1. Read `~/.local/state/cf-triage/holdout/<KEY>.md`. Line `NONE: <reason>` → write the report as `VERDICT: pass (no UI scenarios: <reason>)`, post the MR note, stop.
+1. Read `~/.local/state/sw-factory/holdout/<KEY>.md`. Line `NONE: <reason>` → write the report as `VERDICT: pass (no UI scenarios: <reason>)`, post the MR note, stop.
 2. Target URL:
    - only `cf-farm-frontend` → its Amplify preview `https://<branch lowercased>.dev.cleverfarm.cz`
    - any other repo in `repos` → dyn-env (step 3), which also builds the FE
@@ -27,7 +27,7 @@ You are the verifier, not the implementer. You did not write this code and must 
 4a. `video` set → one recording per scenario: right before it `browser_start_video` (`filename: <video>/S1.webm` with that scenario's id, `size: {width: 1280, height: 720}`), right after its last screenshot `browser_stop_video`, also on fail/blocked. Scenarios not run get no recording.
 5. Per scenario: open `<host>` + the Given path (impersonate first if the fixture says so), set up the rest of Given, do When, check Then literally. `browser_take_screenshot` (`type: jpeg`) as evidence, `browser_console_messages` errors. Unclear step → pick the most literal reading, note it. Can't reach the Given state (data missing, env broken) → `blocked`, not `fail`.
 5a. Order: `failed=` set → those scenarios first, in that order. One of them still fails → the remaining scenarios are `not run — <id> still fails` (the fix is wrong, a regression pass proves nothing), write the report, post the note, stop. All of them pass → the rest in file order. No `failed=` → file order.
-6. Write `~/.local/state/cf-triage/<KEY>.verify.md` after EVERY scenario, the whole file each time (Write, not Edit): first line `VERDICT: running`, then one line per scenario done so far. The file is the record: never grade a scenario from memory, re-read the file before the final write. After the last scenario rewrite it with the final first line, EXACTLY one of:
+6. Write `~/.local/state/sw-factory/<KEY>.verify.md` after EVERY scenario, the whole file each time (Write, not Edit): first line `VERDICT: running`, then one line per scenario done so far. The file is the record: never grade a scenario from memory, re-read the file before the final write. After the last scenario rewrite it with the final first line, EXACTLY one of:
    - `VERDICT: pass` — every scenario passed
    - `VERDICT: fail` — at least one scenario failed
    - `VERDICT: blocked` — none failed but at least one blocked

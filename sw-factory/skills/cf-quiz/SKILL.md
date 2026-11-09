@@ -1,11 +1,11 @@
 ---
 name: cf-quiz
 description: |
-  Comprehension quiz for the cf-triage factory, interactive. Before a factory MR may merge,
+  Comprehension quiz for the sw-factory factory, interactive. Before a factory MR may merge,
   Michal proves he understands the change: 4-6 open questions (why, predict, blast radius,
   alternatives) on the MR diff + PLAN.md, follow-ups on vague answers, every question must end
   correct. Pass adds Jira label ai-quizzed, which turns the cf-factory merge gate green. Re-quiz
-  after new commits covers only the delta. Launched from triage-dash key Q; by hand with
+  after new commits covers only the delta. Launched from factory-dash key Q; by hand with
   "cf-quiz DEV-XXXX".
 ---
 
@@ -17,7 +17,7 @@ Argument: `<KEY>`. Goal: Michal must not become a meat proxy who merges code he 
 
 1. Worktrees: `ls -d ~/work/cleverfarm/repos/*/.worktrees/<KEY>-*`. None → say so and stop.
 2. Per worktree: read `PLAN.md` + `TICKET.md` (first worktree), MR = `glab mr list --source-branch <branch> -F json` (cwd = worktree), base = its `target_branch`, `git fetch origin <base>`, diff = `git diff origin/<base>...HEAD`, HEAD sha = `git rev-parse HEAD`.
-3. Prior record `~/.local/state/cf-triage/quiz/<KEY>.md` exists with `SHA <repo> <sha>` lines → re-quiz: diff only `git diff <sha>...HEAD` per repo; a repo with no new commits is skipped. Delta empty everywhere → add the label (step Pass) and stop.
+3. Prior record `~/.local/state/sw-factory/quiz/<KEY>.md` exists with `SHA <repo> <sha>` lines → re-quiz: diff only `git diff <sha>...HEAD` per repo; a repo with no new commits is skipped. Delta empty everywhere → add the label (step Pass) and stop.
 4. Read the changed code paths and their callers until you know the answers yourself. Do not show your answers.
 
 ## Questions
@@ -43,7 +43,7 @@ Ask one at a time, give the MR URL once at the start. Each question: name the fi
 
 ## Record
 
-Write `~/.local/state/cf-triage/quiz/<KEY>.md` (append on re-quiz, keep the old rounds):
+Write `~/.local/state/sw-factory/quiz/<KEY>.md` (append on re-quiz, keep the old rounds):
 ```
 ## Round <n> <date> <pass|fail>
 SHA <repo> <sha>            (one per repo, only on pass)
@@ -56,7 +56,7 @@ Only the latest round's `SHA` lines count for the next delta.
 
 ## Pass
 
-`jira PUT "/rest/api/2/issue/<KEY>" '{"update":{"labels":[{"add":"ai-quizzed"}]}}'`. Then tell him: passed, the gate turns green on the next triage-worker tick. Fail → no label, say what to re-read.
+`jira PUT "/rest/api/2/issue/<KEY>" '{"update":{"labels":[{"add":"ai-quizzed"}]}}'`. Then tell him: passed, the gate turns green on the next factory-worker tick. Fail → no label, say what to re-read.
 
 ## Rules
 

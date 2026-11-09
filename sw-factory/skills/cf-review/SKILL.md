@@ -1,13 +1,13 @@
 ---
 name: cf-review
 description: |
-  Independent code reviewer for the cf-triage factory. Reviews a ticket's MR diff
+  Independent code reviewer for the sw-factory factory. Reviews a ticket's MR diff
   against PLAN.md, the repo standards and its GLOSSARY.md in a fresh read-only session, every
   finding with a concrete failure scenario. Writes the report (first line
   VERDICT: clean|minor|blocking) and posts one MR note. Never changes code.
   Runs once per MR, after the holdout verifier passed; with `prior=` + `since=`
   it only re-checks the commits a review fix pushed. Invoked headless by
-  triage-worker (stages review, rfix); use by hand with "cf-review DEV-XXXX".
+  factory-worker (stages review, rfix); use by hand with "cf-review DEV-XXXX".
 ---
 
 # Independent review of an MR
@@ -18,7 +18,7 @@ You are the reviewer, not the implementer. You did not write this code and must 
 
 ## Steps
 
-1. Read `PLAN.md` and `TICKET.md` in the first worktree: goal, decisions, comments after the plan win. Do not read `~/.local/state/cf-triage/holdout/` (the verifier's scenarios) nor `~/.local/state/cf-triage/notes/` (the implementer's own notes); both are denied to this session, judge the diff alone.
+1. Read `PLAN.md` and `TICKET.md` in the first worktree: goal, decisions, comments after the plan win. Do not read `~/.local/state/sw-factory/holdout/` (the verifier's scenarios) nor `~/.local/state/sw-factory/notes/` (the implementer's own notes); both are denied to this session, judge the diff alone.
 2. Per repo: base = `glab api projects/<project id>/merge_requests/<iid> | jq -r .target_branch`, diff = `git diff origin/<base>...HEAD` in that worktree.
 3. Run `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = the repo's `CLAUDE.md` "Coding Rules" + `~/dotfiles/claude/cleverfarm/standards/common.md` + `~/dotfiles/claude/cleverfarm/standards/<repo dir>.md` if it exists + the repo's `GLOSSARY.md` if it exists (vocabulary: new identifiers, test names, UI copy and the MR title use its EN terms, `_Avoid_` words are drift). Then check yourself what that pass does not cover: security (authz, injection, secrets, PII in logs), data and migrations (backwards compatibility, irreversible steps), performance (N+1, unbounded loops, needless re-renders), tests (changed logic without a test, tests that cannot fail), scope creep against `PLAN.md`, and the MR description's `## Merge Danger` against the diff (`glab api projects/<project id>/merge_requests/<iid> | jq -r .description`): a migration, deleted route, changed public contract or production flag flip called a two-way door, or a blast radius the diff plainly exceeds.
 4. Ground every finding: read the code path until you can name the file:line, what goes wrong and the concrete input or state that triggers it. A finding you cannot ground in the code is dropped. No style nits (linters cover them), no speculation, no restating the plan.
@@ -33,7 +33,7 @@ You are the reviewer, not the implementer. You did not write this code and must 
 
 ## Incremental re-check (`prior=<abs path>.md since=<worktree>@<sha>[,…]` in arguments)
 
-triage-worker runs this right after `rfix` pushed its fixes. Do not review the whole MR again.
+factory-worker runs this right after `rfix` pushed its fixes. Do not review the whole MR again.
 
 1. Read the prior report at `prior=`. Per repo the delta is `git diff <sha>...HEAD` in its worktree (`<sha>` = the head the prior review saw, from `since=`); read the full file only where a prior finding points.
 2. Per prior finding decide: **fixed** (name the commit), **open** (still reproducible, keep its text, do not reword it), or **dropped** (the implementer argued against it in the MR thread / Jira comment and you agree, say so in one line). No new copy of an open finding, no re-grading of an open one.

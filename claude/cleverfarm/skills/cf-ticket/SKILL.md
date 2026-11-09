@@ -5,7 +5,7 @@ description: |
   ticket", "cf-ticket", or provides a ticket ID (e.g. DEV-XXXX) to work on
   end-to-end. Two checkpoints only (plan + holdout scenarios approval, draft MR
   verified on preview); `--step` adds a stop after every plan step. Unattended
-  factory runs (triage-worker, label ai-fix) use /cf-ticket-headless instead.
+  factory runs (factory-worker, label ai-fix) use /cf-ticket-headless instead.
 ---
 
 # Full ticket lifecycle
@@ -31,7 +31,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 5. If `PLAN.md` exists in worktree root, read it first — it may contain a prior plan or user notes. Incorporate, don't overwrite blindly. If it is already a confirmed full plan (goal, decisions, steps) and the session was just cleared/restarted for implementation, skip 6–9 and go to Phase 3 with `PLAN.md` as the plan.
 6. Call `EnterPlanMode`, then create a detailed stepped plan of implementation, including holdout scenarios (format + rules as in `/cf-work-headless` step 4a) and, in a glossary repo, `## Terms` (as in `/cf-work-headless` step 4; implemented per `/cf-ticket-headless` step 4a). Session runs on `opusplan`: Opus plans, Sonnet implements.
 7. **CHECKPOINT 1** — `ExitPlanMode` with the full plan text + scenarios is the approval gate. User picks "clear context and implement" → Sonnet continues with the approved plan text.
-8. Right after approval (plan mode blocks edits, so not before), write the confirmed plan to `PLAN.md` in worktree root **verbatim, not a summary**: goal, every grilling/`[?]`/`[!]` decision (with concrete numbers, rules, test ids), every step with its detail, verify + eyeball URLs. Fold in answers given after the plan was shown. `PLAN.md` is the single source for implementation. Write the scenarios to `~/.local/state/cf-triage/holdout/<KEY>.md`; from here on never edit that file. Then attach them to the ticket: `jira attach <KEY> ~/.local/state/cf-triage/holdout/<KEY>.md holdout.md` (and `<KEY>.api.md` as `holdout.api.md` if it exists); it replaces an older attachment of the same name.
+8. Right after approval (plan mode blocks edits, so not before), write the confirmed plan to `PLAN.md` in worktree root **verbatim, not a summary**: goal, every grilling/`[?]`/`[!]` decision (with concrete numbers, rules, test ids), every step with its detail, verify + eyeball URLs. Fold in answers given after the plan was shown. `PLAN.md` is the single source for implementation. Write the scenarios to `~/.local/state/sw-factory/holdout/<KEY>.md`; from here on never edit that file. Then attach them to the ticket: `jira attach <KEY> ~/.local/state/sw-factory/holdout/<KEY>.md holdout.md` (and `<KEY>.api.md` as `holdout.api.md` if it exists); it replaces an older attachment of the same name.
 9. Post ONE Czech Jira comment (via `~/bin/jira add-comment <ticket-id>`) that is a **Czech rendering of `PLAN.md`** + scenarios: same sections, same decisions, same steps, one-to-one — nothing added, dropped or merged. Before posting, diff comment vs `PLAN.md` item by item and fix gaps. Jira wiki markup (`h3.`, `#`, `*`, `{{code}}`). First line = CZ 🤖 prefix from `~/.claude/my-voice.md` "Posted by Claude". This is the only Jira comment in the flow. If `PLAN.md` changes later, edit that comment (`jira PUT /rest/api/2/issue/<id>/comment/<commentId>`), don't post a new one.
 
 ## Phase 3: Implementation
@@ -54,7 +54,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 
 15. Run `/cf-mr --headless` — draft MR, no reviewers, FE preview on Nightly.
 16. Holdout verify: wait for the preview (every repo's latest MR pipeline green; FE-only also the bot note `<!-- amplify-preview-url -->` showing `@ <its short sha>`), then run `/cf-holdout-ui <KEY> repos=<repo>:<project id>:<mr iid>:<pipeline id>:<short sha>,… branch=…` in a fresh `Agent` sub-agent (pass only those args, no context from this session). `holdout/<KEY>.api.md` exists (BE refactor) → after it passes, same for `/cf-holdout-api <KEY> repos=… branch=…`. Fail → fix once (same rules as headless `--verify-fix`), push, verify again.
-16a. Rewrite `~/.local/state/cf-triage/notes/<KEY>.md` as in `/cf-ticket-headless` step 9 (change map, decisions, deviations, gotchas, rounds), so a later factory round, or you after a break, starts from what was actually built.
+16a. Rewrite `~/.local/state/sw-factory/notes/<KEY>.md` as in `/cf-ticket-headless` step 9 (change map, decisions, deviations, gotchas, rounds), so a later factory round, or you after a break, starts from what was actually built.
 17. **CHECKPOINT 2** — MR link, review findings fixed, verify verdict, anything deviating from the plan. Only on the user's explicit OK: `glab mr update <iid> --ready` + reviewers per `/cf-mr` step 6, ticket to review per `/cf-mr` step 8, then `/cf-mr` steps 11–12 (time log, retro). Then: "Come back after merge and run `/cf-feedback`."
 
 ## Stop rules (between checkpoints)
@@ -66,4 +66,4 @@ Stop and ask only when: the plan / root cause doesn't hold in the code, the chan
 - Never skip a checkpoint
 - If user wants to skip a phase (e.g. already has worktree), jump to the right phase
 - Keep context concise between phases — summarize, don't repeat everything
-- Unattended factory runs (triage-worker): `/cf-ticket-headless`, nothing here applies to them
+- Unattended factory runs (factory-worker): `/cf-ticket-headless`, nothing here applies to them

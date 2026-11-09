@@ -16,25 +16,30 @@ mkdir -p ${CONFIG_DIR}/workmux > /dev/null 2>&1
 mkdir ~/.tmuxloader-sessions > /dev/null 2>&1
 
 
-# claude: user/ = personal, cleverfarm/ = work-scoped; every file symlinked to ~/.claude at same relative path,
+# claude: user/ = personal, cleverfarm/ = work-scoped, sw-factory/skills = factory-only; every file symlinked to ~/.claude at same relative path,
 # systemd/ units go to ~/.config/systemd/user, docs/ stays unlinked
-find ~/.claude ${CONFIG_DIR}/systemd/user -xtype l -lname "${DOTFILES_DIR}/claude/*" -delete 2>/dev/null
+find ~/.claude ${CONFIG_DIR}/systemd/user ~/bin -xtype l \( -lname "${DOTFILES_DIR}/claude/*" -o -lname "${DOTFILES_DIR}/sw-factory/*" -o -lname "${DOTFILES_DIR}/bin/*" \) -delete 2>/dev/null
 for scope in user cleverfarm; do
   for f in $(cd ${DOTFILES_DIR}/claude/${scope} && find * -type f ! -path 'docs/*' ! -path 'systemd/*'); do
     mkdir -p ~/.claude/$(dirname ${f})
     ln -sf ${DOTFILES_DIR}/claude/${scope}/${f} ~/.claude/${f}
   done
-  for u in ${DOTFILES_DIR}/claude/${scope}/systemd/*; do
-    ln -sf ${u} ${CONFIG_DIR}/systemd/user/$(basename ${u})
-  done
+done
+for f in $(cd ${DOTFILES_DIR}/sw-factory && find skills -type f); do
+  mkdir -p ~/.claude/$(dirname ${f})
+  ln -sf ${DOTFILES_DIR}/sw-factory/${f} ~/.claude/${f}
+done
+for u in ${DOTFILES_DIR}/claude/user/systemd/* ${DOTFILES_DIR}/sw-factory/systemd/*; do
+  ln -sf ${u} ${CONFIG_DIR}/systemd/user/$(basename ${u})
 done
 systemctl --user daemon-reload && systemctl --user enable claude-reflection.timer
 
 mkdir -p ~/bin
-for f in ${DOTFILES_DIR}/bin/*; do
+for f in ${DOTFILES_DIR}/bin/* ${DOTFILES_DIR}/sw-factory/bin/*; do
   ln -sf ${f} ~/bin/$(basename ${f})
 done
-(cd ${DOTFILES_DIR}/go/triage-dash && go build -o ~/bin/triage-dash .)
+rm -f ~/bin/triage-dash
+(cd ${DOTFILES_DIR}/sw-factory/dash && go build -o ~/bin/factory-dash .)
 
 claude mcp get playwright > /dev/null 2>&1 || claude mcp add -s user playwright -- npx -y @playwright/mcp@latest --headless
 

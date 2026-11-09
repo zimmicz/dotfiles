@@ -4,7 +4,7 @@ set -uo pipefail
 MAX=${MAX:-10}
 SLOTS=${SLOTS:-3} IMPL_SLOTS=${IMPL_SLOTS:-1} MR_SLOTS=${MR_SLOTS:-1} VERIFY_SLOTS=${VERIFY_SLOTS:-1} REVIEW_SLOTS=${REVIEW_SLOTS:-1}
 REPOS=~/work/cleverfarm/repos
-LOG_DIR=~/.local/state/cf-triage
+LOG_DIR=~/.local/state/sw-factory
 AI_MARK="AI triage (Claude, headless)"
 NOTES=$LOG_DIR/notes.txt
 HOLDOUT=$LOG_DIR/holdout
@@ -174,9 +174,9 @@ analyze() {
 wm_window() {
   local WT=$1 LOG=$2
   tmux ls >/dev/null 2>&1 || return 0
-  tmux has-session -t cf-triage 2>/dev/null || tmux new-session -d -s cf-triage -n log
-  local PANE=$(tmux list-panes -s -t cf-triage -f "#{==:#{pane_current_path},$WT}" -F '#{pane_id}' | head -1)
-  [[ -n "$PANE" ]] || PANE=$(tmux new-window -d -t cf-triage: -n ${WT:t} -c $WT -P -F '#{pane_id}' "tail -n +1 -f $LOG")
+  tmux has-session -t sw-factory 2>/dev/null || tmux new-session -d -s sw-factory -n log
+  local PANE=$(tmux list-panes -s -t sw-factory -f "#{==:#{pane_current_path},$WT}" -F '#{pane_id}' | head -1)
+  [[ -n "$PANE" ]] || PANE=$(tmux new-window -d -t sw-factory: -n ${WT:t} -c $WT -P -F '#{pane_id}' "tail -n +1 -f $LOG")
   echo $PANE
 }
 
@@ -310,7 +310,7 @@ gate_state() {
   if [[ " $2 " == *" ai-gate-skip "* ]]; then echo "success ai-gate-skip override"
   elif [[ $L == *" ai-verify-failed "* || $L == *" ai-review-findings "* || $L == *" ai-fix-failed "* ]]; then echo "failed factory needs Michal"
   elif [[ $L == *" ai-verified "* && $L == *" ai-reviewed "* && $L == *" ai-quizzed "* ]]; then echo "success verified + reviewed + quizzed"
-  elif [[ $L == *" ai-verified "* && $L == *" ai-reviewed "* ]]; then echo "pending quiz Michal: triage-dash Q"
+  elif [[ $L == *" ai-verified "* && $L == *" ai-reviewed "* ]]; then echo "pending quiz Michal: factory-dash Q"
   else echo "pending factory verify/review in flight"
   fi
 }
@@ -653,7 +653,7 @@ run_stage() {
   (( RC == 75 )) && echo "  $2 busy in another stage, skipped"
   if (( RC != 0 && RC != 2 && RC != 75 )); then
     echo "  stage $1 $2 crashed, exit $RC"
-    note $2 "stage $1 crashed (exit $RC), see \`journalctl --user -u 'cf-triage-*'\`"
+    note $2 "stage $1 crashed (exit $RC), see \`journalctl --user -u 'sw-factory-*'\`"
   fi
   return $RC
 }
@@ -676,7 +676,7 @@ fi
 stage_class() { case $1 in impl|mr|verify|review) echo $1 ;; rfix) echo impl ;; esac }
 stage_timeout() { case $1 in impl|mr|rfix|conflict|verify) echo 110min ;; review) echo 45min ;; done) echo 5min ;; *) echo 30min ;; esac }
 
-RUNNING=(${(f)"$(systemctl --user list-units 'cf-triage-*' --state=active,activating,deactivating --plain --no-legend | awk '{print $1}')"})
+RUNNING=(${(f)"$(systemctl --user list-units 'sw-factory-*' --state=active,activating,deactivating --plain --no-legend | awk '{print $1}')"})
 TAKEN=() SPAWNED=0
 
 pick_slot() {
@@ -693,8 +693,8 @@ pick_slot() {
 
 spawn_stage() {
   local S=$1 KEY=${2//[^A-Za-z0-9_.-]/-} CLS SLOT CAP=() F CMD=() N
-  local UNIT=cf-triage-$KEY-$S
-  [[ -n ${(M)RUNNING:#cf-triage-$KEY-*} ]] && return 1
+  local UNIT=sw-factory-$KEY-$S
+  [[ -n ${(M)RUNNING:#sw-factory-$KEY-*} ]] && return 1
   pick_slot slot- $SLOTS || return 3
   SLOT=$PICKED
   CLS=$(stage_class $S)
@@ -712,7 +712,7 @@ spawn_stage() {
     echo "would spawn $UNIT (slots ${SLOT:t} ${CAP:t})"
   else
     systemd-run --user --collect --quiet --unit=$UNIT "--setenv=PATH=$PATH" ${GRILL:+--setenv=GRILL=$GRILL} \
-      -p EnvironmentFile=$HOME/.config/cf-triage.env -p RuntimeMaxSec=$(stage_timeout $S) \
+      -p EnvironmentFile=$HOME/.config/sw-factory.env -p RuntimeMaxSec=$(stage_timeout $S) \
       -p SuccessExitStatus="2 75" $CMD || return 1
     echo "spawned $UNIT (slots ${SLOT:t} ${CAP:t})"
   fi
@@ -734,7 +734,7 @@ dispatch() {
     spawn_stage $S $KEY ${=ARGS}
     case $? in
       3) echo "no free slot ($SLOTS busy), rest waits for next tick"; return ;;
-      4) RUNNING+=(cf-triage-${KEY//[^A-Za-z0-9_.-]/-}-held) ;;
+      4) RUNNING+=(sw-factory-${KEY//[^A-Za-z0-9_.-]/-}-held) ;;
     esac
   done
 }
@@ -819,7 +819,7 @@ fi
 
 POSTED=$LOG_DIR/.posted QUIET=$LOG_DIR/.quiet SEND=$NOTES.$$
 if [[ -s $NOTES ]] && mv $NOTES $SEND; then
-  if printf '**cf-triage run %s**\n%s\n' "$(date '+%H:%M')" "$(sed 's/^/• /' $SEND)" | ~/.claude/scripts/slack-post.sh "cf-triage"; then
+  if printf '**sw-factory run %s**\n%s\n' "$(date '+%H:%M')" "$(sed 's/^/• /' $SEND)" | ~/.claude/scripts/slack-post.sh "sw-factory"; then
     rm -f $SEND $QUIET && touch $POSTED
   else
     cat $SEND >>$NOTES && rm -f $SEND
@@ -828,7 +828,7 @@ elif (( ! SPAWNED && ! ${#RUNNING} )); then
   date '+%a %H:%M' >>$QUIET
   RECENT=($POSTED(Nmh-3))
   if (( ! ${#RECENT} )); then
-    printf '**cf-triage alive** — %s quiet runs since %s, nothing picked up\n' "$(wc -l <$QUIET)" "$(head -1 $QUIET)" \
-      | ~/.claude/scripts/slack-post.sh "cf-triage" && rm -f $QUIET && touch $POSTED
+    printf '**sw-factory alive** — %s quiet runs since %s, nothing picked up\n' "$(wc -l <$QUIET)" "$(head -1 $QUIET)" \
+      | ~/.claude/scripts/slack-post.sh "sw-factory" && rm -f $QUIET && touch $POSTED
   fi
 fi

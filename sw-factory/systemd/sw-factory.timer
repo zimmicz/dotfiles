@@ -1,5 +1,5 @@
 [Unit]
-Description=Run cf-triage every minute on weekdays 07-18
+Description=Run sw-factory every minute on weekdays 07-18
 
 [Timer]
 OnCalendar=Mon..Fri *-*-* 07..18:*:00

@@ -15,7 +15,7 @@ of the message body, then the text in my voice as usual:
 - EN: `🤖 _I'm writing on Michal's behalf. If you don't like it, please let me know._`
 - Headless triage (cf-work/cf-ticket, Czech):
   `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`
-  (triage-worker matches on `AI triage (Claude, headless)` — keep that substring.)
+  (factory-worker matches on `AI triage (Claude, headless)` — keep that substring.)
 
 Italics: `_x_` in Jira wiki/Slack, same in GitLab markdown.
 

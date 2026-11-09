@@ -32,7 +32,7 @@ const (
 )
 
 var (
-	stateDir = filepath.Join(os.Getenv("HOME"), ".local/state/cf-triage")
+	stateDir = filepath.Join(os.Getenv("HOME"), ".local/state/sw-factory")
 	costRe   = regexp.MustCompile(`cost=\$([0-9.]+)`)
 	verdRe   = regexp.MustCompile(`^\s*VERDICT: (\S+)`)
 	tsRe     = regexp.MustCompile(`^\d\d:\d\d:\d\d `)
@@ -538,7 +538,7 @@ func parseUnits(out string) map[string]string {
 		if len(f) == 0 {
 			continue
 		}
-		u := strings.TrimSuffix(strings.TrimPrefix(f[0], "cf-triage-"), ".service")
+		u := strings.TrimSuffix(strings.TrimPrefix(f[0], "sw-factory-"), ".service")
 		if i := strings.LastIndex(u, "-"); i > 0 {
 			m[u[:i]] = or(phaseNames[u[i+1:]], u[i+1:])
 		}
@@ -547,7 +547,7 @@ func parseUnits(out string) map[string]string {
 }
 
 func runningUnits() map[string]string {
-	out, _ := exec.Command("systemctl", "--user", "list-units", "cf-triage-*", "--plain", "--no-legend", "--state=active").Output()
+	out, _ := exec.Command("systemctl", "--user", "list-units", "sw-factory-*", "--plain", "--no-legend", "--state=active").Output()
 	return parseUnits(string(out))
 }
 
@@ -591,7 +591,7 @@ func workerBusy() bool {
 	procs, _ := filepath.Glob("/proc/[0-9]*/cmdline")
 	for _, p := range procs {
 		b, _ := os.ReadFile(p)
-		if strings.Contains(string(b), "triage-worker") || strings.Contains(string(b), "sentry-triage") {
+		if strings.Contains(string(b), "factory-worker") || strings.Contains(string(b), "sentry-triage") {
 			return true
 		}
 	}
@@ -871,7 +871,7 @@ func do(status string, f func() error) tea.Cmd {
 
 func (m *model) reload() {
 	m.busy = workerBusy()
-	out, _ := exec.Command("systemctl", "--user", "is-active", "cf-triage.service").Output()
+	out, _ := exec.Command("systemctl", "--user", "is-active", "sw-factory.service").Output()
 	m.svc = strings.TrimSpace(string(out))
 	key := m.sel().key
 	m.rows, m.otherN = nil, 0
@@ -1109,7 +1109,7 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		case msg.err != nil:
 			m.status = "\033[31m" + msg.err.Error() + "\033[0m"
 		case msg.kick:
-			exec.Command("systemctl", "--user", "start", "--no-block", "cf-triage.service").Run()
+			exec.Command("systemctl", "--user", "start", "--no-block", "sw-factory.service").Run()
 			m.status += "\033[2m, dispatcher kicked (a free slot picks it up)\033[0m"
 		}
 		delete(m.comments, m.sel().key)
@@ -1375,8 +1375,8 @@ func (m model) key(k string) (model, tea.Cmd) {
 			m.status = "w needs tmux"
 			break
 		}
-		m.confirm("run triage-worker "+r.key+" now (new tmux window)?", func() tea.Msg {
-			err := exec.Command("tmux", "new-window", "-d", "-n", "w:"+r.key, "~/bin/triage-worker "+r.key+"; echo; read '?done, enter closes'").Run()
+		m.confirm("run factory-worker "+r.key+" now (new tmux window)?", func() tea.Msg {
+			err := exec.Command("tmux", "new-window", "-d", "-n", "w:"+r.key, "~/bin/factory-worker "+r.key+"; echo; read '?done, enter closes'").Run()
 			return doneMsg{"worker started for " + r.key, err, false}
 		})
 	}
@@ -1581,7 +1581,7 @@ func (m model) View() string {
 	if m.busy {
 		worker = "\033[32m● busy\033[0m"
 	}
-	head := fmt.Sprintf(" \033[1mcf-triage\033[0m   %s   \033[2m%d tickets   $%.2f\033[0m", worker, len(m.rows)+m.otherN, total)
+	head := fmt.Sprintf(" \033[1msw-factory\033[0m   %s   \033[2m%d tickets   $%.2f\033[0m", worker, len(m.rows)+m.otherN, total)
 	if m.svc == "failed" {
 		head += "   \033[31mdispatcher failed\033[0m"
 	}

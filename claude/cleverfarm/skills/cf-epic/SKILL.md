@@ -12,7 +12,7 @@ description: |
 
 Epic: $ARGUMENTS (Jira epic key; none → ask, or create one after phase 1 with the user's OK)
 
-State dir: `~/.local/state/cf-epics/<EPIC>/` (`map.md`, `issues/`, `SPEC.md`, `tickets.md`). Holdout scenarios: `~/.local/state/cf-triage/holdout/<KEY>.md`, same format and rules as `/cf-work-headless` step 4a.
+State dir: `~/.local/state/cf-epics/<EPIC>/` (`map.md`, `issues/`, `SPEC.md`, `tickets.md`). Holdout scenarios: `~/.local/state/sw-factory/holdout/<KEY>.md`, same format and rules as `/cf-work-headless` step 4a.
 
 Three checkpoints: **spec**, **ticket breakdown**, **acceptance MR**. Between them, run without stopping except on `/cf-ticket` stop rules.
 

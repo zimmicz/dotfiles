@@ -3,7 +3,7 @@ set -euo pipefail
 
 MAX=${MAX:-1}
 REPOS=~/work/cleverfarm/repos
-LOG_DIR=~/.local/state/cf-triage
+LOG_DIR=~/.local/state/sw-factory
 STAMP=$LOG_DIR/sentry-today
 NOTES=$LOG_DIR/notes.txt
 PIPELINE_LABELS='triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed'
