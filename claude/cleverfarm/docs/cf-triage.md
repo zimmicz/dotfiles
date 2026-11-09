@@ -94,7 +94,7 @@ DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentr
 [needs-answer]  Czech Jira comment: Zjištěno + numbered Otázky, each with a recommended answer; no PLAN.md, blocks ai-fix
   │  I reply "ok" / "ok, 3 jinak: …"  →  analysis re-runs: more questions → next round (≤ GRILL_MAX_ROUNDS), none ↓
   ▼  no gaps (or GRILL off): straight here
-[triaged]  worktree + PLAN.md (first section: Belongs in Sentry? → filter fix if no; repo has `GLOSSARY.md`: `## Terms` = entries to add, Czech ticket words mapped via `_CZ_`) + holdout scenarios + Czech Jira comment (🤖 + "AI triage" marker)
+[triaged]  worktree + PLAN.md (first section: Belongs in Sentry? → filter fix if no; `## Implementation` = spec of the future diff: change map, Now/After + key-line sketch per file, data flow, tests, out of scope; binding for impl, deviations logged; repo has `GLOSSARY.md`: `## Terms` = entries to add, Czech ticket words mapped via `_CZ_`) + holdout scenarios + Czech Jira comment (🤖 + "AI triage" marker), PLAN.md attached to the ticket; missing required section → triage-failed
   │  I reply in Jira  →  next run (≤2 min) answers, updates PLAN.md + scenarios   (To Do tickets any age, plus any not-Done ticket labelled `ai-fix`, so a comment can't deadlock behind `impl`)
   │  I add label ai-fix  (= approves plan AND scenarios)
   ▼  triage-worker          `IMPL_SLOTS` at a time: cf-work (claims) → claude -p "/cf-ticket-headless KEY"
