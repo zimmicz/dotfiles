@@ -25,7 +25,7 @@ A `Conversation compacted` notice mid-run → before the next step re-read this 
 
 ## Inputs
 
-1. Goal = `TICKET.md` + `PLAN.md`. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win. No new plan, no plan comment.
+1. Goal = `TICKET.md` + `PLAN.md`. `PLAN.md` is the plan; decisions in `TICKET.md` comments after it win. No new plan, no plan comment. Every `[!]` is binding. A `[?]` no comment answered → its `Default:` is binding, as if it were `[!]`; no default stated → the option that changes least. Never decide it differently yourself, not even as a reported deviation.
 2. `~/.local/state/cf-triage/holdout/<KEY>.md` = acceptance scenarios an independent verifier runs against the preview after the MR exists. Read them, make the change satisfy them; never edit that file.
 2a. `~/.local/state/cf-triage/notes/<KEY>.md` = your own notes from earlier rounds (change map, decisions with reasons, gotchas, round log). Exists → read it right after `PLAN.md`, before touching code; it is the memory between rounds. Reviewer and verifier cannot read it.
 3. **Multi-repo**: `TICKET.md` `## Repos` lists more than one worktree → the session was launched with `--add-dir` for the siblings, all on the same branch. Treat the set as one change: implement, verify (step 5) and review (step 6) per repo, in each repo's own worktree dir. BE contract first (API/DTO), FE consumes it.

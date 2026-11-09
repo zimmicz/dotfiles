@@ -159,7 +159,7 @@ analyze() {
   fi
   (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work-headless $KEY$GARGS" \
     --model $TIER $DIRS --settings "$HEADLESS_SETTINGS" \
-    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$LOG_DIR/$KEY.grill) Write(/$TNOTES/$KEY.md) Edit(/$TNOTES/$KEY.md) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) Write(/$HOLDOUT/$KEY.api.md) Edit(/$HOLDOUT/$KEY.api.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_events Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
+    --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$LOG_DIR/$KEY.grill) Write(/$TNOTES/$KEY.md) Edit(/$TNOTES/$KEY.md) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) Write(/$HOLDOUT/$KEY.api.md) Edit(/$HOLDOUT/$KEY.api.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_errors Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) && [[ -f $WT/PLAN.md || "$(grill_outcome $KEY)" == ASK ]] \
     && echo "  ok -> $WT/PLAN.md${$(grill_outcome $KEY):+ (grill: $(grill_outcome $KEY))}" | tee -a $LOG
   local RC=$? F

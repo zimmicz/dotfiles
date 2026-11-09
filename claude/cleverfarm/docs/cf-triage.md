@@ -132,7 +132,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | `needs-answer` | grill phase (`GRILL=1`): questions posted, no plan yet. Blocks `ai-fix`; my reply re-runs the analysis | triage-worker |
 | `triaged` | PLAN.md + comment done | triage-worker |
 | `triage-failed` | analysis or reply follow-up failed (no repo, worktree, crash); parked, no retry loop, re-add `triage` | triage-worker |
-| `ai-fix` | **my approval** to implement PLAN.md | me |
+| `ai-fix` | **my approval** to implement PLAN.md; unanswered `[?]` → its `Default:` binds impl | me |
 | `ai-mr` | draft MR exists | triage-worker |
 | `ai-reviewed` | independent review done (runs once per MR, after `ai-verified`): clean, should-fix only, or its findings were fixed once and the delta re-check passed. Survives `mr` follow-up pushes (no re-review) | triage-worker |
 | `ai-review-retry` | reviewer found must-fix issues, `rfix` will fix every finding once, then re-check the delta | triage-worker |
@@ -215,7 +215,7 @@ Pick up manually instead: `cd ~/work/cleverfarm/repos/<repo> && cf-work DEV-XXXX
 ## Guardrails
 
 - Everything runs as me (Jira, GitLab, Sentry, Slack tokens are mine). Posts start with the 🤖 prefix from `~/.claude/my-voice.md`.
-- Analysis: read-only tools + write `PLAN.md` + `jira add-comment`.
+- Analysis: read-only tools (ctx_*, codegraph, `git log/show/blame/grep`, Sentry `get_sentry_resource` + `search_errors`) + write only `PLAN.md`, `notes/<KEY>.md`, `holdout/<KEY>.md` + `<KEY>.api.md`, `<KEY>.grill` + `jira add-comment`.
 - Implement: denied `git push --force/-f`, push to develop/staging/production, `reset --hard`, `glab mr merge/approve`. Protected branches enforce it server-side too.
 - Implementation only after I add `ai-fix`. MR always draft, no reviewers.
 - Agent bails (comment, no MR) if root cause doesn't hold, scope grows, or tests can't go green.
