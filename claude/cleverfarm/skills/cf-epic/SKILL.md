@@ -31,7 +31,7 @@ Three checkpoints: **spec**, **ticket breakdown**, **acceptance MR**. Between th
 
 6. `/mattpocock-skills:to-tickets` on `SPEC.md`. Vertical slices, prefactors first, blocking edges. For each slice also draft its holdout scenarios.
 7. **CHECKPOINT 2** — to-tickets' quiz: titles, blocked-by, what it delivers, scenarios. Iterate until approved.
-8. Publish in dependency order via `~/bin/jira` (not MCP), English summaries: DEV issues with `parent` = `<EPIC>`, Product + Component per the repo's `docs/agents/issue-tracker.md`, labels `repo-<dir>` for EVERY repo the slice touches (component BE/FE accordingly) + `cf-epic`, assignee me, current sprint. Second pass: `Blocks` links (`jira POST /rest/api/3/issueLink '{"type":{"name":"Blocks"},"inwardIssue":{"key":"<BLOCKER>"},"outwardIssue":{"key":"<BLOCKED>"}}'`). Write each ticket's scenarios to its holdout file. Record keys + edges in `<state dir>/tickets.md`.
+8. Publish in dependency order via `~/bin/jira` (not MCP), Czech summary + description: DEV issues with `parent` = `<EPIC>`, Product + Component per the repo's `docs/agents/issue-tracker.md`, labels `repo-<dir>` for EVERY repo the slice touches (component BE/FE accordingly) + `cf-epic`, assignee me, current sprint. Second pass: `Blocks` links (`jira POST /rest/api/3/issueLink '{"type":{"name":"Blocks"},"inwardIssue":{"key":"<BLOCKER>"},"outwardIssue":{"key":"<BLOCKED>"}}'`). Write each ticket's scenarios to its holdout file. Record keys + edges in `<state dir>/tickets.md`.
 
 ## Phase 4: Build the acceptance MR
 
