@@ -25,7 +25,7 @@ import (
 
 const (
 	jiraBase = "https://cleverfarm.atlassian.net"
-	labels   = "triage, needs-answer, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-review-retry, ai-reviewed, ai-review-findings, ai-verify-retry, ai-verified, ai-verify-failed, ai-done"
+	labels   = "triage, needs-answer, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-review-retry, ai-reviewed, ai-review-findings, ai-verify-retry, ai-verified, ai-verify-failed, ai-quizzed, ai-done"
 	sideW    = 34
 	top      = 2
 	detailH  = 5
@@ -95,8 +95,10 @@ func stage(ls []string) string {
 		return "review findings"
 	case has["ai-review-retry"]:
 		return "review fix"
-	case has["ai-reviewed"] && has["ai-verified"]:
+	case has["ai-reviewed"] && has["ai-verified"] && has["ai-quizzed"]:
 		return "reviewed"
+	case has["ai-reviewed"] && has["ai-verified"]:
+		return "quiz"
 	case has["ai-reviewed"]:
 		return "re-verify"
 	case has["ai-verified"]:
@@ -121,6 +123,7 @@ var stageStyle = map[string]struct{ icon, color string }{
 	"implementing":    {"🔨", "36"},
 	"mr":              {"🔍", "34"},
 	"reviewed":        {"✅", "32"},
+	"quiz":            {"🎓", "33"},
 	"re-verify":       {"🔁", "36"},
 	"review fix":      {"🔧", "36"},
 	"review findings": {"🔶", "33"},
@@ -162,7 +165,7 @@ func group(r row) int {
 		return gTodo
 	case r.parked:
 		return gParked
-	case slices.Contains([]string{"plan gate", "questions", "reviewed", "verify failed", "review findings", "analysis failed", "bailed"}, r.stage):
+	case slices.Contains([]string{"plan gate", "questions", "quiz", "reviewed", "verify failed", "review findings", "analysis failed", "bailed"}, r.stage):
 		return gNeeds
 	}
 	return gFlight
@@ -740,7 +743,7 @@ type helpSection struct {
 var helpCols = [][]helpSection{
 	{
 		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log·plan·holdout·desc·comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}, {"Z", "zoom pane"}}},
-		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}, {"s", "skip merge gate"}}},
+		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}, {"s", "skip merge gate"}, {"Q", "quiz me → ai-quizzed"}}},
 	},
 	{
 		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"y", "copy tab text"}, {"l", "log in less"}, {"e", "edit plan / holdout"}, {"c", "resume session"}}},
@@ -748,7 +751,7 @@ var helpCols = [][]helpSection{
 	},
 }
 
-var legend = []string{"questions", "plan gate", "reviewed", "verify failed", "review findings", "bailed", "implementing", "mr", "verified", "review fix", "re-verify", "new", "nightly", "todo", "-"}
+var legend = []string{"questions", "plan gate", "quiz", "reviewed", "verify failed", "review findings", "bailed", "implementing", "mr", "verified", "review fix", "re-verify", "new", "nightly", "todo", "-"}
 
 func helpLines() []string {
 	const keyW, colW = 9, 34
@@ -1352,6 +1355,17 @@ func (m model) key(k string) (model, tea.Cmd) {
 		}
 		m.pickKey, m.pickQ = r.key, ""
 		m.pickCur = max(slices.Index(m.picks(), "cf-farm-frontend"), 0)
+	case "Q":
+		if !isTicket || r.stage != "quiz" {
+			m.status = "Q works on a reviewed MR waiting for quiz"
+			break
+		}
+		cmd := "claude --model sonnet '/cf-quiz " + r.key + "'"
+		if os.Getenv("TMUX") != "" {
+			exec.Command("tmux", "new-window", "-n", "quiz:"+r.key, cmd).Run()
+			break
+		}
+		return m, tea.ExecProcess(exec.Command("zsh", "-ic", cmd), func(error) tea.Msg { return tickMsg{} })
 	case "w":
 		if !isTicket {
 			m.status = "no jira ticket"

@@ -309,7 +309,8 @@ gate_state() {
   local L=" $1 "
   if [[ " $2 " == *" ai-gate-skip "* ]]; then echo "success ai-gate-skip override"
   elif [[ $L == *" ai-verify-failed "* || $L == *" ai-review-findings "* || $L == *" ai-fix-failed "* ]]; then echo "failed factory needs Michal"
-  elif [[ $L == *" ai-verified "* && $L == *" ai-reviewed "* ]]; then echo "success verified + reviewed"
+  elif [[ $L == *" ai-verified "* && $L == *" ai-reviewed "* && $L == *" ai-quizzed "* ]]; then echo "success verified + reviewed + quizzed"
+  elif [[ $L == *" ai-verified "* && $L == *" ai-reviewed "* ]]; then echo "pending quiz Michal: triage-dash Q"
   else echo "pending factory verify/review in flight"
   fi
 }
@@ -549,7 +550,7 @@ wt_heads() {
 }
 
 unverify() {
-  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"}]}}' >/dev/null
+  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"},{"remove":"ai-quizzed"}]}}' >/dev/null
 }
 
 stage_mr() {

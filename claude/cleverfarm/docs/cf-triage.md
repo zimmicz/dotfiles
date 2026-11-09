@@ -18,13 +18,14 @@ My job = intent in, decisions at gates, judge results. Agents do the rest.
 **My gates in the background flow** (Slack `#zimmi-claude` tells me when each is due)
 
 1. **Plan gate** — Jira comment with PLAN + Given/When/Then scenarios. Wrong/unclear → reply in Jira (answered ≤2 min, instantly if replied via `triage-dash`, PLAN + scenarios updated). Good → add `ai-fix`. The label approves plan AND scenarios — scenarios are what "done" means, read them.
-2. **MR gate** — draft MR with verify verdict note. `ai-verified` → review diff, mark ready, add reviewers, merge. Want changes → comment in Jira, agent pushes to the same MR.
+2. **MR gate** — draft MR with verify verdict note. `ai-verified` + `ai-reviewed` → **quiz**: `Q` in `triage-dash` opens `claude --model sonnet '/cf-quiz KEY'` (tmux window): 4–6 open-book questions (why / predict / blast radius / alternatives) on diff + PLAN.md, wrong answer = hint + re-ask, still wrong = explained + fresh question at the end; every question must end correct. Pass → `ai-quizzed`, record + quizzed SHAs in `~/.local/state/cf-triage/quiz/<KEY>.md`. New commits drop `ai-quizzed`, re-quiz covers only the delta since those SHAs. Then mark ready, add reviewers, merge. Want changes → comment in Jira, agent pushes to the same MR.
    **Merge block**: every tick `gate_sync` posts commit status `cf-factory` on each open `ai-mr` MR's head pipeline (merge-ref commit + `pipeline_id`; a status on the branch head commit makes a separate pipeline and blocks nothing). "Pipelines must succeed" then holds the merge / train until the round is done:
 
    | labels | `cf-factory` | merge |
    |---|---|---|
    | MR label `ai-gate-skip` (`s` in `triage-dash`) | success | allowed |
-   | `ai-verified` + `ai-reviewed` | success | allowed |
+   | `ai-verified` + `ai-reviewed` + `ai-quizzed` | success | allowed |
+   | `ai-verified` + `ai-reviewed` | pending (`quiz Michal`) | blocked |
    | `ai-verify-failed` / `ai-review-findings` / `ai-fix-failed` | failed | blocked (pipeline red) |
    | anything else (round in flight) | pending | blocked (pipeline running, `CI_MUST_PASS` = CHECKING) |
 
@@ -53,7 +54,7 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 
 | want | how |
 |---|---|
-| all tickets at a glance + act on gates | `triage-dash` TUI: sidebar grouped running (green ●, label = active stage from unit `cf-triage-<KEY>-<stage>`: analysing / implementing / verifying / reviewing / fixing review / rebasing …) / needs you / todo (my sprint To Do, not in factory) / in flight / parked, pane with log / PLAN.md / holdout scenarios (`<KEY>.md` + `.api.md`) / Jira description / Jira comments (`tab`, markdown rendered). Gates without Jira: `a` approve, `R` reply, `t` retry, `w` run worker, `f` feed a todo (pick repo → `triage` + `repo-<x>`), `s` skip merge gate (`ai-gate-skip`) (all y/n). MR rows show 🔒 gate pending / 🚫 gate failed. `e` opens `$EDITOR` on PLAN.md / holdout files (plan / holdout tab; a changed holdout file is re-attached to Jira as `holdout.md` / `holdout.api.md`, replacing the old one). `c` resumes the session in a tmux window. `?` lists all keys. Mouse: tmux `prefix m` |
+| all tickets at a glance + act on gates | `triage-dash` TUI: sidebar grouped running (green ●, label = active stage from unit `cf-triage-<KEY>-<stage>`: analysing / implementing / verifying / reviewing / fixing review / rebasing …) / needs you / todo (my sprint To Do, not in factory) / in flight / parked, pane with log / PLAN.md / holdout scenarios (`<KEY>.md` + `.api.md`) / Jira description / Jira comments (`tab`, markdown rendered). Gates without Jira: `a` approve, `R` reply, `t` retry, `w` run worker, `f` feed a todo (pick repo → `triage` + `repo-<x>`), `s` skip merge gate (`ai-gate-skip`) (all y/n), `Q` quiz me (🎓 quiz rows, `/cf-quiz` in a tmux window). MR rows show 🔒 gate pending / 🚫 gate failed. `e` opens `$EDITOR` on PLAN.md / holdout files (plan / holdout tab; a changed holdout file is re-attached to Jira as `holdout.md` / `holdout.api.md`, replacing the old one). `c` resumes the session in a tmux window. `?` lists all keys. Mouse: tmux `prefix m` |
 | is something running now | `workmux dashboard` — headless runs show as their `cf-triage` window (working → done) while active; finished ones drop off |
 | watch it live | `tmux switch-client -t cf-triage` (one window per worktree, `tail -f` of the log) or `tail -f ~/.local/state/cf-triage/<KEY>.log` (🔧 tool calls, 💬 agent text, 📏 context size at every 50K step, 🧹 compaction if one ever fires, ✅ exit + cost + turns + peak context) |
 | ask the agent why it did X | log line `🆔 session <id> — reopen: cd <wt> && claude --resume <id> — transcript ~/.claude/projects/<cwd slug>/<id>.jsonl` → resume interactively, or dig the transcript file offline (every stage has one, a verify run ≈ 20 MB). `<KEY>.stream.jsonl` is only the last implement run, kept for the worker's fallback comment |
@@ -108,7 +109,9 @@ DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentr
   │  triage-worker          stage review, ONCE per MR: fresh claude -p "/cf-review" (opus, read-only) reads the MR diff vs PLAN.md + repo standards (+ `GLOSSARY.md` where one exists: `_Avoid_` words / synonym drift = should-fix, never blocking), every finding with a failure scenario, posts ONE MR note
   │                         clean / should-fix only → [ai-reviewed]. blocking → [ai-review-retry] → stage rfix ("/cf-ticket-headless --review-fix <report>", impl slot) fixes EVERY finding once, then "/cf-review … prior=<KEY>.review.prev.md since=<heads>" re-checks only the pushed delta (fixed / open / new per prior finding)
   │                         re-check clean or minor → [ai-reviewed] + verify labels dropped (verify runs again on the fixed code). pushed nothing / still blocking / crash → [ai-review-findings] = needs me (verify still runs)
-[ai-reviewed]  (+ ai-verified)
+[ai-reviewed]  (+ ai-verified)  cf-factory gate pending "quiz Michal"
+  │  me: Q in triage-dash → /cf-quiz (sonnet, interactive) → pass
+[ai-quizzed]   gate green; new commits drop it (re-quiz = delta only)
   │  I review, mark ready, add reviewers, merge; release moves ticket to Done
   ▼  triage-worker          ticket Done → resolves every sentry-* issue (haiku + Sentry MCP)
 [ai-done]  → next morning sentry-triage picks the next issue
@@ -141,6 +144,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts
 | `ai-verify-retry` | holdout failed once, fix pushed, waiting for re-verify | triage-worker |
 | `ai-verified` | holdout scenarios pass on the preview; gates `review`. Dropped (with `ai-verify-failed` / `ai-verify-retry`) when an `mr` follow-up or `rfix` pushes new commits, so `verify` runs again; review labels stay | triage-worker |
 | `ai-verify-failed` | holdout failed after retry, blocked, or verifier crashed | triage-worker |
+| `ai-quizzed` | I passed `/cf-quiz` on the current MR code; gates `cf-factory` green. Dropped with the verify labels when new commits land | /cf-quiz (me) |
 | `ai-done` | ticket Done, Sentry issues resolved | triage-worker |
 | `ai-gate-skip` (GitLab MR label) | override: `cf-factory` merge gate goes green whatever the Jira labels | me (`s` in triage-dash) |
 
