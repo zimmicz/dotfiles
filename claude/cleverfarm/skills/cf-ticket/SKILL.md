@@ -41,7 +41,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 ## Phase 4: Verify
 
 11. Run tests, lint, typecheck (`nr test`, `nr lint`, `nr typecheck` or project equivalents). Fix failures.
-11a. If diff touches UI files (`*.tsx`, `*.css`, stories), run `/check-layout` — screenshots at desktop + mobile, all states. UI is not verified until this passes. Include the verdict table in the MR description; if something couldn't be checked, say so there with the exact error of the failed attempt.
+11a. If diff touches UI files (`*.tsx`, `*.css`, stories), run `/check-layout` — screenshots at desktop + mobile, all states. UI is not verified until this passes. The verdict table and screenshot paths go to `/cf-mr` (`## MR body`, Evidence); if something couldn't be checked, say so there with the exact error of the failed attempt.
 11b. New or changed E2E scenarios → run them locally (repo's E2E command, filtered to those scenarios) with `CI=true TARGET=http://localhost:<this worktree's dev server port>`. E2E logs in by itself from `.env` — no logged-in browser needed. Skip only with the failing command + output quoted in the MR description; "headless" / "will run in CI/preview" is never a reason.
 
 ## Phase 5: Independent review
