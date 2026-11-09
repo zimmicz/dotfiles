@@ -129,8 +129,9 @@ unlabel() {
 
 resolve_sentry() {
   local KEY=$1; shift
-  claude -p "Sentry org cleverfarm-sro, regionUrl https://us.sentry.io. No human present, never ask. For EACH of these issue short ids: $* -> update_issue status 'resolved', reason 'Jira $KEY released'. Final answer: 'done' if all succeeded, else the errors." \
+  claude -p "Sentry org cleverfarm-sro, regionUrl https://us.sentry.io. No human present, never ask. For EACH of these issue short ids: $* -> update_issue status 'resolved', reason 'Jira $KEY released'. A 404 / 'does not exist' error means the issue is already gone (deleted or merged): count it as succeeded. Final answer: 'done' if all succeeded, else the errors." \
     --model haiku --allowedTools "mcp__claude_ai_Sentry__update_issue" --output-format json </dev/null 2>>$LOG_DIR/$KEY.log \
+    | tee >(jq -r '"  sentry resolve: \(.result)"' >>$LOG_DIR/$KEY.log) \
     | jq -e '(.is_error | not) and (.permission_denials | length == 0) and (.result | test("^done"; "i"))' >/dev/null
 }
 
