@@ -65,3 +65,4 @@ Auto-generated nightly by ~/.claude/scripts/nightly-reflection.sh (global lesson
 - Edit lands in repo/branch ≠ cwd (sibling worktree, other repo) → report repo + branch + MR + file path upfront, not just "pushed". User: "do jake vetve a repa jsi tohle zapsal?" (FIXTURES.md written from cf-knowledge-base cwd, DEV-3604).
 - Efficiency/cost/context optimisation → ship before/after measurement in same go (cutover = commit time, medians + p90 per stage, wired into existing stats job), not totals. User: "how will we measure the results to compare with the previous setup?"
 - "čím pokračovat?" / "what next?" after a milestone = question → list options, wait for pick; never kick off factory runs / label tickets on my own. User: "stop" (started DEV-3531 triage unasked).
+- User cites file from another project as example ("demo.js:51") w/ gist inline → use the gist, never hunt the file across ~. User: "to demo je z jineho projektu, slo mi o ten uvx edge-tts".
