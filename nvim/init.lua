@@ -79,6 +79,12 @@ require('lazy').setup({
   'nvim-treesitter/nvim-treesitter',
   'nvim-treesitter/nvim-treesitter-context',
   'HiPhish/nvim-ts-rainbow2',
+  {
+    'MeanderingProgrammer/render-markdown.nvim',
+    dependencies = { 'nvim-treesitter/nvim-treesitter', 'echasnovski/mini.icons' },
+    ft = { 'markdown' },
+    opts = {},
+  },
   -- formatting & linting
   {
     'nvimtools/none-ls.nvim',
