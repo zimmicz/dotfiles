@@ -176,7 +176,7 @@ wm_window() {
   tmux ls >/dev/null 2>&1 || return 0
   tmux has-session -t sw-factory 2>/dev/null || tmux new-session -d -s sw-factory -n log
   local PANE=$(tmux list-panes -s -t sw-factory -f "#{==:#{pane_current_path},$WT}" -F '#{pane_id}' | head -1)
-  [[ -n "$PANE" ]] || PANE=$(tmux new-window -d -t sw-factory: -n ${WT:t} -c $WT -P -F '#{pane_id}' "tail -n +1 -f $LOG")
+  [[ -n "$PANE" ]] || PANE=$(tmux new-window -d -t sw-factory: -n ${WT:t} -c $WT -P -F '#{pane_id}' "tail -n +1 -f --pid=$$ $LOG")
   echo $PANE
 }
 
