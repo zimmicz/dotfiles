@@ -367,25 +367,23 @@ gl_human_max() {
 }
 
 gl_unanswered() {
-  local T L P ID="" N
+  local T L P ID="" N H=$(<$GLHANDLED/$1 2>/dev/null || echo 0)
   T=$(mr_targets $1 $2) || return 1
   GLME=${GLME:-$(glab api user </dev/null | jq -r .username)}
   [[ -n "$GLME" ]] || return 1
   for L in ${(f)T}; do
     P=(${(s.:.)L})
     N=$(glab api --paginate "projects/${P[2]}/merge_requests/${P[3]}/discussions?per_page=100" </dev/null \
-      | jq -sr --arg me "$GLME" 'add | [.[] | [.notes[] | select((.system | not) and .author.username == $me)] as $n
+      | jq -sr --arg me "$GLME" --argjson h "${H:-0}" 'add | [.[] | [.notes[] | select((.system | not) and .author.username == $me)] as $n
           | ([$n[] | select(.body | startswith("🤖")) | .id] | max // 0) as $b
-          | $n[] | select((.body | startswith("🤖") or contains("writing on Michal") | not) and .id > $b) | .id] | min // empty') || return 1
+          | $n[] | select((.body | startswith("🤖") or contains("writing on Michal") | not) and .id > ([$b, $h] | max)) | .id] | min // empty') || return 1
     [[ -n "$N" ]] && (( ! ID || N < ID )) && ID=$N
   done
   echo $ID
 }
 
 gl_pending() {
-  local U=$(gl_unanswered $1 $2 </dev/null) H=$GLHANDLED/$1
-  [[ -n "$U" ]] || return 1
-  (( U > $(<$H 2>/dev/null || echo 0) ))
+  [[ -n "$(gl_unanswered $1 $2 </dev/null)" ]]
 }
 
 review() {
