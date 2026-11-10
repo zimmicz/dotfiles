@@ -702,6 +702,9 @@ type doneMsg struct {
 	kick   bool
 }
 type editedMsg struct{ key, path string }
+
+const scissors = "------------------------ >8 ------------------------ reply above, everything below is dropped"
+
 type mrMsg map[string]mrInfo
 
 func loadMRs(urls []string) tea.Cmd {
@@ -1118,7 +1121,8 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 	case editedMsg:
 		b, _ := os.ReadFile(msg.path)
 		os.Remove(msg.path)
-		text := strings.TrimSpace(string(b))
+		text, _, _ := strings.Cut(string(b), scissors)
+		text = strings.TrimSpace(text)
 		if text == "" {
 			m.status = "reply empty, not sent"
 			break
@@ -1325,6 +1329,10 @@ func (m model) key(k string) (model, tea.Cmd) {
 		if err != nil {
 			m.status = err.Error()
 			break
+		}
+		if _, md, err := fetchIssue(r.key); err == nil && md != "" {
+			cs := strings.Split(md, "\n---\n")
+			fmt.Fprintf(f, "\n\n%s\n%s", scissors, strings.TrimSpace(cs[len(cs)-1]))
 		}
 		f.Close()
 		return m, tea.ExecProcess(editCmd(f.Name()), func(err error) tea.Msg {
