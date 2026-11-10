@@ -427,7 +427,6 @@ var wikiRules = []struct {
 	{regexp.MustCompile(`\{\{(.+?)\}\}`), "`$1`"},
 	{regexp.MustCompile(`\{(code|noformat)(:[^}]*)?\}`), "\n```\n"},
 	{regexp.MustCompile(`\[([^|\]\n]+)\|([^\]\n]+)\]`), "[$1]($2)"},
-	{regexp.MustCompile(`(?m)^# `), "1. "},
 	{regexp.MustCompile(`(?m)^\*\* `), "  - "},
 	{regexp.MustCompile(`(^|[\s(])\*([^*\s][^*\n]*?)\*`), "$1**$2**"},
 	{regexp.MustCompile(`(?m)^h([1-6])\. *`), "\x00$1"},
@@ -435,7 +434,22 @@ var wikiRules = []struct {
 
 var headRe = regexp.MustCompile(`(?m)^\x00([1-6])`)
 
+func numberLists(s string) string {
+	lines, n := strings.Split(s, "\n"), 0
+	for i, l := range lines {
+		switch {
+		case strings.HasPrefix(l, "# "):
+			n++
+			lines[i] = fmt.Sprintf("%d. %s", n, l[2:])
+		case strings.TrimSpace(l) != "" && !strings.HasPrefix(l, "** ") && !strings.HasPrefix(l, "## ") && !strings.HasPrefix(l, " "):
+			n = 0
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func wikiToMD(s string) string {
+	s = numberLists(s)
 	for _, r := range wikiRules {
 		s = r.re.ReplaceAllString(s, r.rep)
 	}
