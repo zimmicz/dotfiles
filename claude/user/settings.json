@@ -158,17 +158,6 @@
     }
   ],
   "hooks": {
-    "Notification": [
-      {
-        "matcher": "permission_prompt|elicitation_dialog",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "workmux set-window-status waiting"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": ".*",
@@ -176,14 +165,6 @@
           {
             "type": "command",
             "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "workmux set-window-status working"
           }
         ]
       },
@@ -257,15 +238,6 @@
             "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
           }
         ]
-      },
-      {
-        "matcher": "startup|resume|clear|fork",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "workmux register-agent"
-          }
-        ]
       }
     ],
     "Stop": [
@@ -275,14 +247,6 @@
           {
             "type": "command",
             "command": "/home/zimmi/.fnm/node-versions/v22.22.1/installation/lib/node_modules/lean-ctx-bin/bin/lean-ctx hook observe"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "workmux set-window-status done"
           }
         ]
       }
@@ -302,14 +266,6 @@
           {
             "type": "command",
             "command": "codegraph prompt-hook"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "workmux set-window-status working"
           }
         ]
       }

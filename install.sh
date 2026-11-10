@@ -12,7 +12,6 @@ mkdir ${CONFIG_DIR}/dunst > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/bspwm > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/sxhkd > /dev/null 2>&1
 mkdir ${CONFIG_DIR}/yabar > /dev/null 2>&1
-mkdir -p ${CONFIG_DIR}/workmux > /dev/null 2>&1
 mkdir ~/.tmuxloader-sessions > /dev/null 2>&1
 
 
@@ -79,8 +78,6 @@ ln -sf ${DOTFILES_DIR}/tmuxloader-sessions/main ~/.tmuxloader-sessions/main
 
 ln -sf ${DOTFILES_DIR}/npmrc ~/.npmrc
 
-ln -sf ${DOTFILES_DIR}/workmux/config.yaml ${CONFIG_DIR}/workmux/config.yaml
-
 ln -sf ${DOTFILES_DIR}/nvim/init.lua ~/.config/nvim/init.lua
 ln -sf ${DOTFILES_DIR}/nvim/lua ${CONFIG_DIR}/nvim/lua
 
@@ -91,18 +88,6 @@ ln -sf ~/.kubectx/kubectx ~/.local/bin/kubectx
 ln -sf ~/.kubectx/kubens ~/.local/bin/kubens
 ln -sf ~/.kubectx/completion/_kubectx.zsh ~/.zsh/completions/_kubectx
 ln -sf ~/.kubectx/completion/_kubens.zsh ~/.zsh/completions/_kubens
-
-WORKMUX_VERSION=v0.1.271
-if ! ~/.local/bin/workmux --version 2>/dev/null | grep -q "${WORKMUX_VERSION#v}"; then
-  WM_TMP=$(mktemp -d)
-  WM_URL=https://github.com/raine/workmux/releases/download/${WORKMUX_VERSION}
-  curl -fsSL -o ${WM_TMP}/wm.tar.gz ${WM_URL}/workmux-linux-amd64.tar.gz \
-    && curl -fsSL -o ${WM_TMP}/wm.sha256 ${WM_URL}/workmux-linux-amd64.sha256 \
-    && [ "$(sha256sum ${WM_TMP}/wm.tar.gz | cut -d' ' -f1)" = "$(cut -d' ' -f1 ${WM_TMP}/wm.sha256)" ] \
-    && tar xzf ${WM_TMP}/wm.tar.gz -C ${WM_TMP} workmux \
-    && install -m 755 ${WM_TMP}/workmux ~/.local/bin/workmux
-  rm -rf ${WM_TMP}
-fi
 
 TMUX_VERSION=3.7b
 TMUX_SHA256=92ac102a1f9b33b21d891a836b4b5b5c8c5d2eeac4bae4dfd34d565bbed598bf
