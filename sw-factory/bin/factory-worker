@@ -366,11 +366,26 @@ gl_human_max() {
   echo $ID
 }
 
+gl_unanswered() {
+  local T L P ID="" N
+  T=$(mr_targets $1 $2) || return 1
+  GLME=${GLME:-$(glab api user </dev/null | jq -r .username)}
+  [[ -n "$GLME" ]] || return 1
+  for L in ${(f)T}; do
+    P=(${(s.:.)L})
+    N=$(glab api --paginate "projects/${P[2]}/merge_requests/${P[3]}/discussions?per_page=100" </dev/null \
+      | jq -sr --arg me "$GLME" 'add | [.[] | [.notes[] | select((.system | not) and .author.username == $me)] as $n
+          | ([$n[] | select(.body | startswith("🤖")) | .id] | max // 0) as $b
+          | $n[] | select((.body | startswith("🤖") or contains("writing on Michal") | not) and .id > $b) | .id] | min // empty') || return 1
+    [[ -n "$N" ]] && (( ! ID || N < ID )) && ID=$N
+  done
+  echo $ID
+}
+
 gl_pending() {
-  local ID=$(gl_human_max $1 $2 </dev/null) H=$GLHANDLED/$1
-  [[ -n "$ID" ]] || return 1
-  [[ -f $H ]] || { echo $ID >$H; return 1 }
-  (( ID > $(<$H) ))
+  local U=$(gl_unanswered $1 $2 </dev/null) H=$GLHANDLED/$1
+  [[ -n "$U" ]] || return 1
+  (( U > $(<$H 2>/dev/null || echo 0) ))
 }
 
 review() {
@@ -555,8 +570,10 @@ unverify() {
 
 stage_mr() {
   echo "--- MR follow-up $1"
-  local ID=$(snap_human $1) H0=$(wt_heads $1) GLID=$(gl_human_max $1 "$(ticket_repos $1)" </dev/null)
-  implement $1 $2 "--mr-notes-after $(<$GLHANDLED/$1 2>/dev/null || echo 0)"
+  local ID=$(snap_human $1) H0=$(wt_heads $1) RS=$(ticket_repos $1)
+  local GLID=$(gl_human_max $1 $RS </dev/null) U=$(gl_unanswered $1 $RS </dev/null) AFTER=$(<$GLHANDLED/$1 2>/dev/null || echo 0)
+  [[ -n "$U" ]] && AFTER=$(( U - 1 ))
+  implement $1 $2 "--mr-notes-after $AFTER"
   if answered_since $1 $ID; then
     mark_handled $1 $ID
     [[ -n "$GLID" ]] && echo $GLID >$GLHANDLED/$1
