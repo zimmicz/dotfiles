@@ -441,7 +441,7 @@ func numberLists(s string) string {
 		case strings.HasPrefix(l, "# "):
 			n++
 			lines[i] = fmt.Sprintf("%d. %s", n, l[2:])
-		case strings.TrimSpace(l) != "" && !strings.HasPrefix(l, "** ") && !strings.HasPrefix(l, "## ") && !strings.HasPrefix(l, " "):
+		case strings.TrimSpace(l) != "" && (i == 0 || strings.TrimSpace(lines[i-1]) == "") && !strings.HasPrefix(l, "** ") && !strings.HasPrefix(l, "## ") && !strings.HasPrefix(l, " "):
 			n = 0
 		}
 	}
