@@ -7,6 +7,25 @@ import (
 	"testing"
 )
 
+func TestUploadImages(t *testing.T) {
+	dir := "/tmp/triage-img-DEV-1-42"
+	var got [][2]string
+	text := "see !" + dir + "/img-1.png! and !" + dir + "/img-2.png!, keep !other.png!"
+	out, err := uploadImages(text, dir, "reply-x", func(p, name string) error {
+		got = append(got, [2]string{p, name})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "see !reply-x-img-1.png! and !reply-x-img-2.png!, keep !other.png!"; out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+	if len(got) != 2 || got[1] != [2]string{dir + "/img-2.png", "reply-x-img-2.png"} {
+		t.Errorf("attach calls %v", got)
+	}
+}
+
 func TestStage(t *testing.T) {
 	cases := map[string][]string{
 		"new":             {"triage"},

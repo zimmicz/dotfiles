@@ -715,9 +715,38 @@ type doneMsg struct {
 	err    error
 	kick   bool
 }
-type editedMsg struct{ key, path string }
+type editedMsg struct{ key, path, imgDir string }
 
 const scissors = "------------------------ >8 ------------------------ reply above, everything below is dropped"
+
+func pasteImageMap(dir string) string {
+	return fmt.Sprintf(`inoremap <buffer> <C-v> <C-r>=call({f -> [system('xclip -selection clipboard -t TARGETS -o \| grep -qx image/png && xclip -selection clipboard -t image/png -o > '.shellescape(f)), v:shell_error ? '' : '!'.f.'!'][1]}, ['%[1]s/img-'.(len(glob('%[1]s/*.png', 0, 1)) + 1).'.png'])<CR>`, dir)
+}
+
+func imageRe(dir string) *regexp.Regexp {
+	return regexp.MustCompile(`!(` + regexp.QuoteMeta(dir) + `/img-\d+\.png)!`)
+}
+
+func uploadImages(text, dir, prefix string, attach func(path, name string) error) (string, error) {
+	var err error
+	out := imageRe(dir).ReplaceAllStringFunc(text, func(tok string) string {
+		p := tok[1 : len(tok)-1]
+		name := prefix + "-" + filepath.Base(p)
+		if err == nil {
+			err = attach(p, name)
+		}
+		return "!" + name + "!"
+	})
+	return out, err
+}
+
+func jiraAttach(key, path, name string) error {
+	out, err := exec.Command("jira", "attach", key, path, name).CombinedOutput()
+	if err != nil || !bytes.HasPrefix(bytes.TrimSpace(out), []byte("[")) {
+		return fmt.Errorf("jira attach %s failed: %s", name, fit(strings.TrimSpace(string(out)), 120))
+	}
+	return nil
+}
 
 type mrMsg map[string]mrInfo
 
@@ -1138,11 +1167,21 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		text, _, _ := strings.Cut(string(b), scissors)
 		text = strings.TrimSpace(text)
 		if text == "" {
+			os.RemoveAll(msg.imgDir)
 			m.status = "reply empty, not sent"
 			break
 		}
-		m.confirm(fmt.Sprintf("post %d-char comment to %s?", len(text), msg.key), do("comment posted to "+msg.key, func() error {
-			return jiraReq("POST", "/rest/api/2/issue/"+msg.key+"/comment", map[string]string{"body": text}, nil)
+		imgs := ""
+		if n := len(imageRe(msg.imgDir).FindAllString(text, -1)); n > 0 {
+			imgs = fmt.Sprintf(" + %d image(s)", n)
+		}
+		m.confirm(fmt.Sprintf("post %d-char comment%s to %s?", len(text), imgs, msg.key), do("comment posted to "+msg.key, func() error {
+			defer os.RemoveAll(msg.imgDir)
+			body, err := uploadImages(text, msg.imgDir, "reply-"+time.Now().Format("20060102-150405"), func(p, name string) error { return jiraAttach(msg.key, p, name) })
+			if err != nil {
+				return err
+			}
+			return jiraReq("POST", "/rest/api/2/issue/"+msg.key+"/comment", map[string]string{"body": body}, nil)
 		}))
 	case tea.MouseMsg:
 		side := !m.zoom && msg.X < sideW
@@ -1300,9 +1339,8 @@ func (m model) key(k string) (model, tea.Cmd) {
 					continue
 				}
 				name := strings.Replace(filepath.Base(p), r.key, "holdout", 1)
-				out, err := exec.Command("jira", "attach", r.key, p, name).CombinedOutput()
-				if err != nil || !bytes.HasPrefix(bytes.TrimSpace(out), []byte("[")) {
-					return doneMsg{"", fmt.Errorf("jira attach %s failed: %s", name, fit(strings.TrimSpace(string(out)), 120)), false}
+				if err := jiraAttach(r.key, p, name); err != nil {
+					return doneMsg{"", err, false}
 				}
 				sent = append(sent, name)
 			}
@@ -1344,17 +1382,30 @@ func (m model) key(k string) (model, tea.Cmd) {
 			m.status = err.Error()
 			break
 		}
+		dir, err := os.MkdirTemp("", "triage-img-"+r.key+"-*")
+		if err != nil {
+			f.Close()
+			m.status = err.Error()
+			break
+		}
+		last := ""
 		if _, md, err := fetchIssue(r.key); err == nil && md != "" {
 			cs := strings.Split(md, "\n---\n")
-			fmt.Fprintf(f, "\n\n%s\n%s", scissors, strings.TrimSpace(cs[len(cs)-1]))
+			last = strings.TrimSpace(cs[len(cs)-1])
 		}
+		fmt.Fprintf(f, "\n\n%s\n(insert mode Ctrl+V pastes the clipboard image)\n\n%s", scissors, last)
 		f.Close()
-		return m, tea.ExecProcess(editCmd(f.Name()), func(err error) tea.Msg {
+		cmd := editCmd(f.Name())
+		if strings.HasSuffix(editor()[0], "vim") {
+			cmd = editCmd("-c", pasteImageMap(dir), f.Name())
+		}
+		return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
 			if err != nil {
 				os.Remove(f.Name())
+				os.RemoveAll(dir)
 				return doneMsg{"", err, false}
 			}
-			return editedMsg{r.key, f.Name()}
+			return editedMsg{r.key, f.Name(), dir}
 		})
 	case "b":
 		if in, ok := m.mrs[r.mr]; !ok || in.label != "conflict" {
