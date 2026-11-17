@@ -201,7 +201,7 @@ Prereqs (already done):
 | `systemctl --user start sw-factory.service` | run now |
 | `systemctl --user disable --now sw-factory.timer` | turn off |
 | `tail -f ~/.local/state/sw-factory/DEV-XXXX.log` | live per-ticket progress: 🔧 tool calls, 💬 agent text, 📏 context size, ✅ exit + cost + turns + peak |
-| `git -C ~/dotfiles tag -a sw-factory-<label>-<date> -m "…"` | snapshot before a factory change (bin + skills + docs are symlinks, so the tag is the whole factory; note the mattpocock-skills version in the message). Last: `cf-triage-pre-pr-2026-11-09`; tags `cf-triage-*` predate the `sw-factory/` move, roll back with `-- bin claude/cleverfarm go` |
+| `git -C ~/dotfiles tag sw-factory-pre-<label>-<date>` | snapshot before a factory change (bin + skills + docs are symlinks, so the tag is the whole factory). Newest first: `git -C ~/dotfiles tag -l 'sw-factory-*' --sort=-creatordate`; tags `cf-triage-*` predate the `sw-factory/` move, roll back with `-- bin claude/cleverfarm go` |
 | `git -C ~/dotfiles checkout sw-factory-<label>-<date> -- sw-factory claude/cleverfarm` | roll the factory back to that snapshot (takes effect at once; `go build` only if `sw-factory/dash` changed). Back to head: `git checkout master -- sw-factory claude/cleverfarm` |
 | `git -C ~/dotfiles checkout sw-factory-pre-web-2026-11-17 -- sw-factory/dash install.sh && (cd ~/dotfiles/sw-factory/dash && go build -o ~/bin/factory-dash .) && systemctl --user disable --now factory-dash` | back to the TUI `factory-dash` (state before the web dashboard) |
 
