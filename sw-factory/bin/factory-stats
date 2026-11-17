@@ -5,12 +5,12 @@ export LC_NUMERIC=C
 DAYS=${1:-7}
 LOG_DIR=~/.local/state/sw-factory
 ME=michal.zimmermann1
-LABELS='triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-verify-retry, ai-verified, ai-verify-failed, ai-done'
+LABELS='triage, needs-answer, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-review-retry, ai-reviewed, ai-review-findings, ai-verify-retry, ai-verified, ai-verify-failed, ai-quizzed, ai-done'
 
 RAW=$(jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "project = DEV AND labels in ($LABELS) AND updated >= -${DAYS}d ORDER BY key ASC" '$q|@uri')&fields=labels,created&maxResults=100") \
   || { echo "jira lookup failed"; exit 1; }
 
-RUNNING=$(ps -eo args | grep -oP '^claude -p /cf-ticket \K\S+' | tr '\n' ' ')
+RUNNING=$(systemctl --user list-units 'sw-factory-*-impl.service' --plain --no-legend --state=active | grep -oP '^sw-factory-\K\S+(?=-impl\.service)' | tr '\n' ' ')
 
 ROWS=()
 typeset -A COUNT
@@ -34,7 +34,7 @@ while IFS=$'\t' read -r KEY CREATED LABELSTR; do
   LOG=$LOG_DIR/$KEY.log
   COST=$( (grep -ho 'cost=\$[0-9.]*' $LOG 2>/dev/null || true) | cut -d'$' -f2 | awk '{s+=$1} END {printf "%.2f", s}')
   TOTAL_COST=$(( TOTAL_COST + COST ))
-  RUNS=$(grep -c '^  VERDICT: ' $LOG 2>/dev/null)
+  RUNS=$(grep -cE '^  VERDICT: (pass|fail|blocked)' $LOG 2>/dev/null)
   PASS=$(grep -c '^  VERDICT: pass' $LOG 2>/dev/null)
   (( VERIFY_RUNS += RUNS, VERIFY_PASS += PASS ))
 

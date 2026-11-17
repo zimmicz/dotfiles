@@ -1,0 +1,12 @@
+[Unit]
+Description=factory-dash: web dashboard of the sw-factory on http://127.0.0.1:7777 (open it with `factory-dash`)
+
+[Service]
+Environment=PATH=%h/.local/bin:%h/.fnm/aliases/default/bin:%h/bin:/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=%h/.config/sw-factory.env
+ExecStart=%h/bin/factory-dash serve
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

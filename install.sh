@@ -39,6 +39,7 @@ for f in ${DOTFILES_DIR}/bin/* ${DOTFILES_DIR}/sw-factory/bin/*; do
 done
 rm -f ~/bin/triage-dash
 (cd ${DOTFILES_DIR}/sw-factory/dash && go build -o ~/bin/factory-dash .)
+systemctl --user enable factory-dash.service && systemctl --user restart factory-dash.service
 
 claude mcp get playwright > /dev/null 2>&1 || claude mcp add -s user playwright -- npx -y @playwright/mcp@latest --headless
 

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,24 +18,17 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/x/ansi"
 )
 
 const (
 	jiraBase = "https://cleverfarm.atlassian.net"
 	labels   = "triage, needs-answer, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed, ai-review-retry, ai-reviewed, ai-review-findings, ai-verify-retry, ai-verified, ai-verify-failed, ai-quizzed, ai-done"
-	sideW    = 34
-	top      = 2
-	detailH  = 5
 )
 
 var (
 	stateDir = filepath.Join(os.Getenv("HOME"), ".local/state/sw-factory")
 	costRe   = regexp.MustCompile(`cost=\$([0-9.]+)`)
-	verdRe   = regexp.MustCompile(`^\s*VERDICT: (\S+)`)
+	verdRe   = regexp.MustCompile(`^\s*VERDICT: (pass|fail|blocked)\b`)
 	tsRe     = regexp.MustCompile(`^\d\d:\d\d:\d\d `)
 	mrIIDRe  = regexp.MustCompile(`merge_requests/(\d+)`)
 	jiraKey  = regexp.MustCompile(`^[A-Z]+-\d+$`)
@@ -144,15 +138,6 @@ const (
 	gOther
 )
 
-var groups = []struct{ name, color string }{
-	{"RUNNING", "1;32"},
-	{"NEEDS YOU", "1;33"},
-	{"TODO", "1;35"},
-	{"IN FLIGHT", "1;34"},
-	{"PARKED", "2"},
-	{"OTHER LOGS", "2"},
-}
-
 func group(r row) int {
 	switch {
 	case r.running:
@@ -215,7 +200,7 @@ type mrRaw struct {
 }
 
 type pipeRaw struct {
-	ID          int
+	ID          int64
 	Status, Sha string
 }
 
@@ -319,7 +304,7 @@ func fetchGate(path string) string {
 	if err != nil || json.Unmarshal(out, &st) != nil || len(st) == 0 {
 		return ""
 	}
-	return slices.MaxFunc(st, func(a, b pipeRaw) int { return a.ID - b.ID }).Status
+	return slices.MaxFunc(st, func(a, b pipeRaw) int { return cmp.Compare(a.ID, b.ID) }).Status
 }
 
 func jiraReq(method, path string, body, out any) error {
@@ -458,18 +443,6 @@ func wikiToMD(s string) string {
 	})
 }
 
-func renderMD(src string, w int) []string {
-	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"), glamour.WithWordWrap(max(w-6, 20)))
-	if err != nil {
-		return strings.Split(src, "\n")
-	}
-	out, err := r.Render(src)
-	if err != nil {
-		return strings.Split(src, "\n")
-	}
-	return strings.Split(strings.Trim(out, "\n"), "\n")
-}
-
 func splitTS(l string) (ts, body string) {
 	if m := tsRe.FindString(l); m != "" {
 		return strings.TrimSpace(m), l[len(m):]
@@ -484,39 +457,6 @@ func isMarker(l string) bool {
 		}
 	}
 	return false
-}
-
-func renderLog(lines []string, w int) []string {
-	var out, md []string
-	flush := func() {
-		if len(md) > 0 {
-			out = append(out, renderMD(strings.Join(md, "\n"), w)...)
-		}
-		md = nil
-	}
-	for _, raw := range lines {
-		ts, l := splitTS(raw)
-		if isMarker(l) {
-			flush()
-		}
-		dim := ""
-		if ts != "" {
-			dim = "\033[2m" + ts + "\033[0m "
-		}
-		switch {
-		case strings.HasPrefix(l, "💬"), md != nil && !isMarker(l):
-			md = append(md, strings.TrimSpace(ts+" "+l))
-		case strings.HasPrefix(l, "🔧"):
-			out = append(out, "\033[2m"+raw+"\033[0m")
-		case strings.HasPrefix(l, "✅"):
-			out = append(out, dim+l)
-			md = []string{}
-		default:
-			out = append(out, dim+l)
-		}
-	}
-	flush()
-	return out
 }
 
 func planPath(key string) string {
@@ -652,9 +592,6 @@ func collect(issues, todos []issue, busy bool, units map[string]string) []row {
 	}
 	out := make([]row, 0, len(rows))
 	for _, r := range rows {
-		if r.stage == "RC" || r.stage == "done" {
-			continue
-		}
 		out = append(out, *r)
 	}
 	sort.Slice(out, func(a, b int) bool {
@@ -682,11 +619,6 @@ func ago(t time.Time) string {
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
-func fit(s string, w int) string {
-	s = ansi.Truncate(s, max(w, 0), "…")
-	return s + strings.Repeat(" ", max(w-ansi.StringWidth(s), 0))
-}
-
 func or(s, d string) string {
 	if s == "" {
 		return d
@@ -699,28 +631,6 @@ func jiraURL(r row) string {
 		return ""
 	}
 	return jiraBase + "/browse/" + r.key
-}
-
-type tickMsg struct{}
-type jiraMsg struct {
-	issues, todos []issue
-	err           error
-}
-type commentsMsg struct {
-	key, desc, md string
-	err           error
-}
-type doneMsg struct {
-	status string
-	err    error
-	kick   bool
-}
-type editedMsg struct{ key, path, imgDir string }
-
-const scissors = "------------------------ >8 ------------------------ reply above, everything below is dropped"
-
-func pasteImageMap(dir string) string {
-	return fmt.Sprintf(`inoremap <buffer> <C-v> <C-r>=call({f -> [system('xclip -selection clipboard -t TARGETS -o \| grep -qx image/png && xclip -selection clipboard -t image/png -o > '.shellescape(f)), v:shell_error ? '' : '!'.f.'!'][1]}, ['%[1]s/img-'.(len(glob('%[1]s/*.png', 0, 1)) + 1).'.png'])<CR>`, dir)
 }
 
 func imageRe(dir string) *regexp.Regexp {
@@ -743,956 +653,14 @@ func uploadImages(text, dir, prefix string, attach func(path, name string) error
 func jiraAttach(key, path, name string) error {
 	out, err := exec.Command("jira", "attach", key, path, name).CombinedOutput()
 	if err != nil || !bytes.HasPrefix(bytes.TrimSpace(out), []byte("[")) {
-		return fmt.Errorf("jira attach %s failed: %s", name, fit(strings.TrimSpace(string(out)), 120))
+		msg := []rune(strings.TrimSpace(string(out)))
+		return fmt.Errorf("jira attach %s failed: %s", name, string(msg[:min(len(msg), 120)]))
 	}
 	return nil
 }
 
-type mrMsg map[string]mrInfo
-
-func loadMRs(urls []string) tea.Cmd {
-	if len(urls) == 0 {
-		return nil
-	}
-	return func() tea.Msg {
-		out := mrMsg{}
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		for _, u := range urls {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				if in, err := fetchMR(u); err == nil {
-					mu.Lock()
-					out[u] = in
-					mu.Unlock()
-				}
-			}()
-		}
-		wg.Wait()
-		return out
-	}
-}
-
-type sideLine struct {
-	text string
-	row  int
-}
-
-var tabs = []string{"log", "plan", "holdout", "description", "comments"}
-
-type helpSection struct {
-	title string
-	keys  [][2]string
-}
-
-var helpCols = [][]helpSection{
-	{
-		{"Navigate", [][2]string{{"j k ↑ ↓", "move"}, {"g G", "top / bottom"}, {"tab", "log·plan·holdout·desc·comments"}, {"^u ^d", "scroll pane"}, {"z", "show other logs"}, {"Z", "zoom pane"}}},
-		{"Factory  (asks y/n)", [][2]string{{"a", "approve plan → ai-fix"}, {"R", "reply in Jira"}, {"t", "retry failed stage"}, {"w", "run worker now"}, {"f", "feed todo to factory"}, {"b", "agent fixes MR conflict"}, {"s", "skip merge gate"}, {"Q", "quiz me → ai-quizzed"}}},
-	},
-	{
-		{"Open", [][2]string{{"enter o", "MR, else Jira"}, {"J", "Jira"}, {"m", "MR"}, {"y", "copy tab text"}, {"l", "log in less"}, {"e", "edit plan / holdout"}, {"c", "resume session"}}},
-		{"Other", [][2]string{{"r", "refresh Jira"}, {"?", "this help"}, {"q", "quit"}}},
-	},
-}
-
-var legend = []string{"questions", "plan gate", "quiz", "reviewed", "verify failed", "review findings", "bailed", "implementing", "mr", "verified", "review fix", "re-verify", "new", "nightly", "todo", "-"}
-
-func helpLines() []string {
-	const keyW, colW = 9, 34
-	var cols [][]string
-	for _, col := range helpCols {
-		var ls []string
-		for i, s := range col {
-			if i > 0 {
-				ls = append(ls, "")
-			}
-			ls = append(ls, "\033[1;33m"+s.title+"\033[0m")
-			for _, k := range s.keys {
-				ls = append(ls, "  \033[1;36m"+fit(k[0], keyW)+"\033[0m"+k[1])
-			}
-		}
-		cols = append(cols, ls)
-	}
-	var out []string
-	for i := 0; i < max(len(cols[0]), len(cols[1])); i++ {
-		l, r := "", ""
-		if i < len(cols[0]) {
-			l = cols[0][i]
-		}
-		if i < len(cols[1]) {
-			r = cols[1][i]
-		}
-		out = append(out, fit(l, colW)+r)
-	}
-	out = append(out, "", "\033[1;33mLegend\033[0m")
-	row := "  "
-	for i, s := range legend {
-		name := s
-		if s == "-" {
-			name = "no ticket"
-		}
-		if s == "bailed" {
-			name = "failed / bailed"
-		}
-		row += fit(stageStyle[s].icon+" \033["+stageStyle[s].color+"m"+name+"\033[0m", 22)
-		if i%3 == 2 {
-			out = append(out, row)
-			row = "  "
-		}
-	}
-	out = append(out, row+fit("\033[32m●\033[0m  running", 22), "", "\033[1;33mMR\033[0m")
-	mrs := [][2]string{{"🚧", "draft"}, {"⏳", "ci running"}, {"🔒", "gate pending"}, {"🚫", "gate failed"}, {"🔴", "ci failed"}, {"💥", "conflict: b"}, {"🔧", "auto / queued rebase"}, {"💬", "open threads"}, {"🔁", "changes asked"}, {"📭", "no reviewer"}, {"👀", "in review"}, {"👍", "approved"}, {"🟣", "merged"}, {"⛔", "closed"}}
-	row = "  "
-	for i, s := range mrs {
-		row += fit(s[0]+" "+s[1], 22)
-		if i%3 == 2 || i == len(mrs)-1 {
-			out = append(out, row)
-			row = "  "
-		}
-	}
-	out = append(out, "", "\033[2many key closes\033[0m")
-	return out
-}
-
-type model struct {
-	issues, todos    []issue
-	rows             []row
-	otherN           int
-	body             []string
-	bodySrc, src     string
-	comments, descs  map[string]string
-	cur, off         int
-	tab, scroll      int
-	w, h             int
-	busy, help, zoom bool
-	showOther        bool
-	pickKey          string
-	pickQ            string
-	pickCur          int
-	svc, status      string
-	ask              string
-	pending          tea.Cmd
-	jiraErr          error
-	jiraAt           time.Time
-	mrs              map[string]mrInfo
-	labels           map[string]string
-}
-
-func changed(prev map[string]string, rows []row, label func(row) string) (map[string]string, []string) {
-	cur, out := map[string]string{}, []string(nil)
-	for _, r := range rows {
-		l := label(r)
-		cur[r.key] = l
-		if prev == nil || prev[r.key] == l {
-			continue
-		}
-		if group(r) == gNeeds {
-			out = append(out, r.key+" "+or(prev[r.key], "new")+" → "+l)
-		}
-	}
-	return cur, out
-}
-
-func tick() tea.Cmd {
-	return tea.Tick(5*time.Second, func(time.Time) tea.Msg { return tickMsg{} })
-}
-
-func loadJira() tea.Msg {
-	is, td, err := fetchJira()
-	return jiraMsg{is, td, err}
-}
-
-func loadComments(key string) tea.Cmd {
-	return func() tea.Msg {
-		desc, md, err := fetchIssue(key)
-		return commentsMsg{key, desc, md, err}
-	}
-}
-
-func do(status string, f func() error) tea.Cmd {
-	return func() tea.Msg { return doneMsg{status, f(), true} }
-}
-
-func (m *model) reload() {
-	m.busy = workerBusy()
-	out, _ := exec.Command("systemctl", "--user", "is-active", "sw-factory.service").Output()
-	m.svc = strings.TrimSpace(string(out))
-	key := m.sel().key
-	m.rows, m.otherN = nil, 0
-	for _, r := range collect(m.issues, m.todos, m.busy, runningUnits()) {
-		if group(r) == gOther {
-			m.otherN++
-			if !m.showOther {
-				continue
-			}
-		}
-		_, _, label := m.look(r)
-		r.mrNeeds = label == "conflict: b" || label == "rebase failed"
-		m.rows = append(m.rows, r)
-	}
-	sort.SliceStable(m.rows, func(a, b int) bool { return group(m.rows[a]) < group(m.rows[b]) })
-	if !m.jiraAt.IsZero() {
-		var ch []string
-		m.labels, ch = changed(m.labels, m.rows, func(r row) string { _, _, l := m.look(r); return l })
-		if len(ch) > 0 {
-			m.status = "\033[33m" + strings.Join(ch, ", ") + "\033[0m"
-		}
-	}
-	for i, r := range m.rows {
-		if r.key == key {
-			m.cur = i
-		}
-	}
-	m.move(0)
-}
-
-func (m *model) loadBody() {
-	key, w := m.sel().key, m.paneW()
-	var src string
-	switch tabs[m.tab] {
-	case "log":
-		b, _ := os.ReadFile(filepath.Join(stateDir, key+".log"))
-		src = ansi.Strip(string(b))
-	case "plan":
-		src = "_(no PLAN.md in a worktree for " + key + ")_"
-		if p := planPath(key); p != "" {
-			b, _ := os.ReadFile(p)
-			src = "`" + p + "`\n\n" + string(b)
-		}
-	case "holdout":
-		src = "_(no holdout scenarios for " + key + ")_"
-		var parts []string
-		for _, f := range []string{key + ".md", key + ".api.md"} {
-			p := filepath.Join(stateDir, "holdout", f)
-			if b, err := os.ReadFile(p); err == nil {
-				parts = append(parts, "`"+p+"`\n\n"+string(b))
-			}
-		}
-		if len(parts) > 0 {
-			src = strings.Join(parts, "\n\n---\n\n")
-		}
-	case "comments":
-		src = or(m.comments[key], "_loading…_")
-	case "description":
-		src = or(m.descs[key], "_loading…_")
-	}
-	m.src = src
-	cache := fmt.Sprint(m.tab, w, src)
-	if cache == m.bodySrc {
-		return
-	}
-	m.bodySrc = cache
-	if tabs[m.tab] == "log" {
-		m.body = renderLog(strings.Split(strings.TrimRight(src, "\n"), "\n"), w)
-	} else {
-		m.body = renderMD(src, w)
-	}
-}
-
-func (m model) listH() int {
-	return max(1, m.h-top-1)
-}
-
-func (m model) sideLines() []sideLine {
-	var out []sideLine
-	g := -1
-	for i, r := range m.rows {
-		if gr := group(r); gr != g {
-			if g != -1 {
-				out = append(out, sideLine{"", -1})
-			}
-			g = gr
-			name := groups[g].name
-			if g == gOther {
-				name = fmt.Sprintf("%s (%d)", name, m.otherN)
-			}
-			out = append(out, sideLine{" \033[" + groups[g].color + "m" + name + "\033[0m", -1})
-		}
-		out = append(out, sideLine{"", i})
-	}
-	if !m.showOther && m.otherN > 0 {
-		out = append(out, sideLine{"", -1}, sideLine{fmt.Sprintf(" \033[2m%s (%d)  z shows\033[0m", groups[gOther].name, m.otherN), -1})
-	}
-	return out
-}
-
-func (m *model) move(d int) {
-	prev := m.sel().key
-	m.cur = min(max(m.cur+d, 0), max(len(m.rows)-1, 0))
-	lines := m.sideLines()
-	at := 0
-	for i, l := range lines {
-		if l.row == m.cur {
-			at = i
-		}
-	}
-	first := at
-	if at > 0 && lines[at-1].row == -1 {
-		first = at - 1
-	}
-	if first < m.off {
-		m.off = first
-	}
-	if at >= m.off+m.listH() {
-		m.off = at - m.listH() + 1
-	}
-	m.off = max(min(m.off, len(lines)-m.listH()), 0)
-	if m.sel().key != prev {
-		m.scroll = 0
-	}
-	m.loadBody()
-}
-
-func (m *model) open(u, what string) {
-	if u == "" {
-		m.status = "no " + what
-		return
-	}
-	exec.Command("xdg-open", u).Start()
-	m.status = "opened " + u
-}
-
-func (m *model) confirm(q string, cmd tea.Cmd) {
-	m.ask, m.pending = q+"  y/n", cmd
-}
-
-func (m model) sel() row {
-	if m.cur < len(m.rows) {
-		return m.rows[m.cur]
-	}
-	return row{}
-}
-
-func (m model) paneW() int {
-	if m.zoom {
-		return max(m.w-2, 10)
-	}
-	return max(m.w-sideW-4, 10)
-}
-
-func (m model) bottomAnchored() bool {
-	return tabs[m.tab] == "log" || tabs[m.tab] == "comments"
-}
-
-func (m model) wrapped() []string {
-	var out []string
-	for _, l := range m.body {
-		out = append(out, strings.Split(ansi.Wrap(l, m.paneW(), ""), "\n")...)
-	}
-	return out
-}
-
-func (m model) bodyH() int {
-	return max(1, m.listH()-detailH)
-}
-
-func (m *model) scrollBody(up int) {
-	if !m.bottomAnchored() {
-		up = -up
-	}
-	m.scroll = min(max(m.scroll+up, 0), max(len(m.wrapped())-m.bodyH(), 0))
-}
-
-func (m model) needComments() tea.Cmd {
-	key := m.sel().key
-	if (tabs[m.tab] != "comments" && tabs[m.tab] != "description") || !jiraKey.MatchString(key) {
-		return nil
-	}
-	if _, ok := m.comments[key]; ok {
-		return nil
-	}
-	m.comments[key] = "_loading…_"
-	return loadComments(key)
-}
-
-func (m model) Init() tea.Cmd {
-	return tea.Batch(loadJira, tick())
-}
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.comments == nil {
-		m.comments, m.descs = map[string]string{}, map[string]string{}
-	}
-	m, cmd := m.update(msg)
-	return m, tea.Batch(cmd, m.needComments())
-}
-
-func (m model) update(msg tea.Msg) (model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.w, m.h = msg.Width, msg.Height
-		m.move(0)
-	case tickMsg:
-		m.reload()
-		if time.Since(m.jiraAt) >= time.Minute {
-			m.jiraAt = time.Now()
-			return m, tea.Batch(loadJira, tick())
-		}
-		return m, tick()
-	case jiraMsg:
-		m.jiraAt, m.jiraErr = time.Now(), msg.err
-		if msg.err == nil {
-			m.issues, m.todos = msg.issues, msg.todos
-		}
-		m.reload()
-		return m, loadMRs(m.mrURLs())
-	case mrMsg:
-		for u, in := range msg {
-			m.mrs[u] = in
-		}
-		m.reload()
-	case commentsMsg:
-		m.comments[msg.key], m.descs[msg.key] = or(msg.md, "_(no comments)_"), or(msg.desc, "_(no description)_")
-		if msg.err != nil {
-			m.comments[msg.key], m.descs[msg.key] = "**error:** "+msg.err.Error(), "**error:** "+msg.err.Error()
-		}
-		m.loadBody()
-	case doneMsg:
-		m.status = "\033[32m" + msg.status + "\033[0m"
-		switch {
-		case msg.err != nil:
-			m.status = "\033[31m" + msg.err.Error() + "\033[0m"
-		case msg.kick:
-			exec.Command("systemctl", "--user", "start", "--no-block", "sw-factory.service").Run()
-			m.status += "\033[2m, dispatcher kicked (a free slot picks it up)\033[0m"
-		}
-		delete(m.comments, m.sel().key)
-		m.jiraAt = time.Now()
-		return m, loadJira
-	case editedMsg:
-		b, _ := os.ReadFile(msg.path)
-		os.Remove(msg.path)
-		text, _, _ := strings.Cut(string(b), scissors)
-		text = strings.TrimSpace(text)
-		if text == "" {
-			os.RemoveAll(msg.imgDir)
-			m.status = "reply empty, not sent"
-			break
-		}
-		imgs := ""
-		if n := len(imageRe(msg.imgDir).FindAllString(text, -1)); n > 0 {
-			imgs = fmt.Sprintf(" + %d image(s)", n)
-		}
-		m.confirm(fmt.Sprintf("post %d-char comment%s to %s?", len(text), imgs, msg.key), do("comment posted to "+msg.key, func() error {
-			defer os.RemoveAll(msg.imgDir)
-			body, err := uploadImages(text, msg.imgDir, "reply-"+time.Now().Format("20060102-150405"), func(p, name string) error { return jiraAttach(msg.key, p, name) })
-			if err != nil {
-				return err
-			}
-			return jiraReq("POST", "/rest/api/2/issue/"+msg.key+"/comment", map[string]string{"body": body}, nil)
-		}))
-	case tea.MouseMsg:
-		side := !m.zoom && msg.X < sideW
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
-			if side {
-				m.move(-1)
-			} else {
-				m.scrollBody(3)
-			}
-		case tea.MouseButtonWheelDown:
-			if side {
-				m.move(1)
-			} else {
-				m.scrollBody(-3)
-			}
-		case tea.MouseButtonLeft:
-			if msg.Action != tea.MouseActionPress || m.help {
-				break
-			}
-			lines, i := m.sideLines(), m.off+msg.Y-top
-			switch {
-			case side && msg.Y >= top && i < len(lines) && lines[i].row >= 0:
-				m.move(lines[i].row - m.cur)
-			case !side && msg.Y == top:
-				m.open(jiraURL(m.sel()), "jira ticket")
-			case !side && msg.Y == top+1:
-				m.open(m.sel().mr, "MR")
-			}
-		}
-	case tea.KeyMsg:
-		if m.pickKey != "" {
-			return m.pick(msg)
-		}
-		if m.pending != nil {
-			cmd := m.pending
-			m.ask, m.pending = "", nil
-			if msg.String() == "y" {
-				m.status = "working…"
-				return m, cmd
-			}
-			m.status = "cancelled"
-			return m, nil
-		}
-		if msg.Type != tea.KeyRunes || len(msg.Runes) < 2 {
-			return m.key(msg.String())
-		}
-		var cmds []tea.Cmd
-		for _, r := range msg.Runes {
-			var c tea.Cmd
-			m, c = m.key(string(r))
-			cmds = append(cmds, c)
-		}
-		return m, tea.Batch(cmds...)
-	}
-	return m, nil
-}
-
-func (m model) key(k string) (model, tea.Cmd) {
-	if m.help {
-		m.help = false
-		return m, nil
-	}
-	r := m.sel()
-	isTicket := jiraKey.MatchString(r.key) && r.jira
-	switch k {
-	case "q", "ctrl+c":
-		return m, tea.Quit
-	case "?":
-		m.help = true
-	case "Z":
-		m.zoom = !m.zoom
-		m.scrollBody(0)
-	case "z":
-		m.showOther = !m.showOther
-		m.reload()
-	case "j", "down":
-		m.move(1)
-	case "k", "up":
-		m.move(-1)
-	case "g", "home":
-		m.move(-len(m.rows))
-	case "G", "end":
-		m.move(len(m.rows))
-	case "tab", "shift+tab":
-		d := 1
-		if k == "shift+tab" {
-			d = len(tabs) - 1
-		}
-		m.tab, m.scroll = (m.tab+d)%len(tabs), 0
-		m.loadBody()
-	case "ctrl+u", "pgup":
-		m.scrollBody(m.bodyH() / 2)
-	case "ctrl+d", "pgdown":
-		m.scrollBody(-m.bodyH() / 2)
-	case "enter", "o":
-		if r.mr != "" {
-			m.open(r.mr, "MR")
-		} else {
-			m.open(jiraURL(r), "jira ticket")
-		}
-	case "J":
-		m.open(jiraURL(r), "jira ticket")
-	case "m":
-		m.open(r.mr, "MR")
-	case "r":
-		m.status = "refreshing jira"
-		delete(m.comments, r.key)
-		m.jiraAt = time.Now()
-		return m, loadJira
-	case "y":
-		src, tab := m.src, tabs[m.tab]
-		return m, do(tab+" copied", func() error {
-			c := exec.Command("xclip", "-selection", "clipboard")
-			c.Stdin = strings.NewReader(src)
-			return c.Run()
-		})
-	case "l":
-		return m, tea.ExecProcess(exec.Command("less", "+G", filepath.Join(stateDir, r.key+".log")), func(error) tea.Msg { return tickMsg{} })
-	case "e":
-		var files []string
-		switch tabs[m.tab] {
-		case "plan":
-			if p := planPath(r.key); p != "" {
-				files = []string{p}
-			}
-		case "holdout":
-			for _, f := range []string{r.key + ".md", r.key + ".api.md"} {
-				if p := filepath.Join(stateDir, "holdout", f); func() bool { _, err := os.Stat(p); return err == nil }() {
-					files = append(files, p)
-				}
-			}
-			if len(files) == 0 {
-				files = []string{filepath.Join(stateDir, "holdout", r.key+".md")}
-			}
-		}
-		if len(files) == 0 {
-			m.status = "nothing to edit on this tab"
-			break
-		}
-		before := map[string]string{}
-		for _, p := range files {
-			b, _ := os.ReadFile(p)
-			before[p] = string(b)
-		}
-		attach := tabs[m.tab] == "holdout" && jiraKey.MatchString(r.key)
-		return m, tea.ExecProcess(editCmd(files...), func(err error) tea.Msg {
-			if err != nil || !attach {
-				return doneMsg{"edited", err, false}
-			}
-			var sent []string
-			for _, p := range files {
-				b, rerr := os.ReadFile(p)
-				if rerr != nil || string(b) == before[p] {
-					continue
-				}
-				name := strings.Replace(filepath.Base(p), r.key, "holdout", 1)
-				if err := jiraAttach(r.key, p, name); err != nil {
-					return doneMsg{"", err, false}
-				}
-				sent = append(sent, name)
-			}
-			if len(sent) == 0 {
-				return doneMsg{"edited, unchanged", nil, false}
-			}
-			return doneMsg{"edited, attached to Jira: " + strings.Join(sent, ", "), nil, false}
-		})
-	case "c":
-		if r.resume == "" {
-			m.status = "no session in log"
-			break
-		}
-		if os.Getenv("TMUX") != "" {
-			exec.Command("tmux", "new-window", "-n", r.key, r.resume).Run()
-			break
-		}
-		return m, tea.ExecProcess(exec.Command("zsh", "-ic", r.resume), func(error) tea.Msg { return tickMsg{} })
-	case "a":
-		if !isTicket || !slices.Contains(r.labels, "triaged") || slices.Contains(r.labels, "ai-fix") || slices.Contains(r.labels, "ai-mr") {
-			m.status = "not waiting at plan gate"
-			break
-		}
-		m.confirm("approve plan + scenarios: add ai-fix to "+r.key+"?", do("ai-fix added to "+r.key, func() error { return relabel(r.key, "", "ai-fix") }))
-	case "t":
-		rm, add := retryAction(r.labels)
-		if !isTicket || rm == "" {
-			m.status = "nothing failed to retry"
-			break
-		}
-		m.confirm(fmt.Sprintf("retry %s: remove %s, add %s?", r.key, rm, or(add, "nothing (re-verify)")), do("relabelled "+r.key, func() error { return relabel(r.key, rm, add) }))
-	case "R":
-		if !isTicket {
-			m.status = "no jira ticket"
-			break
-		}
-		f, err := os.CreateTemp("", "triage-reply-"+r.key+"-*.txt")
-		if err != nil {
-			m.status = err.Error()
-			break
-		}
-		dir, err := os.MkdirTemp("", "triage-img-"+r.key+"-*")
-		if err != nil {
-			f.Close()
-			m.status = err.Error()
-			break
-		}
-		last := ""
-		if _, md, err := fetchIssue(r.key); err == nil && md != "" {
-			cs := strings.Split(md, "\n---\n")
-			last = strings.TrimSpace(cs[len(cs)-1])
-		}
-		fmt.Fprintf(f, "\n\n%s\n(insert mode Ctrl+V pastes the clipboard image)\n\n%s", scissors, last)
-		f.Close()
-		cmd := editCmd(f.Name())
-		if strings.HasSuffix(editor()[0], "vim") {
-			cmd = editCmd("-c", pasteImageMap(dir), f.Name())
-		}
-		return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
-			if err != nil {
-				os.Remove(f.Name())
-				os.RemoveAll(dir)
-				return doneMsg{"", err, false}
-			}
-			return editedMsg{r.key, f.Name(), dir}
-		})
-	case "b":
-		if in, ok := m.mrs[r.mr]; !ok || in.label != "conflict" {
-			m.status = "b only works on an MR in conflict"
-			break
-		}
-		iid := mrIIDRe.FindStringSubmatch(r.mr)[1]
-		m.confirm("let the agent resolve the code conflict in !"+iid+" (adds MR label ai-rebase)?", do("ai-rebase added to !"+iid, func() error { return addMRLabel(r.mr, "ai-rebase") }))
-	case "s":
-		if in, ok := m.mrs[r.mr]; !ok || (in.label != "gate pending" && in.label != "gate failed") {
-			m.status = "s only works on an MR held by the factory gate"
-			break
-		}
-		iid := mrIIDRe.FindStringSubmatch(r.mr)[1]
-		m.confirm("skip the factory gate on !"+iid+" (adds MR label ai-gate-skip, next tick sets it green)?", do("ai-gate-skip added to !"+iid, func() error { return addMRLabel(r.mr, "ai-gate-skip") }))
-	case "f":
-		if !r.todo {
-			m.status = "f feeds a TODO ticket"
-			break
-		}
-		m.pickKey, m.pickQ = r.key, ""
-		m.pickCur = max(slices.Index(m.picks(), "cf-farm-frontend"), 0)
-	case "Q":
-		if !isTicket || r.stage != "quiz" {
-			m.status = "Q works on a reviewed MR waiting for quiz"
-			break
-		}
-		cmd := "claude --model sonnet '/cf-quiz " + r.key + "'"
-		if os.Getenv("TMUX") != "" {
-			exec.Command("tmux", "new-window", "-n", "quiz:"+r.key, cmd).Run()
-			break
-		}
-		return m, tea.ExecProcess(exec.Command("zsh", "-ic", cmd), func(error) tea.Msg { return tickMsg{} })
-	case "w":
-		if !isTicket {
-			m.status = "no jira ticket"
-			break
-		}
-		if os.Getenv("TMUX") == "" {
-			m.status = "w needs tmux"
-			break
-		}
-		m.confirm("run factory-worker "+r.key+" now (new tmux window)?", func() tea.Msg {
-			err := exec.Command("tmux", "new-window", "-d", "-n", "w:"+r.key, "~/bin/factory-worker "+r.key+"; echo; read '?done, enter closes'").Run()
-			return doneMsg{"worker started for " + r.key, err, false}
-		})
-	}
-	return m, nil
-}
-
-func (m model) picks() []string {
-	var out []string
-	for _, r := range repos() {
-		if strings.Contains(r, m.pickQ) {
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
-func (m model) pick(msg tea.KeyMsg) (model, tea.Cmd) {
-	ps := m.picks()
-	switch msg.Type {
-	case tea.KeyEsc, tea.KeyCtrlC:
-		m.pickKey, m.status = "", "cancelled"
-	case tea.KeyUp, tea.KeyCtrlP:
-		m.pickCur--
-	case tea.KeyDown, tea.KeyCtrlN:
-		m.pickCur++
-	case tea.KeyBackspace:
-		if m.pickQ != "" {
-			m.pickQ = m.pickQ[:len(m.pickQ)-1]
-		}
-	case tea.KeyRunes:
-		m.pickQ += string(msg.Runes)
-		m.pickCur = 0
-	case tea.KeyEnter:
-		if len(ps) == 0 {
-			break
-		}
-		key, repo := m.pickKey, ps[min(m.pickCur, len(ps)-1)]
-		m.pickKey = ""
-		m.confirm("feed "+key+" to factory: add triage + repo-"+repo+"?", do(key+" fed to factory (repo-"+repo+")", func() error { return feed(key, repo) }))
-	}
-	m.pickCur = min(max(m.pickCur, 0), max(len(m.picks())-1, 0))
-	return m, nil
-}
-
-func (m model) pickLines() []string {
-	ps := m.picks()
-	out := []string{"\033[1;33mFeed " + m.pickKey + " — which repo?\033[0m", "", "> " + m.pickQ + "\033[7m \033[0m", ""}
-	const h = 12
-	from := min(max(m.pickCur-h/2, 0), max(len(ps)-h, 0))
-	for i := from; i < min(from+h, len(ps)); i++ {
-		if i == m.pickCur {
-			out = append(out, "\033[7m "+fit(ps[i], 30)+"\033[0m")
-		} else {
-			out = append(out, " "+fit(ps[i], 30))
-		}
-	}
-	if len(ps) == 0 {
-		out = append(out, "\033[2m no repo matches\033[0m")
-	}
-	return append(out, "", "\033[2mtype to filter  ↑↓ move  enter pick  esc cancel\033[0m")
-}
-
-func (m model) mrURLs() []string {
-	var out []string
-	for _, r := range m.rows {
-		if in, ok := m.mrs[r.mr]; r.mr != "" && !r.parked && !(ok && in.final) {
-			out = append(out, r.mr)
-		}
-	}
-	return out
-}
-
 func mrStage(s string) bool {
 	return s == "mr" || s == "verified" || s == "review fix" || s == "re-verify"
-}
-
-func (m model) look(r row) (icon, color, label string) {
-	st := stageStyle[r.stage]
-	if in, ok := m.mrs[r.mr]; ok && (mrStage(r.stage) || r.stage == "todo" || r.stage == "-") {
-		if in.label == "conflict" {
-			switch r.conflict {
-			case "waiting":
-				return in.icon, in.color, "conflict: b"
-			case "failed":
-				return "🔴", "31", "rebase failed"
-			}
-			return "🔧", "36", "rebase pending"
-		}
-		return in.icon, in.color, in.label
-	}
-	return st.icon, st.color, r.stage
-}
-
-func (m model) rowLine(i int) string {
-	r := m.rows[i]
-	icon, color, label := m.look(r)
-	icon = or(icon, "  ")
-	if r.running {
-		icon = "\033[32m●\033[0m "
-		label, color = or(r.phase, label), "32"
-	}
-	key, stg, age := fmt.Sprintf("%-9s", r.key), fmt.Sprintf("%-15s", ansi.Truncate(label, 15, "…")), fmt.Sprintf("%4s", ago(r.seen))
-	if i == m.cur {
-		return " " + icon + " \033[7m " + key + " " + stg + age + "\033[0m"
-	}
-	return fit(" "+icon+"  "+key+" \033["+or(color, "0")+"m"+stg+"\033[0m\033[2m"+age+"\033[0m", sideW)
-}
-
-func (m model) sidebar() []string {
-	lines := m.sideLines()
-	var out []string
-	for i := m.off; i < m.off+m.listH(); i++ {
-		switch {
-		case i >= len(lines):
-			out = append(out, "")
-		case lines[i].row >= 0:
-			out = append(out, m.rowLine(lines[i].row))
-		default:
-			out = append(out, lines[i].text)
-		}
-	}
-	return out
-}
-
-func (m model) pane() []string {
-	r := m.sel()
-	icon, color, label := m.look(r)
-	meta := []string{icon + " \033[" + or(color, "0") + "m" + label + "\033[0m", fmt.Sprintf("$%.2f", r.cost)}
-	if r.verdict != "" {
-		meta = append(meta, "verify "+r.verdict)
-	}
-	meta = append(meta, ago(r.seen)+" ago")
-	if mm := mrIIDRe.FindStringSubmatch(r.mr); mm != nil {
-		mr := "\033[4m!" + mm[1] + "\033[0m"
-		if in, ok := m.mrs[r.mr]; ok {
-			if !mrStage(r.stage) {
-				mr += " " + in.icon + " \033[" + in.color + "m" + in.label + "\033[0m"
-			}
-			mr += " \033[2m(" + in.detail + ")\033[0m"
-		}
-		meta = append(meta, mr)
-	}
-	tabBar := ""
-	for i, t := range tabs {
-		if i == m.tab {
-			tabBar += "\033[1;4;36m" + t + "\033[0m   "
-		} else {
-			tabBar += "\033[2m" + t + "\033[0m   "
-		}
-	}
-	if m.scroll > 0 {
-		tabBar += fmt.Sprintf("\033[33m↑ %d\033[0m", m.scroll)
-	}
-	out := []string{
-		"\033[1m" + r.key + "\033[0m  " + or(r.summary, "\033[2m(no jira ticket)\033[0m"),
-		strings.Join(meta, " \033[2m·\033[0m "),
-		"",
-		tabBar,
-		"\033[2m" + strings.Repeat("─", m.paneW()) + "\033[0m",
-	}
-	body, h := m.wrapped(), m.bodyH()
-	from, to := m.scroll, min(m.scroll+h, len(body))
-	if m.bottomAnchored() {
-		to = len(body) - m.scroll
-		from = max(to-h, 0)
-	}
-	return append(out, body[from:to]...)
-}
-
-func (m model) overlay(base, content []string) []string {
-	lines := append(append([]string{""}, content...), "")
-	w := 0
-	for _, l := range lines {
-		w = max(w, ansi.StringWidth(l))
-	}
-	w += 6
-	box := []string{"╭" + strings.Repeat("─", w) + "╮"}
-	for _, l := range lines {
-		box = append(box, "│   "+fit(l, w-3)+"│")
-	}
-	box = append(box, "╰"+strings.Repeat("─", w)+"╯")
-	x, y := max((m.w-w-2)/2, 0), max((len(base)-len(box))/2, 0)
-	for i, b := range box {
-		if y+i >= len(base) {
-			break
-		}
-		l := fit(base[y+i], m.w)
-		base[y+i] = ansi.Truncate(l, x, "") + "\033[0m" + b + ansi.TruncateLeft(l, x+w+2, "")
-	}
-	return base
-}
-
-func (m model) View() string {
-	if m.w == 0 {
-		return ""
-	}
-	total := 0.0
-	for _, r := range m.rows {
-		total += r.cost
-	}
-	worker := "\033[2m○ idle\033[0m"
-	if m.busy {
-		worker = "\033[32m● busy\033[0m"
-	}
-	head := fmt.Sprintf(" \033[1msw-factory\033[0m   %s   \033[2m%d tickets   $%.2f\033[0m", worker, len(m.rows)+m.otherN, total)
-	if m.svc == "failed" {
-		head += "   \033[31mdispatcher failed\033[0m"
-	}
-	switch {
-	case m.jiraErr != nil:
-		head += "   \033[31mjira: " + m.jiraErr.Error() + "\033[0m"
-	case !m.jiraAt.IsZero() && time.Since(m.jiraAt) > 3*time.Minute:
-		head += "   \033[33mjira " + ago(m.jiraAt) + " old\033[0m"
-	}
-	view := []string{fit(head, m.w), ""}
-	side, pane := m.sidebar(), m.pane()
-	for i := 0; i < m.listH(); i++ {
-		s, p := "", ""
-		if i < len(side) {
-			s = side[i]
-		}
-		if i < len(pane) {
-			p = pane[i]
-		}
-		if m.zoom {
-			s = " "
-		} else {
-			s = fit(s, sideW) + "\033[2m │\033[0m  "
-		}
-		view = append(view, s+fit(p, m.paneW())+"\033[0m")
-	}
-	foot := fit(" \033[2m? help   q quit\033[0m", 20) + m.status
-	if m.ask != "" {
-		foot = " \033[1;33m" + m.ask + "\033[0m"
-	}
-	view = append(view, fit(foot, m.w))
-	if m.help {
-		view = m.overlay(view, helpLines())
-	}
-	if m.pickKey != "" {
-		view = m.overlay(view, m.pickLines())
-	}
-	return strings.Join(view, "\n")
 }
 
 var editor = sync.OnceValue(func() []string {
@@ -1704,15 +672,19 @@ var editor = sync.OnceValue(func() []string {
 	return []string{"vi"}
 })
 
-func editCmd(files ...string) *exec.Cmd {
-	e := editor()
-	return exec.Command(e[0], append(slices.Clone(e[1:]), files...)...)
-}
+const defaultAddr = "127.0.0.1:7777"
 
 func main() {
-	go editor()
-	if _, err := tea.NewProgram(model{comments: map[string]string{}, descs: map[string]string{}, mrs: map[string]mrInfo{}}, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	if len(os.Args) > 1 && os.Args[1] == "serve" {
+		addr := defaultAddr
+		if len(os.Args) > 2 {
+			addr = os.Args[2]
+		}
+		serve(addr)
+		return
+	}
+	u := "http://" + defaultAddr + "/?t=" + loadToken()
+	if err := exec.Command("xdg-open", u).Start(); err != nil {
+		fmt.Println(u)
 	}
 }

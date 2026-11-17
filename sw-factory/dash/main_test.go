@@ -2,9 +2,13 @@ package main
 
 import (
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestUploadImages(t *testing.T) {
@@ -135,29 +139,77 @@ func TestMRStatus(t *testing.T) {
 }
 
 func TestLookConflict(t *testing.T) {
-	m := model{mrs: map[string]mrInfo{"u": {label: "conflict", icon: "💥", color: "31"}}}
+	mrs := map[string]mrInfo{"u": {label: "conflict", icon: "💥", color: "31"}}
 	cases := map[string]string{"waiting": "conflict: b", "failed": "rebase failed", "pending": "rebase pending", "": "rebase pending"}
 	for state, want := range cases {
-		if _, _, got := m.look(row{stage: "mr", mr: "u", conflict: state}); got != want {
+		if _, _, got := look(row{stage: "mr", mr: "u", conflict: state}, mrs); got != want {
 			t.Errorf("conflict %q: got %q, want %q", state, got, want)
 		}
 	}
 }
 
-func TestChanged(t *testing.T) {
-	rows := []row{{key: "A", stage: "verify failed", jira: true}, {key: "B", stage: "implementing", jira: true}, {key: "C", stage: "nightly", jira: true, parked: true}}
-	lbl := func(r row) string { return r.stage }
-	base, ch := changed(nil, rows, lbl)
-	if len(ch) != 0 {
-		t.Fatalf("baseline notified: %v", ch)
+func TestGuard(t *testing.T) {
+	s := &server{mrs: map[string]mrInfo{}, token: "secret-token"}
+	h := s.handler()
+	call := func(method, path, host, origin string, cookie bool) int {
+		r := httptest.NewRequest(method, path, strings.NewReader("{}"))
+		r.Host = host
+		if origin != "" {
+			r.Header.Set("Origin", origin)
+		}
+		if cookie {
+			r.AddCookie(&http.Cookie{Name: "fd", Value: "secret-token"})
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
 	}
-	if _, ch = changed(base, rows, lbl); len(ch) != 0 {
-		t.Fatalf("no-op notified: %v", ch)
+	cases := []struct {
+		name                       string
+		method, path, host, origin string
+		cookie                     bool
+		want                       int
+	}{
+		{"no cookie", "GET", "/api/status", "127.0.0.1:7777", "", false, 401},
+		{"foreign host", "GET", "/api/status", "evil.example", "", true, 403},
+		{"foreign origin", "POST", "/api/action", "127.0.0.1:7777", "http://evil.example", true, 403},
+		{"missing origin on post", "POST", "/api/action", "127.0.0.1:7777", "", true, 403},
+		{"media traversal", "GET", "/media/DEV-1.verify-media/..%2f..%2fdash.token", "127.0.0.1:7777", "", true, 404},
+		{"media wrong dir", "GET", "/media/holdout/DEV-1.jpg", "127.0.0.1:7777", "", true, 404},
+		{"token login", "GET", "/?t=secret-token", "127.0.0.1:7777", "", false, 302},
 	}
-	base["A"], base["B"], base["C"] = "implementing", "plan", "mr"
-	_, ch = changed(base, rows, lbl)
-	if len(ch) != 1 || ch[0] != "A implementing → verify failed" {
-		t.Fatalf("got %v", ch)
+	for _, c := range cases {
+		if got := call(c.method, c.path, c.host, c.origin, c.cookie); got != c.want {
+			t.Errorf("%s: got %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+func TestChapters(t *testing.T) {
+	old := stateDir
+	stateDir = t.TempDir()
+	defer func() { stateDir = old }()
+	os.MkdirAll(filepath.Join(stateDir, "DEV-1.verify-media", "narrate"), 0o755)
+	os.WriteFile(filepath.Join(stateDir, "DEV-1.verify-media", "narrate", "chapters.txt"), []byte(";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=9200\ntitle=DEV-1 · Intro\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=9200\nEND=27892\ntitle=S1 · First\n"), 0o644)
+	os.WriteFile(filepath.Join(stateDir, "DEV-1.verify-media", "DEV-1.short.webm"), nil, 0o644)
+	os.WriteFile(filepath.Join(stateDir, "DEV-1.verify-media", "S1.webm"), nil, 0o644)
+	os.WriteFile(filepath.Join(stateDir, "DEV-1.verify.md"), []byte("VERDICT: fail\nS1 First: fail — broke\nVideo: /x/DEV-1.verify-media/DEV-1.short.webm\n"), 0o644)
+	m := mediaFiles("DEV-1")
+	if len(m) != 2 || !m[0].Current || m[0].Name != "DEV-1.short.webm" || m[1].Current {
+		t.Fatalf("current video not first: %+v", m)
+	}
+	ch := m[0].Chapters
+	if len(ch) != 2 || ch[1].Start != 9.2 || ch[1].Title != "S1 · First" || ch[1].Verdict != "fail" || ch[0].Verdict != "" {
+		t.Fatalf("chapters: %+v", ch)
+	}
+}
+
+func TestParseRuns(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "DEV-1.log")
+	os.WriteFile(p, []byte("=== implement DEV-1 (repo) 2026-11-12T13:49:31+01:00\n13:49:40 🔧 Bash {\"command\":\"ls\"}\n13:50:00 🔧 Bash {}\n13:59:31 ✅ exit error=false cost=$1.5 turns=20 peak=84K\n"), 0o644)
+	r := parseRuns(p)
+	if len(r) != 1 || r[0].stage != "implement" || r[0].key != "DEV-1" || r[0].cost != 1.5 || r[0].turns != 20 || r[0].peak != 84 || r[0].tools["Bash"] != 2 || r[0].dur != 10*time.Minute || r[0].fail {
+		t.Fatalf("got %+v", r)
 	}
 }
 
