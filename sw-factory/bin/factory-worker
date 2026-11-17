@@ -183,6 +183,7 @@ wm_window() {
 implement() {
   local KEY=$1 REPO=${2-} LOG=$LOG_DIR/$1.log
   echo "=== implement $KEY ($REPO) $(date -Iseconds)" | tee -a $LOG
+  [[ -n "${3:-}" ]] && echo "  variant: ${3%% *}" >>$LOG
   [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] || { echo "  no repo '$REPO'" | tee -a $LOG; return 1; }
   local SETUP=$(cd $REPOS/$REPO && cf-work $KEY --no-launch --comments-after $(<$HANDLED/$KEY 2>/dev/null || echo 0) 2>&1)
   echo "$SETUP" >>$LOG
@@ -190,8 +191,11 @@ implement() {
   local TIER=$(grep -oP 'claude --model \K\w+' <<<"$SETUP" || echo sonnet)
   local DIRS=(); for D in ${(u)${(f)"$(grep -oP -- '--add-dir \K\S+' <<<"$SETUP")"}}; do DIRS+=(--add-dir $D); done
   [[ -n "$WT" && -f $WT/PLAN.md ]] || { echo "  no worktree/PLAN.md" | tee -a $LOG; return 1; }
-  local PANE=$(wm_window $WT $LOG)
-  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-ticket-headless $KEY ${3:-}" \
+  local PANE=$(wm_window $WT $LOG) CR=($REPO) D
+  for D in ${(u)${(f)"$(grep -oP -- '--add-dir \K\S+' <<<"$SETUP")"}}; do [[ $D == $REPOS/* ]] && CR+=(${${D#$REPOS/}%%/*}); done
+  local CONV=$(conventions $KEY ${(j:,:)${(u)CR}}) CARGS=()
+  [[ -n "$CONV" ]] && CARGS=(--append-system-prompt "$CONV")
+  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-ticket-headless $KEY ${3:-}" $CARGS \
     --model $TIER $DIRS --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config $LOG_DIR/$KEY.layout-media lean-ctx codegraph)" \
     --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__playwright Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
     --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**)" \
@@ -386,6 +390,53 @@ gl_pending() {
   [[ -n "$(gl_unanswered $1 $2 </dev/null)" ]]
 }
 
+conv_add() { CONV_L+=("$1"); CONV_B+=("$2"); CONV_N+=("$3"); CONV_S+=($(print -rn -- "$2" | wc -c)); }
+
+conv_collect() {
+  local KEY=$1 R=$2 WT=$3 LOG=$LOG_DIR/$1.log BASE C F P d STD=~/dotfiles/claude/cleverfarm/standards
+  BASE=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null </dev/null | jq -r '.[0].target_branch // empty')
+  [[ -n "$BASE" ]] || BASE=$(git -C $WT symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)
+  BASE=${BASE#origin/}
+  [[ -n "$BASE" ]] || { echo "  conventions: no base branch in $R" >>$LOG; return }
+  git -C $WT fetch -q origin $BASE </dev/null 2>/dev/null
+  F=.claude/skills/review-checklist/SKILL.md
+  C=$(git -C $WT show origin/$BASE:$F 2>/dev/null) && conv_add "$R/$F" "$C" 0
+  P=(${(f)"$(git -C $WT diff --name-only origin/$BASE...HEAD 2>/dev/null)"}
+     ${(f)"$(sed -n '/^### Change map/,/^#/p' $WT/PLAN.md 2>/dev/null | grep -oP '`\K[^`\s]+(?=`)' | grep -E '/|\.[a-z]+$')"})
+  local DIRS=(${(f)"$(for F in $P; do d=${F:h}; while [[ $d != . && $d != / && -n $d ]]; do echo $d; d=${d:h}; done; done | sort -u | awk '{print gsub("/","/") " " $0}' | sort -n | cut -d' ' -f2-)"})
+  for d in $DIRS; do
+    C=$(git -C $WT show origin/$BASE:$d/CLAUDE.md 2>/dev/null) && conv_add "$R/$d/CLAUDE.md" "$C" 1
+  done
+  for F in common $R; do
+    (( ${CONV_L[(Ie)standards/$F.md]} )) && continue
+    [[ -f $STD/$F.md ]] && conv_add "standards/$F.md" "$(<$STD/$F.md)" 0
+  done
+}
+
+conventions() {
+  local KEY=$1 LOG=$LOG_DIR/$1.log R WT i TOTAL=0 DROP=()
+  CONV_L=() CONV_B=() CONV_N=() CONV_S=()
+  for R in ${(s:,:)2}; do
+    WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
+    [[ -n "$WT" ]] && conv_collect $KEY $R $WT
+  done
+  for i in ${CONV_S}; do (( TOTAL += i )); done
+  while (( TOTAL > 100000 )); do
+    i=${CONV_N[(I)1]}
+    (( i )) || break
+    (( TOTAL -= CONV_S[i] )); DROP+=($CONV_L[i])
+    CONV_L[i]=() CONV_B[i]=() CONV_N[i]=() CONV_S[i]=()
+  done
+  for i in {1..$#CONV_L}; do
+    print -r -- "<conventions file=\"$CONV_L[i]\">"
+    print -r -- "$CONV_B[i]"
+    print -r -- "</conventions>"
+  done
+  echo "  conventions: $#CONV_L files, $TOTAL B: ${(j:, :)CONV_L}" >>$LOG
+  (( $#DROP )) && echo "  conventions dropped (over 100 KB): ${(j:, :)DROP}" >>$LOG
+  return 0
+}
+
 review() {
   local KEY=$1 LOG=$LOG_DIR/$1.log OUT=$LOG_DIR/$1.review.md T WT0 WTA=() RS=(${(s:,:)2})
   T=$(mr_targets $KEY $2) || return 2
@@ -399,14 +450,16 @@ review() {
   fi
   echo "=== review${PRIOR:+ (incremental)} $KEY (${(j:, :)${(f)T}}) $(date -Iseconds)" | tee -a $LOG
   rm -f $OUT
-  local PANE=$(wm_window $WT0 $LOG)
-  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-review $KEY repos=${(j:,:)${(f)T}} branch=${WT0:t} report=$OUT$PRIOR" \
+  local PANE=$(wm_window $WT0 $LOG) CONV=$(conventions $KEY $2) CARGS=()
+  [[ -n "$CONV" ]] && CARGS=(--append-system-prompt "$CONV")
+  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-review $KEY repos=${(j:,:)${(f)T}} branch=${WT0:t} report=$OUT$PRIOR" $CARGS \
     --model opus --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '' lean-ctx codegraph)" \
     --allowedTools "Read Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Write(/$OUT) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git merge-base:*) Bash(git fetch:*) Bash(glab mr note:*) Bash(glab api:*) Bash(jq:*)" \
     --disallowedTools "Edit Bash(git push:*) Bash(git commit:*) Bash(git checkout:*) Bash(git reset:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)
   echo "  ${VERDICT:-no report}" | tee -a $LOG
+  [[ -f $OUT ]] && echo "  findings: $(awk '/^## must-fix/{s="m";next} /^## should-fix/{s="s";next} /^## /{s=""} /^[0-9]+\. /{cur=($0 !~ /\[(fixed|dropped)\]/); if (cur) c[s]++} /^ +- Rule:/{if (cur) r++} END{printf "must=%d should=%d convention=%d", c["m"], c["s"], r}' $OUT)" >>$LOG
   case $VERDICT in
     "VERDICT: clean"*) return 0 ;;
     "VERDICT: minor"*) return 1 ;;
@@ -563,7 +616,7 @@ wt_heads() {
 }
 
 unverify() {
-  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"},{"remove":"ai-quizzed"}]}}' >/dev/null
+  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"},{"remove":"ai-quizzed"},{"remove":"ai-reviewed"}]}}' >/dev/null
 }
 
 stage_mr() {
@@ -614,12 +667,19 @@ stage_verify() {
 }
 
 stage_review() {
-  local KEY=$1 RC MR
+  local KEY=$1 RC MR H=$(wt_heads $1) PRIOR=""
   has_label $KEY ai-verified && ! has_label $KEY ai-reviewed ai-review-retry ai-review-findings || { echo "  not ai-verified or already reviewed (stale search index), skipped"; return 0 }
-  review $KEY $2
+  [[ -f $LOG_DIR/$KEY.reviewed && -f $LOG_DIR/$KEY.review.md ]] && PRIOR=$(<$LOG_DIR/$KEY.reviewed)
+  if [[ -n "$PRIOR" && "$PRIOR" == "$H" ]]; then
+    echo "  review: no commits since the last reviewed heads, relabel only" >>$LOG_DIR/$KEY.log
+    relabel $KEY "" ai-reviewed; note $KEY "independent review: nothing new since the last review: $(cat $LOG_DIR/$KEY.mr 2>/dev/null)"
+    return 0
+  fi
+  review $KEY $2 "$PRIOR"
   RC=$?
   (( RC == 2 )) && return 2
   MR=$(cat $LOG_DIR/$KEY.mr 2>/dev/null)
+  (( RC == 0 || RC == 1 )) && echo "$H" >$LOG_DIR/$KEY.reviewed
   case $RC in
     0) relabel $KEY "" ai-reviewed; note $KEY "independent review clean: $MR" ;;
     1) relabel $KEY "" ai-reviewed; note $KEY "independent review: should-fix findings only, see the MR note: $MR" ;;
@@ -632,6 +692,12 @@ stage_review() {
 stage_rfix() {
   local KEY=$1 H0=$(wt_heads $1) RC MR=$(cat $LOG_DIR/$1.mr 2>/dev/null)
   has_label $KEY ai-review-retry || { echo "  no ai-review-retry (stale search index), skipped"; return 0 }
+  local N=$(<$LOG_DIR/$KEY.rfix-count 2>/dev/null || echo 0)
+  if (( N >= ${RFIX_MAX:-2} )); then
+    relabel $KEY ai-review-retry ai-review-findings; note $KEY "review fix cap reached ($N rounds), needs you: \`$LOG_DIR/$KEY.review.md\`"
+    return 0
+  fi
+  echo $(( N + 1 )) >$LOG_DIR/$KEY.rfix-count
   implement $KEY $2 "--review-fix $LOG_DIR/$1.review.md"
   if [[ "$(wt_heads $KEY)" == "$H0" ]]; then
     relabel $KEY ai-review-retry ai-review-findings; note $KEY "review findings not fixed (no commits pushed), see \`$LOG_DIR/$KEY.review.md\`"
@@ -640,6 +706,7 @@ stage_rfix() {
   review $KEY $2 "$H0"
   RC=$?
   unverify $KEY
+  (( RC == 0 || RC == 1 )) && wt_heads $KEY >$LOG_DIR/$KEY.reviewed
   case $RC in
     0|1) relabel $KEY ai-review-retry ai-reviewed; note $KEY "review findings fixed, re-check $( (( RC )) && echo minor || echo clean ), re-verify next: $MR" ;;
     4) relabel $KEY ai-review-retry ai-review-findings; note $KEY "review findings fixed, but the re-check still blocks, needs you: $MR" ;;
@@ -685,6 +752,11 @@ fi
 
 if [[ "${2:-}" == --gate ]]; then
   GATE_VERBOSE=1 gate_all "key = ${1:u}"
+  exit 0
+fi
+
+if [[ "${2:-}" == --conventions ]]; then
+  conventions ${1:u} "$(ticket_repos ${1:u})"
   exit 0
 fi
 

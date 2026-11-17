@@ -29,6 +29,7 @@ A `Conversation compacted` notice mid-run → before the next step re-read this 
 2. `~/.local/state/sw-factory/holdout/<KEY>.md` = acceptance scenarios an independent verifier runs against the preview after the MR exists. Read them, make the change satisfy them; never edit that file.
 2a. `~/.local/state/sw-factory/notes/<KEY>.md` = your own notes from earlier rounds (change map, decisions with reasons, gotchas, round log). Exists → read it right after `PLAN.md`, before touching code; it is the memory between rounds. Reviewer and verifier cannot read it.
 2b. `GLOSSARY.md` at the repo root exists → read it now, in every mode (MR follow-up, verify fix and review fix included). Every name the diff adds or renames (files, dirs, symbols, test names, i18n keys), UI copy and the MR title use its EN terms, never an `_Avoid_` word. The glossary beats `PLAN.md` and neighbouring code: a plan name with an `_Avoid_` word is a plan bug, use the term and log it under `## Deviations from PLAN.md`. A touched file whose name, dir or exported symbols carry an `_Avoid_` word gets renamed in scope (`git mv` + every caller), whether the change map lists it or not. No `GLOSSARY.md` → nothing here applies.
+2c. `<conventions file="…">` blocks in the system prompt (review checklist, nested `CLAUDE.md`, standards) bind every line you add or change, in every variant (MR follow-up, verify fix and review fix included). No blocks → the repo's root `CLAUDE.md` alone.
 3. **Multi-repo**: `TICKET.md` `## Repos` lists more than one worktree → the session was launched with `--add-dir` for the siblings, all on the same branch. Treat the set as one change: implement, verify (step 5) and review (step 6) per repo, in each repo's own worktree dir. BE contract first (API/DTO), FE consumes it.
 
 ## Implement
@@ -47,7 +48,7 @@ A `Conversation compacted` notice mid-run → before the next step re-read this 
 
 ## Review
 
-6. `/code-review` on the diff (correctness bugs). Then `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = the repo's `CLAUDE.md` "Coding Rules" + `~/dotfiles/claude/cleverfarm/standards/common.md` + `~/dotfiles/claude/cleverfarm/standards/<repo dir>.md` if it exists + the repo's `GLOSSARY.md` if it exists (tell it: glossary terms beat `PLAN.md` wording; a name matching the plan but using an `_Avoid_` word is a finding). Its Standards + Spec sub-agents see only the diff and those files, not your reasoning — don't pass them your own justification. Fix what both passes found, re-run step 5.
+6. `/code-review` on the diff (correctness bugs). Then `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = the repo's root `CLAUDE.md` "Coding Rules" + every `<conventions>` block (2c) + the repo's `GLOSSARY.md` if it exists (tell it: glossary terms beat `PLAN.md` wording; a name matching the plan but using an `_Avoid_` word is a finding). Its Standards + Spec sub-agents see only the diff and those files, not your reasoning — don't pass them your own justification. Fix what both passes found, re-run step 5.
 
 ## MR + comment
 
