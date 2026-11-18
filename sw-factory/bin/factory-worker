@@ -407,7 +407,7 @@ conv_collect() {
   for d in $DIRS; do
     C=$(git -C $WT show origin/$BASE:$d/CLAUDE.md 2>/dev/null) && conv_add "$R/$d/CLAUDE.md" "$C" 1
   done
-  for F in common $R; do
+  for F in common; do
     (( ${CONV_L[(Ie)standards/$F.md]} )) && continue
     [[ -f $STD/$F.md ]] && conv_add "standards/$F.md" "$(<$STD/$F.md)" 0
   done
@@ -596,7 +596,10 @@ stage_reply() {
   [[ -n "${GRILL:-}" ]] && has_label $1 needs-answer && CUR=needs-answer
   if analyze $1 $2; then
     mark_handled $1 $ID
-    if [[ "$(grill_outcome $1)" == ASK ]]; then grill_bump $1; note $1 "your reply answered, more questions (round $(<$LOG_DIR/$1.round)), reply in Jira"
+    if [[ "$(grill_outcome $1)" == ASK ]]; then
+      grill_bump $1
+      [[ $CUR == triaged ]] && relabel $1 triaged needs-answer
+      note $1 "your reply answered, more questions (round $(<$LOG_DIR/$1.round)), reply in Jira"
     else
       [[ -n "${GRILL:-}" ]] && has_label $1 ai-fix-failed && unlabel $1 ai-fix-failed
       if [[ $CUR == needs-answer ]]; then relabel $1 needs-answer triaged; note $1 "questions settled, PLAN.md ready (add \`ai-fix\` to implement)"
