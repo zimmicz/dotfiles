@@ -1,5 +1,7 @@
 # Plan: review that catches convention drift and covers pushed code
 
+Executed in `c44ca42` (2026-11-17). Later changed by DEV-3800 (`df5b075`): source 4 `standards/<repo>.md` removed, worker reads only `standards/common.md`; grill ASK on `triaged` fixed.
+
 Handoff from the audit session of 2026-11-17 (Fable). Executor: a fresh session (sonnet is enough). Everything needed is in this file; the audit's scratch scripts are gone.
 
 ## Goal
