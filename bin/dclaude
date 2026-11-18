@@ -4,7 +4,7 @@ set -euo pipefail
 IMAGE=dclaude
 DOTFILES=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 ENV_FILE=${DCLAUDE_ENV:-$HOME/.config/dclaude.env}
-JIRA_ENV=$HOME/.config/sw-factory.env
+JIRA_ENV=$HOME/.config/jira.env
 C=$HOME/.claude
 SETTINGS='{"enabledPlugins":{"slack@claude-plugins-official":false}}'
 

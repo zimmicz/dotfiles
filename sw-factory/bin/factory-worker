@@ -838,7 +838,7 @@ spawn_stage() {
     echo "would spawn $UNIT (slots ${SLOT:t} ${CAP:t})"
   else
     systemd-run --user --collect --quiet --unit=$UNIT "--setenv=PATH=$PATH" ${GRILL:+--setenv=GRILL=$GRILL} \
-      -p EnvironmentFile=$HOME/.config/sw-factory.env -p RuntimeMaxSec=$(stage_timeout $S) \
+      -p EnvironmentFile=$HOME/.config/jira.env -p EnvironmentFile=$HOME/.config/sw-factory.env -p RuntimeMaxSec=$(stage_timeout $S) \
       -p SuccessExitStatus="2 75" $CMD || return 1
     echo "spawned $UNIT (slots ${SLOT:t} ${CAP:t})"
   fi
