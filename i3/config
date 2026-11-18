@@ -199,5 +199,8 @@ focus_on_window_activation none
 
 client.focused          #BF4342 #BF4342  #ffffff #D3D4D9  #D3D4D9
 
-bindsym Mod1+v exec --no-startup-id sh -c 'i3-msg "[class=\"Vivaldi\"] focus" && i3-msg "[class=\"Vivaldi\"] move workspace to output current"'
+bindsym Mod1+v exec --no-startup-id sh -c 'i3-msg "[class=\"Vivaldi\" instance=\"^vivaldi\"] focus" && i3-msg "[class=\"Vivaldi\" instance=\"^vivaldi\"] move workspace to output current"'
+
+for_window [class="Vivaldi" instance="^127.0.0.1$"] move to workspace 0
+bindsym $mod+d exec --no-startup-id sh -c 'i3-msg -q "[class=\"Vivaldi\" instance=\"^127.0.0.1$\"] focus" || (i3-msg -q workspace 0 && ~/bin/factory-dash)'
 bindsym Mod1+t exec --no-startup-id sh -c 'i3-msg "[class=\"Gnome-terminal\"] focus" && i3-msg "[class=\"Gnome-terminal\"] move workspace to output current"'
