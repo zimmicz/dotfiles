@@ -435,7 +435,7 @@ async function renderStats() {
 function go(v) { view = v; render(); if (v === 'stats') renderStats(); if (v === 'overview') loadBody() }
 function select(k) { if (k === cur) return; cur = k; render(); if (view === 'overview') loadBody() }
 function move(d) { const rs = visible(), i = rs.findIndex(r => r.Key === cur); const n = rs[Math.min(Math.max(i + d, 0), rs.length - 1)]; if (n) select(n.Key) }
-function open(u, what) { u ? (window.open(u, '_blank'), say('opened ' + u)) : say('no ' + what, true) }
+function openURL(u, what) { u ? (window.open(u, '_blank'), say('opened ' + u)) : say('no ' + what, true) }
 
 async function act(action, extra = {}, dry = true) {
   const body = {Key: cur, Action: action, Dry: dry, ...extra}
@@ -561,14 +561,14 @@ document.onkeydown = e => {
   }
   if (e.target === $('q') || e.metaKey || e.altKey) return
   const r = sel(), k = (e.ctrlKey ? '^' : '') + e.key, body = $('body')
-  const openMain = () => r.MR ? open(r.MR, 'MR') : open(r.JiraURL, 'jira ticket')
+  const openMain = () => r.MR ? openURL(r.MR, 'MR') : openURL(r.JiraURL, 'jira ticket')
   const keys = {
     '?': showHelp, i: showSys, '/':() => { $('q').focus(); $('q').select() }, '1': () => go('overview'), B: () => go(view === 'board' ? 'overview' : 'board'), S: () => go(view === 'stats' ? 'overview' : 'stats'),
     Z: () => document.body.classList.toggle('zoom'), z: () => { showOther = !showOther; render() },
     j: () => move(1), ArrowDown: () => move(1), k: () => move(-1), ArrowUp: () => move(-1), g: () => move(-1e6), Home: () => move(-1e6), G: () => move(1e6), End: () => move(1e6),
     Tab: () => { tab = (tab + (e.shiftKey ? S.Tabs.length - 1 : 1)) % S.Tabs.length; render(); loadBody() },
     '^u': () => body.scrollBy(0, -body.clientHeight / 2), PageUp: () => body.scrollBy(0, -body.clientHeight / 2), '^d': () => body.scrollBy(0, body.clientHeight / 2), PageDown: () => body.scrollBy(0, body.clientHeight / 2),
-    Enter: openMain, o: openMain, J: () => open(r.JiraURL, 'jira ticket'), m: () => open(r.MR, 'MR'),
+    Enter: openMain, o: openMain, J: () => openURL(r.JiraURL, 'jira ticket'), m: () => openURL(r.MR, 'MR'),
     r: () => { say('refreshing jira'); act('refresh') }, y: () => navigator.clipboard.writeText(src).then(() => say(S.Tabs[tab] + ' copied')),
     l: () => { tab = 0; render(); bodyKey = ''; loadBody(true) }, e: () => act('edit', {Tab: S.Tabs[tab]}), c: () => act('resume'),
     a: () => act('approve'), t: () => act('retry'), R: openReply, b: () => act('rebase'), s: () => act('skipgate'), f: openPick, Q: () => act('quiz'), w: () => act('worker'),
