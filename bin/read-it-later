@@ -14,7 +14,7 @@ LOG=$STATE/run-$(date +%F-%H%M)$( (( DRY )) && echo -dry).json
 
 export DISPLAY=${DISPLAY:-:0}
 if ! pgrep -x chromium >/dev/null; then
-  chromium --no-startup-window >/dev/null 2>&1 &!
+  chromium --new-window about:blank >/dev/null 2>&1 &!
   sleep 20
 fi
 
