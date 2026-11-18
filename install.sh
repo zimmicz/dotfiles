@@ -31,7 +31,7 @@ done
 for u in ${DOTFILES_DIR}/claude/user/systemd/* ${DOTFILES_DIR}/sw-factory/systemd/*; do
   ln -sf ${u} ${CONFIG_DIR}/systemd/user/$(basename ${u})
 done
-systemctl --user daemon-reload && systemctl --user enable claude-reflection.timer
+systemctl --user daemon-reload && systemctl --user enable claude-reflection.timer read-it-later.timer
 
 mkdir -p ~/bin
 for f in ${DOTFILES_DIR}/bin/* ${DOTFILES_DIR}/sw-factory/bin/*; do

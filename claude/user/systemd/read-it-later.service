@@ -1,0 +1,7 @@
+[Unit]
+Description=Číst později → Jira tickets (read-it-later-organizer agent)
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:%h/bin:/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=%h/bin/read-it-later

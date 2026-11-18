@@ -1,0 +1,53 @@
+#!/bin/zsh
+set -u
+
+DRY=0
+[[ "${1:-}" == "--dry-run" ]] && DRY=1
+
+set -a
+source $HOME/.config/jira.env
+set +a
+
+STATE=$HOME/.local/state/read-it-later
+mkdir -p $STATE
+LOG=$STATE/run-$(date +%F-%H%M)$( (( DRY )) && echo -dry).json
+
+export DISPLAY=${DISPLAY:-:0}
+if ! pgrep -x chromium >/dev/null; then
+  chromium --no-startup-window >/dev/null 2>&1 &!
+  sleep 20
+fi
+
+PROMPT="Process the Číst později database now."
+DENY=()
+if (( DRY )); then
+  PROMPT="DRY RUN. $PROMPT"
+  DENY=(--disallowedTools "Bash(jira:*) mcp__claude_ai_Notion__notion-update-page mcp__claude_ai_Notion__notion-create-pages mcp__claude_ai_Notion__notion-create-comment mcp__claude_ai_Notion__notion-delete-pages")
+fi
+
+cd $HOME/work/cleverfarm/agents
+claude -p "$PROMPT" \
+  --agent read-it-later-organizer \
+  --chrome \
+  --settings '{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false}}' \
+  --allowedTools "mcp__claude_ai_Notion mcp__claude-in-chrome WebFetch Bash(jira:*) Bash(jq:*)" \
+  $DENY \
+  --output-format stream-json --verbose \
+  </dev/null | tee $LOG \
+  | jq --unbuffered -r 'select(.type=="assistant") | .message.content[]? | if .type=="tool_use" then "→ \(.name | sub("^mcp__.*__"; ""))" elif .type=="text" then .text else empty end' 2>/dev/null
+
+DONE=$(grep '"type":"result"' $LOG | tail -1)
+RESULT=$(print -r -- "$DONE" | jq -r '.result // empty' 2>/dev/null)
+
+if (( DRY )); then
+  print -r -- "$DONE" | jq -r '"cost: $\(.total_cost_usd)"' 2>/dev/null
+  exit 0
+fi
+
+if [[ "$(print -r -- "$DONE" | jq -r '.is_error' 2>/dev/null)" != false || -z "$RESULT" ]]; then
+  print -r -- "read-it-later selhal, log: $LOG" | ~/.claude/scripts/slack-post.sh "Číst později: chyba"
+  exit 1
+fi
+
+[[ "$RESULT" == NOTHING ]] && exit 0
+print -r -- "$RESULT" | ~/.claude/scripts/slack-post.sh "Číst později → Jira"
