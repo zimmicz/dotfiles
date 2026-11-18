@@ -193,13 +193,15 @@ func TestChapters(t *testing.T) {
 	os.WriteFile(filepath.Join(stateDir, "DEV-1.verify-media", "narrate", "chapters.txt"), []byte(";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=9200\ntitle=DEV-1 · Intro\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=9200\nEND=27892\ntitle=S1 · First\n"), 0o644)
 	os.WriteFile(filepath.Join(stateDir, "DEV-1.verify-media", "DEV-1.short.webm"), nil, 0o644)
 	os.WriteFile(filepath.Join(stateDir, "DEV-1.verify-media", "S1.webm"), nil, 0o644)
-	os.WriteFile(filepath.Join(stateDir, "DEV-1.verify.md"), []byte("VERDICT: fail\nS1 First: fail — broke\nVideo: /x/DEV-1.verify-media/DEV-1.short.webm\n"), 0o644)
+	os.WriteFile(filepath.Join(stateDir, "DEV-1.verify.md"), []byte("VERDICT: fail\nS1 First: fail — broke. Screenshot: /x.jpeg\nVideo: /x/DEV-1.verify-media/DEV-1.short.webm\n"), 0o644)
+	os.MkdirAll(filepath.Join(stateDir, "holdout"), 0o755)
+	os.WriteFile(filepath.Join(stateDir, "holdout", "DEV-1.md"), []byte("S1: First\nGiven: a\nThen: b\n\nS2: Other\nGiven: c\n"), 0o644)
 	m := mediaFiles("DEV-1")
 	if len(m) != 2 || !m[0].Current || m[0].Name != "DEV-1.short.webm" || m[1].Current {
 		t.Fatalf("current video not first: %+v", m)
 	}
 	ch := m[0].Chapters
-	if len(ch) != 2 || ch[1].Start != 9.2 || ch[1].Title != "S1 · First" || ch[1].Verdict != "fail" || ch[0].Verdict != "" {
+	if len(ch) != 2 || ch[1].Start != 9.2 || ch[1].Title != "S1 · First" || ch[1].Verdict != "fail" || ch[0].Verdict != "" || ch[1].Text != "Given: a\nThen: b" || ch[0].Text != "" || ch[1].Result != "broke." {
 		t.Fatalf("chapters: %+v", ch)
 	}
 }

@@ -318,13 +318,13 @@ type mediaOut struct {
 }
 
 type chapter struct {
-	Start, End     float64
-	Title, Verdict string
+	Start, End                   float64
+	Title, Verdict, Text, Result string
 }
 
 var (
 	chapterRe = regexp.MustCompile(`(?m)^START=(\d+)\nEND=(\d+)\ntitle=(.*)$`)
-	verdictRe = regexp.MustCompile(`(?m)^(S\d+)\b[^:\n]*: (pass|fail|blocked|not run)`)
+	verdictRe = regexp.MustCompile(`(?m)^(S\d+)\b[^:\n]*: (pass|fail|blocked|not run)(?: — (.*))?$`)
 )
 
 func chapters(key string) []chapter {
@@ -332,10 +332,20 @@ func chapters(key string) []chapter {
 	if err != nil {
 		return nil
 	}
-	verdicts := map[string]string{}
+	verdicts, results := map[string]string{}, map[string]string{}
 	if r, err := os.ReadFile(filepath.Join(stateDir, key+".verify.md")); err == nil {
 		for _, m := range verdictRe.FindAllStringSubmatch(string(r), -1) {
 			verdicts[m[1]] = m[2]
+			results[m[1]], _, _ = strings.Cut(m[3], " Screenshot: ")
+		}
+	}
+	texts := map[string]string{}
+	if h, err := os.ReadFile(filepath.Join(stateDir, "holdout", key+".md")); err == nil {
+		for _, blk := range strings.Split(strings.ReplaceAll(string(h), "\r", ""), "\n\n") {
+			head, rest, _ := strings.Cut(strings.TrimSpace(blk), "\n")
+			if id, _, ok := strings.Cut(head, ":"); ok {
+				texts[id] = rest
+			}
 		}
 	}
 	var out []chapter
@@ -343,7 +353,7 @@ func chapters(key string) []chapter {
 		s, _ := strconv.ParseFloat(m[1], 64)
 		e, _ := strconv.ParseFloat(m[2], 64)
 		id, _, _ := strings.Cut(m[3], " ")
-		out = append(out, chapter{s / 1000, e / 1000, m[3], verdicts[id]})
+		out = append(out, chapter{s / 1000, e / 1000, m[3], verdicts[id], texts[id], results[id]})
 	}
 	return out
 }
@@ -372,7 +382,7 @@ func mediaFiles(key string) []mediaOut {
 			if err != nil || e.IsDir() || !mediaExtRe.MatchString(e.Name()) {
 				continue
 			}
-			m := mediaOut{URL: "/media/" + dir + "/" + url.PathEscape(e.Name()), Name: e.Name(), Kind: "image", When: fi.ModTime().Format("2006-01-02 15:04"), at: fi.ModTime()}
+			m := mediaOut{URL: "/media/" + dir + "/" + url.PathEscape(e.Name()) + "?v=" + strconv.FormatInt(fi.ModTime().Unix(), 10), Name: e.Name(), Kind: "image", When: fi.ModTime().Format("2006-01-02 15:04"), at: fi.ModTime()}
 			m.Stale = kind == "verify" && !reportAt.IsZero() && reportAt.Sub(m.at) > time.Hour
 			if kind == "layout" {
 				m.Name = "layout · " + m.Name

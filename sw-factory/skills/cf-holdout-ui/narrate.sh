@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 dir=$(realpath "$1") key=$2
-font=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+font=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf bodyfont=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
 work=$dir/narrate
 rm -rf "$work"; mkdir -p "$work"
 enc=(-c:v libvpx-vp9 -deadline realtime -cpu-used 8 -row-mt 1 -crf 40 -b:v 0 -pix_fmt yuv420p -r 25 -c:a libopus -ar 48000 -ac 1)
@@ -29,11 +29,16 @@ speak() {
 }
 
 card() {
-  local id=$1 title=$2 audio=$3 out=$4
+  local id=$1 title=$2 audio=$3 out=$4 body=${5:-}
   printf '%s' "$title" | fold -s -w 38 > "$work/$id.title"
   local d; d=$(max "$(add "$(dur "$audio")" 0.3)" 2)
+  local vf="drawtext=fontfile=$font:textfile=$work/$id.title:expansion=none:fontcolor=white:fontsize=52:line_spacing=14:x=(w-tw)/2:y=(h-th)/2"
+  if [[ -n $body ]]; then
+    printf '%s' "$body" | fold -s -w 60 > "$work/$id.body"
+    vf="${vf%y=*}y=h/2-th-24,drawtext=fontfile=$bodyfont:textfile=$work/$id.body:expansion=none:fontcolor=0xcbd5e1:fontsize=32:line_spacing=12:x=(w-tw)/2:y=h/2+24"
+  fi
   ffmpeg -v error -y -f lavfi -i "color=c=0x1e293b:s=1280x720:d=$d:r=25" -i "$audio" \
-    -vf "drawtext=fontfile=$font:textfile=$work/$id.title:expansion=none:fontcolor=white:fontsize=52:line_spacing=14:x=(w-tw)/2:y=(h-th)/2" \
+    -vf "$vf" \
     -af apad -t "$d" "${enc[@]}" "$out"
 }
 
@@ -53,8 +58,9 @@ t=0
 while IFS=$'\t' read -r -u 3 id title text; do
   [[ -n $id ]] || continue
   IFS='|' read -r -a s <<< "$text"
-  if [[ -f $dir/$id.webm ]]; then speak "$work/$id.head.m4a" "${s[0]}"; else speak "$work/$id.head.m4a" "${s[@]}"; fi
-  card "$id" "$title" "$work/$id.head.m4a" "$work/$id.card.webm"
+  body=""
+  if [[ -f $dir/$id.webm ]]; then speak "$work/$id.head.m4a" "${s[0]}"; else speak "$work/$id.head.m4a" "${s[@]}"; body="${s[*]}"; fi
+  card "$id" "$title" "$work/$id.head.m4a" "$work/$id.card.webm" "$body"
   segs=("$work/$id.card.webm")
   if [[ -f $dir/$id.webm ]]; then
     speak "$work/$id.body.m4a" "${s[@]:1}"

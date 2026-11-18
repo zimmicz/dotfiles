@@ -141,6 +141,13 @@ th.num{font:700 12px var(--sans)}
 .ch.v-pass{border-left-color:var(--green)}.ch.v-pass b{background:var(--green);color:#03210f}
 .ch.v-fail{border-left-color:var(--red)}.ch.v-fail b{background:var(--red);color:#2a0505}
 .ch.v-blocked,.ch.v-notrun{border-left-color:var(--yellow)}.ch.v-blocked b,.ch.v-notrun b{background:var(--yellow);color:#231a00}
+.chtext{margin-top:10px;padding:12px 16px;border-radius:7px;background:var(--panel);border:1px solid var(--line);font-size:15px;line-height:1.5}
+.chtext h6{margin:0 0 8px;font-size:15px}
+.chtext p{margin:4px 0}
+.chtext p b{display:inline-block;min-width:56px;color:var(--accent);font-size:13px;letter-spacing:.05em;text-transform:uppercase}
+.chtext p.res{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.chtext p.res b{margin-right:8px;min-width:0}
+.chtext p.res.v-pass b{color:var(--green)}.chtext p.res.v-fail b{color:var(--red)}.chtext p.res.v-blocked b,.chtext p.res.v-notrun b{color:var(--yellow)}
 .media .videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
 .media h5{margin:18px 0 8px;font-size:12.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
 .media figure.current{border:2px solid var(--green);box-shadow:0 0 0 4px #3ddc8422}
@@ -375,14 +382,25 @@ async function loadBody(full) {
   const fig = (x, inner) => `<figure class="${x.Current ? 'current' : x.Stale ? 'stale' : ''}">${inner}<figcaption title="${esc(x.Name)}">${badge(x)}<span>${esc(x.Name)}</span><i>${esc(x.When)}</i></figcaption></figure>`
   const video = x => fig(x, `<video controls preload="metadata" src="${esc(x.URL)}"></video>`)
   const mmss = s => `${s / 60 | 0}:${String(s % 60 | 0).padStart(2, '0')}`
-  const chaps = x => !x.Chapters?.length ? '' : `<div class="chbar">${x.Chapters.map((c, i) => `<i class="v-${esc(c.Verdict.replace(' ', ''))}" data-c="${i}" data-s="${c.Start}" data-e="${c.End}" style="flex:${c.End - c.Start}" title="${esc(c.Title)}"></i>`).join('')}</div><div class="chaps">${x.Chapters.map((c, i) => `<div class="ch v-${esc(c.Verdict.replace(' ', ''))}" data-c="${i}" data-s="${c.Start}" data-e="${c.End}"><i>${mmss(c.Start)}</i><span>${esc(c.Title)}</span>${c.Verdict ? `<b>${esc(c.Verdict)}</b>` : ''}</div>`).join('')}</div>`
+  const chaps = x => !x.Chapters?.length ? '' : `<div class="chbar">${x.Chapters.map((c, i) => `<i class="v-${esc(c.Verdict.replace(' ', ''))}" data-c="${i}" data-s="${c.Start}" data-e="${c.End}" style="flex:${c.End - c.Start}" title="${esc(c.Title)}"></i>`).join('')}</div><div class="chaps">${x.Chapters.map((c, i) => `<div class="ch v-${esc(c.Verdict.replace(' ', ''))}" data-c="${i}" data-s="${c.Start}" data-e="${c.End}"><i>${mmss(c.Start)}</i><span>${esc(c.Title)}</span>${c.Verdict ? `<b>${esc(c.Verdict)}</b>` : ''}</div>`).join('')}</div><div class="chtext" hidden></div>`
+  const gwt = c => c.Text.split('\n').map(l => { const [, k, r] = l.match(/^(Given|When|Then|And):\s*(.*)$/) || [, '', l]; return `<p>${k ? `<b>${k}</b>` : ''}${esc(r)}</p>` }).join('')
   const main = m.filter(x => x.Current).map(x => video(x) + chaps(x)).join(''), vids = m.filter(x => x.Kind === 'video' && !x.Current).map(video).join('')
   const shots = m.filter(x => x.Kind !== 'video').map(x => fig(x, `<img src="${esc(x.URL)}">`)).join('')
   el.innerHTML = (m.length ? `<div class="media">${main ? `<div class="main">${main}</div>` : ''}${vids ? `<h5>Other recordings (per scenario / raw)</h5><div class="videos">${vids}</div>` : ''}${shots ? `<h5>Screenshots</h5><div class="shots">${shots}</div>` : ''}</div>` : '') + d.HTML
   el.querySelectorAll('img[src$=".webm"],img[src$=".mp4"]').forEach(i => { const v = document.createElement('video'); v.controls = true; v.src = i.src; i.replaceWith(v) })
   el.querySelectorAll('a').forEach(a => a.target = '_blank')
   const mv = el.querySelector('.main video')
-  if (mv) mv.ontimeupdate = () => el.querySelectorAll('.main [data-c]').forEach(c => c.classList.toggle('on', mv.currentTime >= +c.dataset.s && mv.currentTime < +c.dataset.e))
+  const cs = m.find(x => x.Current)?.Chapters || []
+  let shown
+  if (mv) mv.ontimeupdate = () => {
+    const t = mv.currentTime, i = cs.findIndex(c => t >= c.Start && t < c.End)
+    el.querySelectorAll('.main [data-c]').forEach(c => c.classList.toggle('on', +c.dataset.c === i))
+    if (i === shown) return
+    shown = i
+    const c = cs[i], box = el.querySelector('.chtext')
+    const res = c?.Result ? `<p class="res v-${esc(c.Verdict.replace(' ', ''))}"><b>${esc(c.Verdict)}</b>${esc(c.Result)}</p>` : ''
+    if (box) { box.hidden = !c?.Text && !res; box.innerHTML = c ? `<h6>${esc(c.Title)}</h6>${c.Text ? gwt(c) : ''}${res}` : '' }
+  }
   if ((t === 'log' || t === 'comments') && (fresh || atEnd)) el.scrollTop = el.scrollHeight
   else if (fresh) el.scrollTop = 0
 }
