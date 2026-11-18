@@ -23,6 +23,7 @@ Read by the independent reviewer (`/mattpocock-skills:code-review` in `/cf-ticke
 - No imperative `queryClient.refetchQueries` after mutations; global MutationCache invalidates, awaited refresh via `meta.awaits` prefix key — evidence: session 2026-11-05, !4423 (imperative refetch note), DEV-3604 — lint: no-restricted-syntax (planned in DEV-3604)
 - `useSuspenseQuery` consumer → own `Suspense` (with fallback) + `ErrorBoundary`, wrapping only the data-dependent part; controls/headers (selects, season picker) stay mounted. No fallback-less `Suspense` unmounting a whole panel — evidence: session 2026-11-05, !4423 ("error/pending state"), DEV-3594 — lint: no
 - `set-state-in-effect` violation → derive during render (`impersonated ? farm : currentFarm`) or reset local state via `key` on an inner component; sync state is the last option, never `eslint-disable`. Two wrappers with identical sync logic → one shared component — evidence: session 2026-11-06, DEV-3583/DEV-3586 grill plans accepted ("ok"), !4429, !4441 — lint: react-hooks/set-state-in-effect (flags only, fix pattern not enforced)
+- State lives with its only consumer (row expand/poll state → `useFileRowChildren` hook used by `FileRow`), not in shared context; shared context = one state object changed via named actions (`startConversion`/`finishConversion`), no boolean derivable from other state (`inProgress` vs `createdFileId !== null`) — evidence: session 2026-11-11, !4472 ("is the state where it should be?") — lint: no
 
 ## types
 
@@ -33,6 +34,7 @@ Read by the independent reviewer (`/mattpocock-skills:code-review` in `/cf-ticke
 - No pointless `String()` conversions — evidence: !3324 — lint: @typescript-eslint/no-unnecessary-type-conversion (needs ts-eslint v8.30+)
 - Type-only imports → `import type { … }`; plain import only for real value use — evidence: "make type only imports say type" — lint: @typescript-eslint/consistent-type-imports (not configured)
 - `sx` props typed `SxProps<Theme>`, not `BoxProps["sx"]` — evidence: !2172 — lint: no
+- Field the data always carries (`Sowing.parcelId`) → required in the type, no optional + `??` fallback to a proxy value (`rowParcelId`) — evidence: session 2026-11-11, !4462 ("Sounds good." to making `parcelId` required) — lint: no
 
 ## styling/DS
 
@@ -60,3 +62,8 @@ Read by the independent reviewer (`/mattpocock-skills:code-review` in `/cf-ticke
 - Detail routes registered in the module's `*_URLS` constant, not ad hoc paths — evidence: !1535 — lint: no
 - `window.open` external URL → `"noopener,noreferrer"` — evidence: !2734 — lint: no
 - Touched `.js`/`.jsx` file → convert to TS — evidence: !1883 — lint: no
+- Import boundary = module (`app/<module>/`, `common`+`shared` count as one): `../` at any depth OK inside a module; import leaving the module → `@/` alias — evidence: session 2026-11-11, DEV-3688 grill round 2 ("`../` allowed inside a module") — lint: oxlint no-restricted-imports overrides (planned DEV-3688)
+
+## naming
+
+- New/touched identifiers, file + folder names, `data-testid`s, E2E step text use `GLOSSARY.md` terms; `_Avoid_` words (`sowing` → `seed application`, `activity` → `action`) never copied from neighbouring legacy code (`add-sowing/`, `use-sowing-subpanel.ts`). i18n ids renamed only together with their keys in all 8 `app/shared/lang/*.json`, else keep the existing keys (raw keys in UI otherwise) — evidence: session 2026-11-16, !4491 (MR notes on "sowing" naming vs glossary, "yes, in this ticket" to renaming older names; rename of ids alone failed holdout S1/S9) — lint: no
