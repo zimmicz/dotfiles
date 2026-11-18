@@ -220,3 +220,34 @@ func TestParseUnits(t *testing.T) {
 		t.Errorf("parseUnits = %v, want %v", got, want)
 	}
 }
+
+func TestAcceptProposal(t *testing.T) {
+	old := stateDir
+	stateDir = t.TempDir()
+	defer func() { stateDir = old }()
+	for _, d := range []string{"holdout", "holdout-proposed", "notes"} {
+		os.MkdirAll(filepath.Join(stateDir, d), 0o755)
+	}
+	os.WriteFile(filepath.Join(stateDir, "holdout", "DEV-1.md"), []byte("## S1: a\nThen: old\n"), 0o644)
+	os.WriteFile(filepath.Join(stateDir, "holdout-proposed", "DEV-1.md"), []byte("## S1: a\nThen: new\n"), 0o644)
+	os.WriteFile(filepath.Join(stateDir, "holdout-proposed", "DEV-1.why"), []byte("S1 changed: ticket says new\nS2 kept: fine\n"), 0o644)
+	os.WriteFile(filepath.Join(stateDir, "notes", "DEV-1.md"), []byte("## Analysis\nx\n## Holdout changes\n2026-01-01 S4 changed (accepted by Michal)\n"), 0o644)
+	if d := proposalDiff("DEV-1"); !strings.Contains(d, "-Then: old") || !strings.Contains(d, "+Then: new") {
+		t.Fatalf("diff: %q", d)
+	}
+	got, err := acceptProposal("DEV-1", time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC))
+	if err != nil || len(got) != 1 {
+		t.Fatalf("accept: %v %v", got, err)
+	}
+	b, _ := os.ReadFile(filepath.Join(stateDir, "holdout", "DEV-1.md"))
+	n, _ := os.ReadFile(filepath.Join(stateDir, "notes", "DEV-1.md"))
+	if string(b) != "## S1: a\nThen: new\n" || len(proposedFiles("DEV-1")) != 0 || fileExists(filepath.Join(stateDir, "holdout-proposed", "DEV-1.why")) {
+		t.Fatalf("holdout %q, proposal left", b)
+	}
+	if string(n) != "## Analysis\nx\n## Holdout changes\n2026-11-18 S1 changed (accepted by Michal)\n2026-01-01 S4 changed (accepted by Michal)\n" {
+		t.Fatalf("notes %q", n)
+	}
+	if _, err := acceptProposal("DEV-1", time.Now()); err == nil {
+		t.Fatal("second accept should fail")
+	}
+}

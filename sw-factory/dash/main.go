@@ -108,25 +108,26 @@ func stage(ls []string) string {
 }
 
 var stageStyle = map[string]struct{ icon, color string }{
-	"plan gate":       {"📋", "33"},
-	"questions":       {"❓", "33"},
-	"verified":        {"🧪", "34"},
-	"verify failed":   {"❗", "31"},
-	"analysis failed": {"❌", "31"},
-	"bailed":          {"❌", "31"},
-	"implementing":    {"🔨", "36"},
-	"mr":              {"🔍", "34"},
-	"reviewed":        {"✅", "32"},
-	"quiz":            {"🎓", "33"},
-	"re-verify":       {"🔁", "36"},
-	"review fix":      {"🔧", "36"},
-	"review findings": {"🔶", "33"},
-	"new":             {"🆕", "36"},
-	"done":            {"🏁", "2"},
-	"RC":              {"📦", "2"},
-	"nightly":         {"🌙", "2"},
-	"-":               {"📄", "2"},
-	"todo":            {"📝", "35"},
+	"plan gate":        {"📋", "33"},
+	"questions":        {"❓", "33"},
+	"verified":         {"🧪", "34"},
+	"verify failed":    {"❗", "31"},
+	"holdout proposal": {"✏️", "33"},
+	"analysis failed":  {"❌", "31"},
+	"bailed":           {"❌", "31"},
+	"implementing":     {"🔨", "36"},
+	"mr":               {"🔍", "34"},
+	"reviewed":         {"✅", "32"},
+	"quiz":             {"🎓", "33"},
+	"re-verify":        {"🔁", "36"},
+	"review fix":       {"🔧", "36"},
+	"review findings":  {"🔶", "33"},
+	"new":              {"🆕", "36"},
+	"done":             {"🏁", "2"},
+	"RC":               {"📦", "2"},
+	"nightly":          {"🌙", "2"},
+	"-":                {"📄", "2"},
+	"todo":             {"📝", "35"},
 }
 
 const (
@@ -150,7 +151,7 @@ func group(r row) int {
 		return gTodo
 	case r.parked:
 		return gParked
-	case slices.Contains([]string{"plan gate", "questions", "quiz", "reviewed", "verify failed", "review findings", "analysis failed", "bailed"}, r.stage):
+	case slices.Contains([]string{"plan gate", "questions", "quiz", "reviewed", "verify failed", "holdout proposal", "review findings", "analysis failed", "bailed"}, r.stage):
 		return gNeeds
 	}
 	return gFlight
@@ -467,6 +468,83 @@ func planPath(key string) string {
 	return m[0]
 }
 
+func proposedFiles(key string) []string {
+	var out []string
+	for _, f := range []string{key + ".md", key + ".api.md"} {
+		if p := filepath.Join(stateDir, "holdout-proposed", f); fileExists(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+func proposalDiff(key string) string {
+	var b strings.Builder
+	for _, p := range proposedFiles(key) {
+		cur := filepath.Join(stateDir, "holdout", filepath.Base(p))
+		if !fileExists(cur) {
+			cur = os.DevNull
+		}
+		out, _ := exec.Command("diff", "-u", "--label", "current/"+filepath.Base(p), "--label", "proposed/"+filepath.Base(p), cur, p).Output()
+		b.Write(out)
+	}
+	return b.String()
+}
+
+var changedRe = regexp.MustCompile(`(?m)^([SA]\d+) changed`)
+
+func proposalWhy(key string) (why string, changed []string) {
+	b, _ := os.ReadFile(filepath.Join(stateDir, "holdout-proposed", key+".why"))
+	for _, m := range changedRe.FindAllStringSubmatch(string(b), -1) {
+		changed = append(changed, m[1])
+	}
+	return strings.TrimSpace(string(b)), changed
+}
+
+func acceptProposal(key string, now time.Time) (accepted []string, err error) {
+	_, changed := proposalWhy(key)
+	for _, p := range proposedFiles(key) {
+		dst := filepath.Join(stateDir, "holdout", filepath.Base(p))
+		if err := os.Rename(p, dst); err != nil {
+			return accepted, err
+		}
+		accepted = append(accepted, dst)
+	}
+	if len(accepted) == 0 {
+		return nil, fmt.Errorf("no holdout proposal for %s", key)
+	}
+	os.Remove(filepath.Join(stateDir, "holdout-proposed", key+".why"))
+	notes := filepath.Join(stateDir, "notes", key+".md")
+	b, _ := os.ReadFile(notes)
+	ids := strings.Join(changed, ",")
+	if ids == "" {
+		ids = "scenarios"
+	}
+	line := now.Format("2006-01-02") + " " + ids + " changed (accepted by Michal)\n"
+	c, head := string(b), "## Holdout changes\n"
+	if i := strings.Index(c, head); i >= 0 {
+		c = c[:i+len(head)] + line + c[i+len(head):]
+	} else {
+		if c != "" && !strings.HasSuffix(c, "\n") {
+			c += "\n"
+		}
+		c += "\n" + head + line
+	}
+	return accepted, os.WriteFile(notes, []byte(c), 0o644)
+}
+
+func rejectProposal(key string) {
+	for _, p := range proposedFiles(key) {
+		os.Remove(p)
+	}
+	os.Remove(filepath.Join(stateDir, "holdout-proposed", key+".why"))
+}
+
 func retryAction(ls []string) (remove, add string) {
 	for _, l := range ls {
 		switch l {
@@ -564,6 +642,8 @@ func collect(issues, todos []issue, busy bool, units map[string]string) []row {
 		r.seen, _ = time.Parse("2006-01-02T15:04:05.000-0700", i.Fields.Updated)
 		if s, ok := parkedStage(i.Fields.Status.Name, i.Fields.Status.StatusCategory.Key); ok {
 			r.stage, r.parked = s, true
+		} else if len(proposedFiles(i.Key)) > 0 {
+			r.stage = "holdout proposal"
 		}
 		rows[i.Key] = r
 	}

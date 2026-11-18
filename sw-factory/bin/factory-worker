@@ -15,7 +15,9 @@ HANDLED=$LOG_DIR/handled
 STALLED=$LOG_DIR/stalled
 GLHANDLED=$LOG_DIR/handled-mr
 TNOTES=$LOG_DIR/notes
-mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED
+SUSPECT=$LOG_DIR/holdout-suspect
+PROPOSED=$LOG_DIR/holdout-proposed
+mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED $SUSPECT $PROPOSED
 
 HEADLESS_SETTINGS='{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false,"slack@claude-plugins-official":false,"cf-planning@cleverfarm":false,"cf-release@cleverfarm":false,"cf-kb@cleverfarm":false,"cf-eod@cleverfarm":false,"cf-bug-report@cleverfarm":false,"cf-cli-skill@cleverfarm":false,"cf-investigator@cleverfarm":false,"cf-cc@cleverfarm":false,"typescript-lsp@claude-plugins-official":false}}'
 PW_ARGS='["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools"]'
@@ -171,6 +173,36 @@ analyze() {
   return $RC
 }
 
+amend() {
+  local KEY=$1 LOG=$LOG_DIR/$1.log WT=($REPOS/*/.worktrees/$1-*(N/[1])) BOX=$LOG_DIR/amend/$1 F
+  [[ -f $SUSPECT/$KEY.md ]] || return 1
+  echo "=== holdout amend $KEY $(date -Iseconds)" | tee -a $LOG
+  rm -rf $BOX $PROPOSED/$KEY.md $PROPOSED/$KEY.api.md $PROPOSED/$KEY.why
+  mkdir -p $BOX
+  for F in $WT/TICKET.md:TICKET.md $WT/PLAN.md:PLAN.md $HOLDOUT/$KEY.md:holdout.md $HOLDOUT/$KEY.api.md:holdout.api.md \
+      $LOG_DIR/$KEY.verify.md:verify.md $LOG_DIR/$KEY.verify-api.md:verify-api.md $SUSPECT/$KEY.md:suspect.md; do
+    [[ -f ${F%:*} ]] && cp ${F%:*} $BOX/${F##*:}
+  done
+  (cd $BOX && claude -p "/cf-work-headless $KEY --holdout-amend" \
+    --model sonnet --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
+    --allowedTools "Read(./*) Edit(/$PROPOSED/$KEY.md) Edit(/$PROPOSED/$KEY.api.md) Edit(/$PROPOSED/$KEY.why) Skill" \
+    --disallowedTools "Bash Agent WebFetch WebSearch Edit Read(/$REPOS/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Edit(/$HOLDOUT/**) Edit(/$REPOS/**) Edit(./**)" \
+    --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
+  rm -rf $BOX $SUSPECT/$KEY.md
+  [[ -f $PROPOSED/$KEY.md || -f $PROPOSED/$KEY.api.md ]]
+}
+
+proposal() { [[ -f $PROPOSED/$1.md || -f $PROPOSED/$1.api.md ]] }
+
+after_amend() {
+  if amend $1; then
+    note $1 "holdout change proposed, review in dash (A accept / X reject): $(paste -sd' ' $PROPOSED/$1.why 2>/dev/null)"
+    return 0
+  fi
+  [[ -f $PROPOSED/$1.why ]] && { note $1 "scenario suspect rejected by analyzer: $(paste -sd' ' $PROPOSED/$1.why)"; rm -f $PROPOSED/$1.why }
+  return 1
+}
+
 wm_window() {
   local WT=$1 LOG=$2
   tmux ls >/dev/null 2>&1 || return 0
@@ -198,7 +230,7 @@ implement() {
   (cd $WT && TMUX_PANE=$PANE claude -p "/cf-ticket-headless $KEY ${3:-}" $CARGS \
     --model $TIER $DIRS --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config $LOG_DIR/$KEY.layout-media lean-ctx codegraph)" \
     --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__playwright Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
-    --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**)" \
+    --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**) Edit(/$PROPOSED/**) Write(/$PROPOSED/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | tee $LOG_DIR/$KEY.stream.jsonl | stream >>$LOG)
   local MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null | jq -r '.[0].web_url // empty')
   [[ -n "$MR" ]] && echo "  mr -> $MR" | tee -a $LOG && echo "$MR" >$LOG_DIR/$KEY.mr
@@ -246,6 +278,8 @@ verify_blocker() {
   local F=$(mktemp)
   if [[ ! -f $HOLDOUT/$1.md ]]; then
     echo "no holdout scenarios file"
+  elif proposal $1; then
+    echo "holdout proposal waiting for Michal (dash A/X)"
   elif WHY=$F verify_targets $1 $2 >/dev/null </dev/null; then
     rm -f $F
     return 1
@@ -268,7 +302,7 @@ verify() {
   local KEY=$1 KIND=${3:-ui} LOG=$LOG_DIR/$1.log WT0 T
   local OUT=$LOG_DIR/$KEY.verify$([[ $KIND == api ]] && echo -api).md SCEN=$HOLDOUT/$KEY$([[ $KIND == api ]] && echo .api).md
   local TARGETS=() WTA=() RS=(${(s:,:)2})
-  [[ -f $SCEN ]] || return 2
+  [[ -f $SCEN ]] && ! proposal $KEY || return 2
   T=$(verify_targets $KEY $2) || return 2
   TARGETS=(${(f)T})
   WTA=($REPOS/${RS[1]}/.worktrees/${KEY}-*(N/[1]))
@@ -285,7 +319,7 @@ verify() {
     --model sonnet --settings "$HEADLESS_SETTINGS" \
     --strict-mcp-config --mcp-config "$MCP" \
     --allowedTools "Read Skill Write(/$OUT) Write(/$MEDIA/narration.tsv) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(bash $HOME/.claude/skills/cf-holdout-ui/narrate.sh $MEDIA $KEY) Bash(bash $HOME/.claude/skills/cf-holdout-api/run-scenarios.sh:*)" \
-    --disallowedTools "Edit Bash(git:*) Read(/$TNOTES/**)" \
+    --disallowedTools "Edit Bash(git:*) Edit(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)
   echo "  ${VERDICT:-no report}" | tee -a $LOG
@@ -455,7 +489,7 @@ review() {
   (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-review $KEY repos=${(j:,:)${(f)T}} branch=${WT0:t} report=$OUT$PRIOR" $CARGS \
     --model opus --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '' lean-ctx codegraph)" \
     --allowedTools "Read Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Write(/$OUT) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git merge-base:*) Bash(git fetch:*) Bash(glab mr note:*) Bash(glab api:*) Bash(jq:*)" \
-    --disallowedTools "Edit Bash(git push:*) Bash(git commit:*) Bash(git checkout:*) Bash(git reset:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**)" \
+    --disallowedTools "Edit Bash(git push:*) Bash(git commit:*) Bash(git checkout:*) Bash(git reset:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)
   echo "  ${VERDICT:-no report}" | tee -a $LOG
@@ -546,7 +580,7 @@ resolve_conflict() {
     (cd $WT && TMUX_PANE=$PANE claude -p "Rebase of branch $BR onto origin/$TGT is in progress in this worktree and stopped on conflicts. No human present, never ask. Run /mattpocock-skills:resolving-merge-conflicts. Intent of this branch: its MR $URL + PLAN.md / TICKET.md here if present. Intent of the other side: the commits on origin/$TGT touching each conflicted file (git log origin/$TGT -- <file>) and their MRs (glab api). Keep both intents. pnpm-lock.yaml: never hand-merge, git checkout --ours it, then pnpm install --lockfile-only. Continue with GIT_EDITOR=true git rebase --continue until the rebase is finished. Then run the repo's lint, typecheck and the tests touching the conflicted files (per its CLAUDE.md), fix only what the resolution broke, amend into the rebased commits. Never push, never skip or drop commits. Not confident about a hunk → stop. Write $REPORT: first line exactly RESOLVED or FAILED: <reason>, then markdown bullets for a reviewer skimming an MR note, one per conflicted file: - \`<path>\`: kept <X>, dropped <Y>, <why in one short clause> (max 2 lines each, no paragraphs). If the resolution forced a follow-up edit in a file that did not conflict, one more bullet for it. Last bullet: - Checks: <what ran, result>." \
       --model opus --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '' lean-ctx codegraph)" \
       --allowedTools "Read Edit Write Skill mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Bash(git:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Bash(glab api:*) Bash(glab mr view:*) Bash(jq:*)" \
-      --disallowedTools "Bash(git push:*) Bash(git reset --hard:*) Bash(git rebase --skip:*) Bash(git rebase --abort:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**)" \
+      --disallowedTools "Bash(git push:*) Bash(git reset --hard:*) Bash(git rebase --skip:*) Bash(git rebase --abort:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**) Edit(/$PROPOSED/**) Write(/$PROPOSED/**)" \
       --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
     if rebasing $WT || [[ "$(head -1 $REPORT 2>/dev/null)" != RESOLVED ]]; then
       rebasing $WT && git -C $WT rebase --abort
@@ -625,6 +659,7 @@ stage_mr() {
   local GLID=$(gl_human_max $1 $RS </dev/null) U=$(gl_unanswered $1 $RS </dev/null) AFTER=$(<$GLHANDLED/$1 2>/dev/null || echo 0)
   [[ -n "$U" ]] && AFTER=$(( U - 1 ))
   implement $1 $2 "--mr-notes-after $AFTER"
+  after_amend $1
   if answered_since $1 $ID; then
     mark_handled $1 $ID
     [[ -n "$GLID" ]] && echo $GLID >$GLHANDLED/$1
@@ -660,7 +695,8 @@ stage_verify() {
     relabel $KEY "" ai-verify-retry
     H0=$(wt_heads $KEY)
     implement $KEY ${REPO%%,*} "--verify-fix $REPORT"
-    if [[ "$(wt_heads $KEY)" == "$H0" ]]; then relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios failed, fix round pushed nothing, needs you: \`$REPORT\` + Jira comment"
+    if after_amend $KEY; then relabel $KEY ai-verify-retry ai-verify-failed
+    elif [[ "$(wt_heads $KEY)" == "$H0" ]]; then relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios failed, fix round pushed nothing, needs you: \`$REPORT\` + Jira comment"
     else note $KEY "holdout scenarios failed, fix pushed, re-verify next run ($(failed_scenarios $REPORT) first)"; fi
   fi
   return 0

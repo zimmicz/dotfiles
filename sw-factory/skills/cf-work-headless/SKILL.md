@@ -9,12 +9,14 @@ description: |
   human reply: answers it, updates PLAN.md + scenarios. With `--grill --round N`
   (opt-in, GRILL=1): before planning, asks blocking questions in a
   Jira comment (numbered, each with a recommended answer) and writes no plan
-  until they are answered.
+  until they are answered. With `--holdout-amend`: judges scenarios the
+  implementer flagged as wrong against ticket + PLAN.md only (no code, no diff)
+  and writes a proposed scenarios file for Michal to accept.
 ---
 
 # Analyze a ticket, unattended
 
-Arguments: `<KEY> [--grill --round N]`
+Arguments: `<KEY> [--grill --round N | --holdout-amend]`
 
 No user present — never ask, never wait. cwd = the worktree `cf-work` created (`TICKET.md` in its root). Read-only on code: writes are `PLAN.md`, the holdout files, the grill outcome file and `~/.local/state/sw-factory/notes/<KEY>.md` (ticket memory, step 3). A `Conversation compacted` notice mid-run → re-read this skill (`~/.claude/skills/cf-work-headless/SKILL.md`), `TICKET.md` and the notes file before the next step.
 
@@ -83,3 +85,12 @@ Goal: the human answers questions in Jira instead of a session. One round = one 
    Then write the single line `ASK` to `~/.local/state/sw-factory/<KEY>.grill` (absolute path).
 5. No gaps → steps 4–5 as normal (settled decisions in Requirements, new assumptions as `[!]`), then write the single line `READY` to the same file.
 6. Round > 1 (no `PLAN.md`, last AI comment has `Otázky`): read the human reply in `TICKET.md` `## New comments`. `ok` accepts every `➡️`; `N jinak: X` overrides question N; free text answers what it addresses. Fold decisions into Zjištěno, recompute the frontier, then step 4 or 5. No round cap: ask as long as blocking gaps remain.
+
+## Holdout amend (`--holdout-amend`)
+
+Passed only by factory-worker after the implementer flagged scenarios as wrong. Everything above does not apply. cwd is a sandbox holding copies: `TICKET.md`, `PLAN.md`, `holdout.md` / `holdout.api.md` (current scenarios), `verify.md` / `verify-api.md` (verifier report, if any), `suspect.md` (one line per flagged scenario: `S#: reason`). Code, git, the MR diff and the implementer's notes are denied to you on purpose: the implementer is judged by these scenarios, you judge the scenarios by the ticket alone. Read only the sandbox files.
+
+1. Per `S#` in `suspect.md`: does the scenario contradict `TICKET.md` (description or a later comment by Michal) or `PLAN.md` (Requirements, `[!]`, `[?]` defaults)? The implementer's reason is a claim, not evidence; "hard to implement", "the code does Y" or a failing run alone never make a scenario wrong.
+2. At least one contradicts → write the whole corrected file (absolute path) `~/.local/state/sw-factory/holdout-proposed/<KEY>.md` (or `<KEY>.api.md` for API scenarios): only the contradicting blocks change, every other line verbatim, same `S#` ids, no scenario dropped, same format.
+3. Always write `~/.local/state/sw-factory/holdout-proposed/<KEY>.why`: one line per flagged `S#`, English, `S3 changed: <what, quoting the ticket/PLAN.md line>` or `S3 kept: <why the scenario stands>`.
+4. No Jira comment, nothing else. Last line of your answer: `done`.

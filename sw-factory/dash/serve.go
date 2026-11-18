@@ -96,41 +96,42 @@ func look(r row, mrs map[string]mrInfo) (icon, color, label string) {
 }
 
 var nextSteps = map[string][2]string{
-	"questions":       {"you", "answer the questions in Jira (R)"},
-	"plan gate":       {"you", "approve plan (a) or reply (R)"},
-	"quiz":            {"you", "take the quiz (Q)"},
-	"reviewed":        {"you", "gate green: mark ready, get it merged (m)"},
-	"verify failed":   {"you", "read verify tab, then retry (t) or reply (R)"},
-	"review findings": {"you", "read review tab, then retry (t)"},
-	"analysis failed": {"you", "read log, then retry (t)"},
-	"bailed":          {"you", "read log, then retry (t)"},
-	"todo":            {"you", "feed to factory (f)"},
-	"conflict: b":     {"you", "let the agent resolve it (b)"},
-	"rebase failed":   {"you", "resolve the conflict by hand"},
-	"gate failed":     {"you", "finish quiz (Q) or skip gate (s)"},
-	"gate pending":    {"you", "finish quiz (Q) or skip gate (s)"},
-	"ci failed":       {"you", "check the pipeline (m)"},
-	"changes asked":   {"you", "address reviewer changes (m)"},
-	"open threads":    {"you", "resolve MR threads (m)"},
-	"no reviewer":     {"you", "assign a reviewer (m)"},
-	"approved":        {"you", "merge (m)"},
-	"in review":       {"reviewer", "waiting for review"},
-	"ci running":      {"ci", "pipeline running"},
-	"draft":           {"factory", "draft MR: verify + review pending"},
-	"rebase pending":  {"factory", "ai-rebase will resolve"},
-	"rebase queued":   {"factory", "ai-rebase will resolve"},
-	"auto-rebase":     {"factory", "ai-rebase will resolve"},
-	"new":             {"factory", "analysis queued"},
-	"implementing":    {"factory", "implementation queued"},
-	"mr":              {"factory", "holdout verify queued"},
-	"verified":        {"factory", "independent review queued"},
-	"review fix":      {"factory", "fixing review findings"},
-	"re-verify":       {"factory", "re-verify after review fix"},
-	"nightly":         {"-", "on nightly"},
-	"RC":              {"-", "in release candidate"},
-	"done":            {"-", "done"},
-	"merged":          {"-", "merged"},
-	"closed":          {"-", "MR closed"},
+	"questions":        {"you", "answer the questions in Jira (R)"},
+	"plan gate":        {"you", "approve plan (a) or reply (R)"},
+	"quiz":             {"you", "take the quiz (Q)"},
+	"reviewed":         {"you", "gate green: mark ready, get it merged (m)"},
+	"verify failed":    {"you", "read verify tab, then retry (t) or reply (R)"},
+	"holdout proposal": {"you", "read holdout tab diff: accept (A), reject (X) or edit (e)"},
+	"review findings":  {"you", "read review tab, then retry (t)"},
+	"analysis failed":  {"you", "read log, then retry (t)"},
+	"bailed":           {"you", "read log, then retry (t)"},
+	"todo":             {"you", "feed to factory (f)"},
+	"conflict: b":      {"you", "let the agent resolve it (b)"},
+	"rebase failed":    {"you", "resolve the conflict by hand"},
+	"gate failed":      {"you", "finish quiz (Q) or skip gate (s)"},
+	"gate pending":     {"you", "finish quiz (Q) or skip gate (s)"},
+	"ci failed":        {"you", "check the pipeline (m)"},
+	"changes asked":    {"you", "address reviewer changes (m)"},
+	"open threads":     {"you", "resolve MR threads (m)"},
+	"no reviewer":      {"you", "assign a reviewer (m)"},
+	"approved":         {"you", "merge (m)"},
+	"in review":        {"reviewer", "waiting for review"},
+	"ci running":       {"ci", "pipeline running"},
+	"draft":            {"factory", "draft MR: verify + review pending"},
+	"rebase pending":   {"factory", "ai-rebase will resolve"},
+	"rebase queued":    {"factory", "ai-rebase will resolve"},
+	"auto-rebase":      {"factory", "ai-rebase will resolve"},
+	"new":              {"factory", "analysis queued"},
+	"implementing":     {"factory", "implementation queued"},
+	"mr":               {"factory", "holdout verify queued"},
+	"verified":         {"factory", "independent review queued"},
+	"review fix":       {"factory", "fixing review findings"},
+	"re-verify":        {"factory", "re-verify after review fix"},
+	"nightly":          {"-", "on nightly"},
+	"RC":               {"-", "in release candidate"},
+	"done":             {"-", "done"},
+	"merged":           {"-", "merged"},
+	"closed":           {"-", "MR closed"},
 }
 
 func column(stage string) string {
@@ -141,7 +142,7 @@ func column(stage string) string {
 		return "analysis"
 	case "implementing", "bailed":
 		return "implement"
-	case "mr", "verify failed", "re-verify":
+	case "mr", "verify failed", "holdout proposal", "re-verify":
 		return "verify"
 	case "verified", "review findings", "review fix":
 		return "review"
@@ -432,6 +433,10 @@ func (s *server) body(key, tab string, full bool) (htm, src string, media []medi
 				parts = append(parts, "`"+p+"`\n\n"+string(b))
 			}
 		}
+		if d := proposalDiff(key); d != "" {
+			why, _ := proposalWhy(key)
+			parts = append([]string{"### Proposed change (A accept, X reject, e edit)\n\n```\n" + why + "\n```\n\n```diff\n" + d + "```"}, parts...)
+		}
 		if len(parts) > 0 {
 			src = strings.Join(parts, "\n\n---\n\n")
 		}
@@ -588,8 +593,12 @@ func (s *server) editFiles(r row, tab string) error {
 			files = []string{p}
 		}
 	case "holdout":
+		if files = proposedFiles(r.key); len(files) > 0 {
+			tab = "proposal"
+			break
+		}
 		for _, f := range []string{r.key + ".md", r.key + ".api.md"} {
-			if p := filepath.Join(stateDir, "holdout", f); func() bool { _, err := os.Stat(p); return err == nil }() {
+			if p := filepath.Join(stateDir, "holdout", f); fileExists(p) {
 				files = append(files, p)
 			}
 		}
@@ -668,6 +677,27 @@ func (s *server) reply(key, text string, images map[string]string) error {
 		return err
 	}
 	return jiraReq("POST", "/rest/api/2/issue/"+key+"/comment", map[string]string{"body": body}, nil)
+}
+
+func (s *server) acceptHoldout(key string) error {
+	why, _ := proposalWhy(key)
+	diff := proposalDiff(key)
+	paths, err := acceptProposal(key, time.Now())
+	if err != nil {
+		return err
+	}
+	for _, p := range paths {
+		if err := jiraAttach(key, p, strings.Replace(filepath.Base(p), key, "holdout", 1)); err != nil {
+			return err
+		}
+	}
+	body := "🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._\n\n" +
+		"Upravil jsem holdout scénáře, návrh analyzéru jsem schválil. Ověření poběží znovu proti nové verzi (příloha holdout.md).\n\n{noformat}\n" + why + "\n{noformat}\n\n{code:diff}\n" + diff + "{code}"
+	if err := jiraReq("POST", "/rest/api/2/issue/"+key+"/comment", map[string]string{"body": body}, nil); err != nil {
+		return err
+	}
+	ops := []map[string]string{{"remove": "ai-verified"}, {"remove": "ai-verify-failed"}, {"remove": "ai-verify-retry"}, {"remove": "ai-quizzed"}}
+	return jiraReq("PUT", "/rest/api/2/issue/"+key, map[string]any{"update": map[string]any{"labels": ops}}, nil)
 }
 
 func (s *server) action(a actionReq) (ask string, run func() (string, error), kick bool, err error) {
@@ -752,6 +782,16 @@ func (s *server) action(a actionReq) (ask string, run func() (string, error), ki
 		return "", func() (string, error) { return "session opened in tmux", tmuxWindow(false, r.key, r.resume) }, false, nil
 	case "edit":
 		return "", func() (string, error) { return "editor opened in tmux", s.editFiles(r, a.Tab) }, false, nil
+	case "holdoutAccept", "holdoutReject":
+		if !isTicket || len(proposedFiles(r.key)) == 0 {
+			return "", nil, false, fmt.Errorf("no holdout proposal for %s", r.key)
+		}
+		_, changed := proposalWhy(r.key)
+		ids := or(strings.Join(changed, ", "), "see holdout tab")
+		if a.Action == "holdoutReject" {
+			return "reject holdout proposal for " + r.key + " (" + ids + "), delete it?", func() (string, error) { rejectProposal(r.key); return "holdout proposal rejected", nil }, false, nil
+		}
+		return "accept holdout change " + ids + " for " + r.key + ": replace scenarios, attach + comment in Jira, re-verify?", func() (string, error) { return "holdout change accepted, re-verify queued", s.acceptHoldout(r.key) }, true, nil
 	}
 	return "", nil, false, fmt.Errorf("unknown action %q", a.Action)
 }

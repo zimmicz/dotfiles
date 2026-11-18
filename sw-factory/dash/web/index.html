@@ -275,8 +275,8 @@ const COLC = {todo: 'magenta', analysis: 'cyan', 'plan gate': 'yellow', implemen
 const STAGEC = {analyze: 'cyan', implement: 'blue', 'verify-ui': 'orange', 'verify-api': 'orange', verify: 'orange', review: 'magenta', conflict: 'red'}
 const HELP = [
   ['Navigate', [['j k ↑ ↓', 'move'], ['g G', 'top / bottom'], ['tab', 'next tab (shift: previous)'], ['^u ^d', 'scroll pane'], ['z', 'show other logs'], ['Z', 'zoom pane'], ['/', 'search any ticket, enter looks it up in Jira'], ['1 B S', 'overview / board / stats']]],
-  ['Factory  (asks to confirm)', [['a', 'approve plan → ai-fix'], ['R', 'reply in Jira (Ctrl+V pastes image)'], ['t', 'retry failed stage'], ['w', 'run worker now'], ['f', 'feed todo to factory'], ['b', 'agent fixes MR conflict'], ['s', 'skip merge gate'], ['Q', 'quiz me → ai-quizzed']]],
-  ['Open', [['enter o', 'MR, else Jira'], ['J', 'Jira'], ['m', 'MR'], ['y', 'copy tab text'], ['l', 'load full log'], ['e', 'edit plan / holdout (vim in tmux)'], ['c', 'resume session (tmux)']]],
+  ['Factory  (asks to confirm)', [['a', 'approve plan → ai-fix'], ['R', 'reply in Jira (Ctrl+V pastes image)'], ['t', 'retry failed stage'], ['w', 'run worker now'], ['f', 'feed todo to factory'], ['b', 'agent fixes MR conflict'], ['s', 'skip merge gate'], ['Q', 'quiz me → ai-quizzed'], ['A', 'accept holdout proposal → re-verify'], ['X', 'reject holdout proposal']]],
+  ['Open', [['enter o', 'MR, else Jira'], ['J', 'Jira'], ['m', 'MR'], ['y', 'copy tab text'], ['l', 'load full log'], ['e', 'edit plan / holdout, proposal first (vim in tmux)'], ['c', 'resume session (tmux)']]],
   ['Other', [['r', 'refresh Jira'], ['i', 'factory status (Jira, timer, units)'], ['?', 'this help'], ['esc', 'close dialog / clear search']]],
 ]
 let S = {Rows: [], Tabs: ['log'], Cols: [], Repos: []}, extras = [], cur = '', tab = 0, view = 'overview', showOther = false, pending = null, bodyKey = '', src = '', days = 30, pick = null, images = {}, boot = true
@@ -554,6 +554,7 @@ document.onkeydown = e => {
     r: () => { say('refreshing jira'); act('refresh') }, y: () => navigator.clipboard.writeText(src).then(() => say(S.Tabs[tab] + ' copied')),
     l: () => { tab = 0; render(); bodyKey = ''; loadBody(true) }, e: () => act('edit', {Tab: S.Tabs[tab]}), c: () => act('resume'),
     a: () => act('approve'), t: () => act('retry'), R: openReply, b: () => act('rebase'), s: () => act('skipgate'), f: openPick, Q: () => act('quiz'), w: () => act('worker'),
+    A: () => act('holdoutAccept'), X: () => act('holdoutReject'),
   }
   if (keys[k]) { keys[k](); e.preventDefault() }
 }
