@@ -1,6 +1,6 @@
 # Review standards — all CleverFarm repos
 
-Read by the independent reviewer (`/mattpocock-skills:code-review` in `/cf-ticket` phase 5) next to the repo's own `CLAUDE.md` and `<repo>.md`. Format: `- <rule> — evidence — lint: <rule|no>`.
+Cross-repo rules, read next to the repo's `CLAUDE.md` and `.claude/skills/review-checklist/SKILL.md` by `/cf-ticket` step 13 and the factory (`conv_collect`, `cf-review`). Format: `- <rule> — evidence — lint: <rule|no>`.
 
 ## misc
 
