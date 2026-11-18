@@ -230,7 +230,9 @@ dialog h3{margin:0 0 14px;font-size:19px}
 #help h4{color:var(--yellow);font-size:12.5px;letter-spacing:.09em;text-transform:uppercase;margin:16px 0 8px}
 #help .k{display:grid;grid-template-columns:104px 1fr;padding:3px 0;color:var(--fg2)}
 #help .k b{font:700 14px var(--mono);color:var(--cyan)}
-#reply textarea{width:min(820px,88vw);height:260px;background:var(--bg);color:var(--fg);border:1px solid var(--line2);border-radius:9px;padding:12px 14px;font:15px/1.55 var(--mono);outline:0;resize:vertical}
+#reply{position:fixed;inset:57px auto 37px 0;margin:0;width:420px;max-width:none;max-height:none;height:auto;border-radius:0 14px 14px 0;box-shadow:12px 0 40px #0009}
+#reply[open]{display:flex;flex-direction:column}
+#reply textarea{width:100%;flex:1;min-height:160px;background:var(--bg);color:var(--fg);border:1px solid var(--line2);border-radius:9px;padding:12px 14px;font:15px/1.55 var(--mono);outline:0;resize:vertical}
 #reply textarea:focus{border-color:var(--accent)}
 #thumbs img{height:72px;margin:10px 10px 0 0;border:1px solid var(--line2);border-radius:7px}
 #pick{width:440px}
@@ -501,7 +503,7 @@ function openReply() {
   images = {}; $('thumbs').innerHTML = ''; $('replyX').value = ''
   $('replyT').textContent = 'Reply in Jira · ' + r.Key
   if (S.Tabs[tab] !== 'comments') { tab = S.Tabs.indexOf('comments'); render(); loadBody() }
-  $('reply').showModal(); $('replyX').focus()
+  $('reply').show(); $('replyX').focus()
 }
 $('replyX').onpaste = e => {
   const it = [...e.clipboardData.items].find(i => i.type.startsWith('image/'))
@@ -514,6 +516,7 @@ $('replyX').onpaste = e => {
   x.setRangeText(`!${name}!`, x.selectionStart, x.selectionEnd, 'end')
 }
 $('replyX').onkeydown = e => {
+  if (e.key === 'Escape') { $('reply').close(); e.preventDefault(); e.stopPropagation() }
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
     const text = $('replyX').value, used = Object.fromEntries(Object.entries(images).filter(([n, v]) => v && text.includes(`!${n}!`)))
     $('reply').close(); act('reply', {Text: text, Images: used}); e.preventDefault(); e.stopPropagation()
