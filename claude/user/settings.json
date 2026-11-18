@@ -325,6 +325,11 @@
       }
     }
   },
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
+  },
   "pluginConfigs": {
     "cf-eod@cleverfarm": {
       "options": {
