@@ -31,7 +31,7 @@ My job = intent in, decisions at gates, judge results. Agents do the rest.
 
    Only changes post (one log line `gate <old> → <new>` in `<KEY>.log`). A finished status can't go back to pending, GitLab adds a new status record on the same pipeline instead. `factory-worker DEV-X --gate` syncs one ticket and prints the state.
 
-Conventions injection: `impl` (all variants) and `review` get the repo's conventions in the system prompt (`--append-system-prompt`, `<conventions file=…>` blocks), because nested `CLAUDE.md` only load on native `Read` and the checklist is a skill nobody invokes. Sources, in order: `.claude/skills/review-checklist/SKILL.md`, every non-root `CLAUDE.md` in an ancestor dir of a changed path (MR diff + PLAN.md `### Change map`), dotfiles `standards/common.md`, `standards/<repo>.md`. Repo files are read from the MR target branch (`origin/<base>`), not the worktree, so an MR cannot weaken its own rules. Over 100 KB → nested `CLAUDE.md` dropped deepest first. One log line `conventions: <n> files, <bytes> B: <paths>` in `<KEY>.log`. `factory-worker DEV-X --conventions` prints the block and exits.
+Conventions injection: `impl` (all variants) and `review` get the repo's conventions in the system prompt (`--append-system-prompt`, `<conventions file=…>` blocks), because nested `CLAUDE.md` only load on native `Read` and the checklist is a skill nobody invokes. Sources, in order: `.claude/skills/review-checklist/SKILL.md`, every non-root `CLAUDE.md` in an ancestor dir of a changed path (MR diff + PLAN.md `### Change map`), dotfiles `standards/common.md`. Repo files are read from the MR target branch (`origin/<base>`), not the worktree, so an MR cannot weaken its own rules. Over 100 KB → nested `CLAUDE.md` dropped deepest first. One log line `conventions: <n> files, <bytes> B: <paths>` in `<KEY>.log`. `factory-worker DEV-X --conventions` prints the block and exits.
 3. **Failures** — `triage-failed` / `ai-fix-failed` / `ai-verify-failed`: read the 🤖 Jira comment or `<KEY>.verify.md`; fix the plan/scenario and re-label (`triage` or `ai-fix`), take it over with `cf-work DEV-X`, or close the ticket.
 
 **Merge conflicts** — every run rechecks ALL my open MRs (any repo, factory or not). Conflicting → rebase onto target in its worktree:
@@ -50,7 +50,7 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 
 **Weekly (Monday Slack "Factory yield" + "Factory before/after")** — bail rate up → plans too vague, push harder at plan gate. Verify failures → scenarios or implementer weak. Reviewer notes per MR up → run `/cf-feedback` after merges so the reviewer learns. `$`/merged MR spikes → check `<KEY>.log`.
 
-**After every merge with reviewer comments**: `/cf-feedback` → rule lands in `standards/<repo>.md`, the reviewer agent enforces it next time. Lint-able → offer ticket.
+**After every merge with reviewer comments**: `/cf-feedback` → rule lands in the repo's `review-checklist` (commit on the ticket's MR, or a chore ticket once merged), cross-repo ones in `standards/common.md`; the reviewer agent enforces it next time. Lint-able → offer ticket.
 
 **Debugging a run**
 
