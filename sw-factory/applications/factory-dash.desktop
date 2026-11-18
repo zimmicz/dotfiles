@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Factory Dash
+Comment=sw-factory dashboard in its own window
+Exec=sh -c '$HOME/bin/factory-dash'
+Icon=utilities-system-monitor
+Terminal=false
+Categories=Development;

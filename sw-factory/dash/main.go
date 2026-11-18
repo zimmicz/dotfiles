@@ -764,7 +764,10 @@ func main() {
 		return
 	}
 	u := "http://" + defaultAddr + "/?t=" + loadToken()
-	if err := exec.Command("xdg-open", u).Start(); err != nil {
-		fmt.Println(u)
+	for _, c := range [][]string{{"vivaldi", "--app=" + u}, {"xdg-open", u}} {
+		if exec.Command(c[0], c[1:]...).Start() == nil {
+			return
+		}
 	}
+	fmt.Println(u)
 }

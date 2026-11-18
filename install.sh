@@ -40,6 +40,8 @@ done
 rm -f ~/bin/triage-dash
 (cd ${DOTFILES_DIR}/sw-factory/dash && go build -o ~/bin/factory-dash .)
 systemctl --user enable factory-dash.service && systemctl --user restart factory-dash.service
+mkdir -p ~/.local/share/applications
+ln -sf ${DOTFILES_DIR}/sw-factory/applications/factory-dash.desktop ~/.local/share/applications/factory-dash.desktop
 
 claude mcp get playwright > /dev/null 2>&1 || claude mcp add -s user playwright -- npx -y @playwright/mcp@latest --headless
 
