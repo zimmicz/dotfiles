@@ -739,7 +739,11 @@ func (s *server) action(a actionReq) (ask string, run func() (string, error), ki
 			return "", nil, false, fmt.Errorf("Q works on a reviewed MR waiting for quiz")
 		}
 		return "", func() (string, error) {
-			return "quiz opened in tmux", tmuxWindow(false, "quiz:"+r.key, "claude --model sonnet '/cf-quiz "+r.key+"'")
+			cmd := "claude --model sonnet '/cf-quiz " + r.key + "'"
+			if p := planPath(r.key); p != "" {
+				cmd = "cd " + shq(filepath.Dir(p)) + " && " + cmd
+			}
+			return "quiz opened in tmux", tmuxWindow(false, "quiz:"+r.key, cmd)
 		}, false, nil
 	case "resume":
 		if r.resume == "" {
