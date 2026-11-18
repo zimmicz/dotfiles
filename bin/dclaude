@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IMAGE=dclaude
+DOTFILES=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+ENV_FILE=${DCLAUDE_ENV:-$HOME/.config/dclaude.env}
+JIRA_ENV=$HOME/.config/sw-factory.env
+C=$HOME/.claude
+SETTINGS='{"enabledPlugins":{"slack@claude-plugins-official":false}}'
+
+die() { echo "dclaude: $*" >&2; exit 1; }
+
+top=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
+[ "$top" = "$PWD" ] || die "run from the repo/worktree root: $top"
+case $PWD/ in "$DOTFILES/"*) die "refused in $DOTFILES (host executes files from here), use c" ;; esac
+[ -f "$ENV_FILE" ] || die "missing $ENV_FILE, see $DOTFILES/docker/claude/README.md"
+
+docker image inspect $IMAGE >/dev/null 2>&1 ||
+  docker build -t $IMAGE --build-arg USERNAME="$USER" --build-arg UID="$(id -u)" "$DOTFILES/docker/claude"
+
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+m=(-v "$PWD:$PWD")
+case $common/ in "$PWD/"*) ;; *) m+=(-v "$common:$common") ;; esac
+for p in hooks config; do
+  [ -e "$common/$p" ] && m+=(-v "$common/$p:$common/$p:ro")
+done
+
+m+=(-v dclaude-state:"$C" -v "$C/projects:$C/projects")
+for p in settings.json CLAUDE.md LEARNED.md my-voice.md RTK.md simple-statusline.sh .credentials.json \
+  hooks plugins skills commands scripts standards; do
+  [ -e "$C/$p" ] && m+=(-v "$(readlink -f "$C/$p"):$C/$p:ro")
+done
+
+cj=$(mktemp)
+trap 'rm -f "$cj"' EXIT
+cp "$HOME/.claude.json" "$cj"
+
+m+=(
+  -v "$cj:$HOME/.claude.json"
+  -v "$DOTFILES:$DOTFILES:ro"
+  -v "$HOME/bin:$HOME/bin:ro"
+  -v "$HOME/.fnm:$HOME/.fnm:ro"
+  -v "$HOME/.config/lean-ctx:$HOME/.config/lean-ctx:ro"
+  -v "$(readlink -f "$HOME/.gitconfig"):$HOME/.gitconfig:ro"
+  -v "$(readlink -f "$HOME/.local/bin/claude"):/usr/local/bin/claude:ro"
+  -v dclaude-pnpm:"$HOME/.local/share/pnpm"
+)
+
+e=(--env-file "$ENV_FILE" -e TERM=xterm-256color -e COLORTERM -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+  -e PLAYWRIGHT_MCP_EXECUTABLE_PATH=/usr/bin/chromium -e PLAYWRIGHT_MCP_NO_SANDBOX=true -e PLAYWRIGHT_MCP_HEADLESS=true)
+[ -f "$JIRA_ENV" ] && e+=(--env-file "$JIRA_ENV")
+
+t=-i
+[ -t 0 ] && [ -t 1 ] && t=-it
+
+cmd=(claude --dangerously-skip-permissions --settings "$SETTINGS" "$@")
+[ -n "${DCLAUDE_CMD:-}" ] && cmd=($DCLAUDE_CMD)
+
+docker run --rm --init $t --cap-add NET_ADMIN --cap-add NET_RAW \
+  "${e[@]}" "${m[@]}" -w "$PWD" $IMAGE "${cmd[@]}"
