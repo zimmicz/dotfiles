@@ -284,7 +284,7 @@ const COLC = {todo: 'magenta', analysis: 'cyan', 'plan gate': 'yellow', implemen
 const STAGEC = {analyze: 'cyan', implement: 'blue', 'verify-ui': 'orange', 'verify-api': 'orange', verify: 'orange', review: 'magenta', conflict: 'red'}
 const HELP = [
   ['Navigate', [['j k ↑ ↓', 'move'], ['g G', 'top / bottom'], ['tab', 'next tab (shift: previous)'], ['^u ^d', 'scroll pane'], ['z', 'show other logs'], ['Z', 'zoom pane'], ['/', 'search any ticket, enter looks it up in Jira'], ['1 B S', 'overview / board / stats']]],
-  ['Factory  (asks to confirm)', [['a', 'approve plan → ai-fix'], ['R', 'reply in Jira (Ctrl+V pastes image)'], ['t', 'retry failed stage'], ['w', 'run worker now'], ['f', 'feed todo to factory'], ['b', 'agent fixes MR conflict'], ['s', 'skip merge gate'], ['Q', 'quiz me → ai-quizzed'], ['A', 'accept holdout proposal → re-verify'], ['X', 'reject holdout proposal']]],
+  ['Factory  (asks to confirm)', [['a', 'approve plan → ai-fix'], ['R', 'reply in Jira, no confirm (Ctrl+V pastes image)'], ['t', 'retry failed stage'], ['w', 'run worker now'], ['f', 'feed todo to factory'], ['b', 'agent fixes MR conflict'], ['s', 'skip merge gate'], ['Q', 'quiz me → ai-quizzed'], ['A', 'accept holdout proposal → re-verify'], ['X', 'reject holdout proposal']]],
   ['Open', [['enter o', 'MR, else Jira'], ['J', 'Jira'], ['m', 'MR'], ['y', 'copy tab text'], ['l', 'load full log'], ['e', 'edit plan / holdout, proposal first (vim in tmux)'], ['c', 'resume session (tmux)']]],
   ['Other', [['r', 'refresh Jira'], ['i', 'factory status (Jira, timer, units)'], ['?', 'this help'], ['esc', 'close dialog / clear search']]],
 ]
@@ -519,7 +519,7 @@ $('replyX').onkeydown = e => {
   if (e.key === 'Escape') { $('reply').close(); e.preventDefault(); e.stopPropagation() }
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
     const text = $('replyX').value, used = Object.fromEntries(Object.entries(images).filter(([n, v]) => v && text.includes(`!${n}!`)))
-    $('reply').close(); act('reply', {Text: text, Images: used}); e.preventDefault(); e.stopPropagation()
+    $('reply').close(); act('reply', {Text: text, Images: used}, false); e.preventDefault(); e.stopPropagation()
   }
 }
 
