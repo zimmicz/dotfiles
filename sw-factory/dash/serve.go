@@ -1141,6 +1141,14 @@ func (s *server) handler() http.Handler {
 		writeJSON(w, map[string]any{"Rows": out, "Busy": workerBusy(), "Svc": strings.TrimSpace(string(svc)), "JiraErr": jerr,
 			"JiraAge": int(time.Since(s.jiraAt).Seconds()), "Status": s.status, "Repos": repos(), "Cols": boardCols, "Tabs": webTabs})
 	})
+	mux.HandleFunc("GET /api/nosprint", func(w http.ResponseWriter, r *http.Request) {
+		is, err := search("assignee = currentUser() AND statusCategory != Done AND (sprint is EMPTY OR sprint in futureSprints()) AND (sprint is EMPTY OR sprint not in openSprints()) ORDER BY updated DESC")
+		if err != nil {
+			http.Error(w, "jira: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, is)
+	})
 	mux.HandleFunc("GET /api/ticket", func(w http.ResponseWriter, r *http.Request) {
 		key, tab := r.URL.Query().Get("key"), r.URL.Query().Get("tab")
 		if !regexp.MustCompile(`^[\w.-]+$`).MatchString(key) || strings.Contains(key, "..") || !slices.Contains(webTabs, tab) {

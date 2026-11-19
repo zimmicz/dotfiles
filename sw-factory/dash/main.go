@@ -40,6 +40,7 @@ type issue struct {
 		Summary string
 		Labels  []string
 		Updated string
+		Sprint  []struct{ Name, State string } `json:"customfield_10007"`
 		Status  struct {
 			Name           string
 			StatusCategory struct{ Key string }
@@ -159,7 +160,7 @@ func group(r row) int {
 
 func search(jql string) ([]issue, error) {
 	var out struct{ Issues []issue }
-	return out.Issues, jiraReq("GET", "/rest/api/3/search/jql?fields=labels,summary,updated,status&maxResults=100&jql="+url.QueryEscape(jql), nil, &out)
+	return out.Issues, jiraReq("GET", "/rest/api/3/search/jql?fields=labels,summary,updated,status,customfield_10007&maxResults=100&jql="+url.QueryEscape(jql), nil, &out)
 }
 
 func fetchJira() ([]issue, []issue, error) {

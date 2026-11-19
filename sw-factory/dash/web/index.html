@@ -197,6 +197,7 @@ th.num{font:700 12px var(--sans)}
 .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-top:16px;overflow:auto}
 .box h2{font-size:13px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--fg2);margin:0 0 14px;border:0;padding:0}
 .box table{width:100%}
+#nav button,#nosprint td:nth-child(-n+3){white-space:nowrap}#nosprint tr[data-k]{cursor:pointer}#nosprint tr.cur td{background:#4da6ff24}
 .bars{display:flex;align-items:flex-end;gap:4px;height:170px;border-bottom:2px solid var(--line2);padding-top:6px}
 .bars div{flex:1;background:linear-gradient(180deg,var(--cyan),var(--blue));min-height:2px;border-radius:4px 4px 0 0}
 .bars div:hover{background:var(--yellow)}
@@ -251,6 +252,7 @@ dialog h3{margin:0 0 14px;font-size:19px}
   <span id="pills" style="display:flex;gap:8px"></span>
   <div class="seg" id="nav">
     <button data-v="overview">Overview <kbd>1</kbd></button>
+    <button data-v="nosprint">Backlog <kbd>2</kbd></button>
     <button data-v="board">Board <kbd>B</kbd></button>
     <button data-v="stats">Stats <kbd>S</kbd></button>
   </div>
@@ -266,6 +268,7 @@ dialog h3{margin:0 0 14px;font-size:19px}
 </main>
 <main id="board" hidden></main>
 <main id="stats" class="stats" hidden></main>
+<main id="nosprint" class="stats" hidden></main>
 <footer>
   <span class="hints"><span><kbd>j</kbd> <kbd>k</kbd> move</span><span><kbd>tab</kbd> tabs</span><span><kbd>a</kbd> approve</span><span><kbd>R</kbd> reply</span><span><kbd>t</kbd> retry</span><span><kbd>o</kbd> open</span><span><kbd>?</kbd> all keys</span></span>
   <span id="status"></span>
@@ -283,12 +286,12 @@ const GROUPS = [['RUNNING', 'c32'], ['NEEDS YOU', 'c33'], ['TODO', 'c35'], ['IN 
 const COLC = {todo: 'magenta', analysis: 'cyan', 'plan gate': 'yellow', implement: 'blue', verify: 'orange', review: 'magenta', quiz: 'yellow', merge: 'green', nightly: 'green', RC: 'green', done: 'dim'}
 const STAGEC = {analyze: 'cyan', implement: 'blue', 'verify-ui': 'orange', 'verify-api': 'orange', verify: 'orange', review: 'magenta', conflict: 'red'}
 const HELP = [
-  ['Navigate', [['j k ↑ ↓', 'move'], ['g G', 'top / bottom'], ['tab', 'next tab (shift: previous)'], ['^u ^d', 'scroll pane'], ['z', 'show other logs'], ['Z', 'zoom pane'], ['/', 'search any ticket, enter looks it up in Jira'], ['1 B S', 'overview / board / stats']]],
+  ['Navigate', [['j k ↑ ↓', 'move'], ['g G', 'top / bottom'], ['tab', 'next tab (shift: previous)'], ['^u ^d', 'scroll pane'], ['z', 'show other logs'], ['Z', 'zoom pane'], ['/', 'search any ticket, enter looks it up in Jira'], ['1 2 B S', 'overview / backlog / board / stats'], ['j k enter J r', 'backlog: move / open / Jira / reload']]],
   ['Factory  (asks to confirm)', [['a', 'approve plan → ai-fix'], ['R', 'reply in Jira, no confirm (Ctrl+V pastes image)'], ['t', 'retry failed stage'], ['w', 'run worker now'], ['f', 'feed todo to factory'], ['b', 'agent fixes MR conflict'], ['s', 'skip merge gate'], ['Q', 'quiz me → ai-quizzed'], ['A', 'accept holdout proposal → re-verify'], ['X', 'reject holdout proposal']]],
   ['Open', [['enter o', 'MR, else Jira'], ['J', 'Jira'], ['m', 'MR'], ['y', 'copy tab text'], ['l', 'load full log'], ['e', 'edit plan / holdout, proposal first (vim in tmux)'], ['c', 'resume session (tmux)']]],
   ['Other', [['r', 'refresh Jira'], ['i', 'factory status (Jira, timer, units)'], ['?', 'this help'], ['esc', 'close dialog / clear search']]],
 ]
-let S = {Rows: [], Tabs: ['log'], Cols: [], Repos: []}, extras = [], cur = '', tab = 0, view = 'overview', showOther = false, pending = null, bodyKey = '', src = '', days = 30, pick = null, images = {}, boot = true
+let S = {Rows: [], Tabs: ['log'], Cols: [], Repos: []}, extras = [], cur = '', tab = 0, view = 'overview', showOther = false, pending = null, bodyKey = '', src = '', days = 30, pick = null, images = {}, boot = true, ns = [], nsi = 0
 
 const all = () => [...S.Rows, ...extras.filter(e => !S.Rows.some(r => r.Key === e.Key))]
 const query = () => $('q').value.trim().toLowerCase()
@@ -315,10 +318,11 @@ async function poll() {
     boot = false
     const p = new URLSearchParams(location.hash.slice(1)), k = p.get('key')
     tab = Math.max(S.Tabs.indexOf(p.get('tab')), 0)
-    if (['board', 'stats'].includes(p.get('view'))) view = p.get('view')
+    if (['board', 'stats', 'nosprint'].includes(p.get('view'))) view = p.get('view')
     if (k && all().some(r => r.Key === k)) cur = k
     else if (k) lookup(k, true)
     if (view === 'stats') renderStats()
+    if (view === 'nosprint') renderNoSprint(true)
   }
   if (!sel().Key) cur = (visible()[0] || {}).Key || ''
   if ($('sys').open) showSys()
@@ -363,7 +367,7 @@ function render() {
   $('next').innerHTML = r.Key && r.Next ? `${ball(r)}<span>${esc(r.Next)}</span>` : ''
   $('tabs').innerHTML = S.Tabs.map((t, i) => `<span class="${i === tab ? 'on' : ''}" data-t="${i}">${t}</span>`).join('')
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === view))
-  for (const v of ['overview', 'board', 'stats']) $(v).hidden = v !== view
+  for (const v of ['overview', 'nosprint', 'board', 'stats']) $(v).hidden = v !== view
   history.replaceState(null, '', '#' + new URLSearchParams({view, key: cur, tab: S.Tabs[tab]}))
   if (view === 'board') renderBoard()
 }
@@ -434,7 +438,20 @@ async function renderStats() {
   for (const n of ['factory-stats', 'factory-compare']) fetch('/api/report?name=' + n).then(r => r.json()).then(j => { const e = $('rep-' + n); if (e) { e.className = ''; e.innerHTML = j.HTML } })
 }
 
-function go(v) { view = v; render(); if (v === 'stats') renderStats(); if (v === 'overview') loadBody() }
+async function renderNoSprint(fetchIt) {
+  const el = $('nosprint')
+  if (fetchIt) {
+    el.innerHTML = '<p class="dim">loading…</p>'
+    const r = await fetch('/api/nosprint')
+    if (!r.ok) { el.innerHTML = `<p class="c31">${esc(await r.text())}</p>`; return }
+    ns = await r.json(); nsi = Math.min(nsi, Math.max(ns.length - 1, 0))
+  }
+  const catC = {new: 'c35', indeterminate: 'c34'}, upd = u => ago(Date.parse(u.replace(/([+-]\d\d)(\d\d)$/, '$1:$2')) / 1000)
+  el.innerHTML = `<div class="box"><h2>Assigned to me · no sprint or future sprint · ${ns.length}</h2><table><tr><th>ticket</th><th>status</th><th>sprint</th><th>summary</th><th>labels</th><th class="num">updated</th></tr>${ns.map((i, n) => `<tr class="${n === nsi ? 'cur' : ''}" data-k="${esc(i.Key)}"><td><b class="key">${esc(i.Key)}</b></td><td><span class="tag ${catC[i.Fields.Status.StatusCategory.Key] || 'c2'}">${esc(i.Fields.Status.Name)}</span></td><td class="c36">${esc((i.Fields.customfield_10007 || []).filter(s => s.State === 'future').map(s => s.Name).join(', '))}</td><td>${esc(i.Fields.Summary)}</td><td class="dim">${esc((i.Fields.Labels || []).join(', '))}</td><td class="num">${upd(i.Fields.Updated)}</td></tr>`).join('')}</table>${ns.length ? '' : '<p class="dim">nothing</p>'}</div>`
+  const c = el.querySelector('tr.cur'); if (c) c.scrollIntoView({block: 'nearest'})
+}
+
+function go(v) { view = v; render(); if (v === 'stats') renderStats(); if (v === 'nosprint') renderNoSprint(true); if (v === 'overview') loadBody() }
 function select(k) { if (k === cur) return; cur = k; render(); if (view === 'overview') loadBody() }
 function move(d) { const rs = visible(), i = rs.findIndex(r => r.Key === cur); const n = rs[Math.min(Math.max(i + d, 0), rs.length - 1)]; if (n) select(n.Key) }
 function openURL(u, what) { u ? (window.open(u, '_blank'), say('opened ' + u)) : say('no ' + what, true) }
@@ -529,6 +546,7 @@ $('stats').onclick = e => {
   if (e.target.dataset.d) { days = +e.target.dataset.d; renderStats() }
   if (e.target.dataset.k) { e.preventDefault(); lookup(e.target.dataset.k) }
 }
+$('nosprint').onclick = e => { const t = e.target.closest('tr[data-k]'); if (t) lookup(t.dataset.k) }
 $('tabs').onclick = e => { if (e.target.dataset.t) { tab = +e.target.dataset.t; render(); loadBody() } }
 $('body').onclick = e => {
   const c = e.target.closest('.main [data-c]'), v = $('body').querySelector('.main video')
@@ -564,9 +582,14 @@ document.onkeydown = e => {
   }
   if (e.target === $('q') || e.metaKey || e.altKey) return
   const r = sel(), k = (e.ctrlKey ? '^' : '') + e.key, body = $('body')
+  if (view === 'nosprint') {
+    const d = {j: 1, ArrowDown: 1, k: -1, ArrowUp: -1}[k], it = ns[nsi], nk = {Enter: () => it && lookup(it.Key), o: () => it && lookup(it.Key), J: () => it && openURL('https://cleverfarm.atlassian.net/browse/' + it.Key, 'ticket'), r: () => renderNoSprint(true)}[k]
+    if (d) { nsi = Math.min(Math.max(nsi + d, 0), ns.length - 1); renderNoSprint(); e.preventDefault(); return }
+    if (nk) { nk(); e.preventDefault(); return }
+  }
   const openMain = () => r.MR ? openURL(r.MR, 'MR') : openURL(r.JiraURL, 'jira ticket')
   const keys = {
-    '?': showHelp, i: showSys, '/':() => { $('q').focus(); $('q').select() }, '1': () => go('overview'), B: () => go(view === 'board' ? 'overview' : 'board'), S: () => go(view === 'stats' ? 'overview' : 'stats'),
+    '?': showHelp, i: showSys, '/':() => { $('q').focus(); $('q').select() }, '1': () => go('overview'), '2': () => go(view === 'nosprint' ? 'overview' : 'nosprint'), B: () => go(view === 'board' ? 'overview' : 'board'), S: () => go(view === 'stats' ? 'overview' : 'stats'),
     Z: () => document.body.classList.toggle('zoom'), z: () => { showOther = !showOther; render() },
     j: () => move(1), ArrowDown: () => move(1), k: () => move(-1), ArrowUp: () => move(-1), g: () => move(-1e6), Home: () => move(-1e6), G: () => move(1e6), End: () => move(1e6),
     Tab: () => { tab = (tab + (e.shiftKey ? S.Tabs.length - 1 : 1)) % S.Tabs.length; render(); loadBody() },
