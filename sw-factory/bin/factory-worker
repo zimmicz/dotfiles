@@ -17,7 +17,8 @@ GLHANDLED=$LOG_DIR/handled-mr
 TNOTES=$LOG_DIR/notes
 SUSPECT=$LOG_DIR/holdout-suspect
 PROPOSED=$LOG_DIR/holdout-proposed
-mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED $SUSPECT $PROPOSED
+SENT=$LOG_DIR/sent
+mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED $SUSPECT $PROPOSED $SENT
 
 HEADLESS_SETTINGS='{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false,"slack@claude-plugins-official":false,"cf-planning@cleverfarm":false,"cf-release@cleverfarm":false,"cf-kb@cleverfarm":false,"cf-eod@cleverfarm":false,"cf-bug-report@cleverfarm":false,"cf-cli-skill@cleverfarm":false,"cf-investigator@cleverfarm":false,"cf-cc@cleverfarm":false,"typescript-lsp@claude-plugins-official":false}}'
 PW_ARGS='["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools"]'
@@ -126,7 +127,15 @@ awaiting_reply() { reply_filter true }
 not_awaiting() { reply_filter false }
 
 note() {
+  local F=$SENT/$1
+  local -a R=($F(Nmh-24))
+  (( ${#R} )) && [[ "$(<$F)" == "$2" ]] && { info $1 "Slack skipped, same as last note: $2"; return }
+  print -r -- "$2" >$F
   echo "[$1](https://cleverfarm.atlassian.net/browse/$1) $2" >>$NOTES
+}
+
+info() {
+  print -r -- "  info: $2" >>$LOG_DIR/$1.log
 }
 
 relabel() {
@@ -208,7 +217,7 @@ after_amend() {
     note $1 "holdout change proposed, review in dash (A accept / X reject): $(paste -sd' ' $PROPOSED/$1.why 2>/dev/null)"
     return 0
   fi
-  [[ -f $PROPOSED/$1.why ]] && { note $1 "scenario suspect rejected by analyzer: $(paste -sd' ' $PROPOSED/$1.why)"; rm -f $PROPOSED/$1.why }
+  [[ -f $PROPOSED/$1.why ]] && { info $1 "scenario suspect rejected by analyzer: $(paste -sd' ' $PROPOSED/$1.why)"; rm -f $PROPOSED/$1.why }
   return 1
 }
 
@@ -614,9 +623,9 @@ No code changed: git applied every commit as is, only \`pnpm-lock.yaml\` was reg
   echo "  rebased + pushed" | tee -a $LOG
   if [[ $HOW != (clean\ rebase|lockfile\ regenerated) && -n "$KEY" ]] && search "key = $KEY AND labels = ai-verified" 1 | jq -e '.issues | length > 0' >/dev/null; then
     jira PUT "/rest/api/2/issue/$KEY" '{"update":{"labels":[{"remove":"ai-verified"}]}}' >/dev/null
-    echo "$WHO rebased, conflicts resolved by agent, holdout re-verify queued" >>$NOTES
+    echo "  info: $WHO rebased, conflicts resolved by agent, holdout re-verify queued" >>$LOG
   else
-    echo "$WHO rebased onto $TGT (${${HOW%%$'\n'*}#- })" >>$NOTES
+    echo "  info: $WHO rebased onto $TGT (${${HOW%%$'\n'*}#- })" >>$LOG
   fi
 }
 
@@ -646,14 +655,14 @@ stage_reply() {
     else
       [[ -n "${GRILL:-}" ]] && has_label $1 ai-fix-failed && unlabel $1 ai-fix-failed
       if [[ $CUR == needs-answer ]]; then relabel $1 needs-answer triaged; note $1 "questions settled, PLAN.md ready (add \`ai-fix\` to implement)"
-      else note $1 "your reply answered"; fi
+      else info $1 "your reply answered"; fi
     fi
   else relabel $1 $CUR triage-failed; note $1 "reply follow-up failed, parked as \`triage-failed\` (re-add \`triage\` to retry), see \`$LOG_DIR/$1.log\`"; fi
 }
 
 stage_impl() {
   local ID=$(snap_human $1)
-  if implement $1 $2; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; note $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; note $1 "already fixed, closed as duplicate, Sentry resolves next run"; else fallback_comment $1 $ID; relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
+  if implement $1 $2; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; info $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; info $1 "already fixed, closed as duplicate, Sentry resolves next run"; else fallback_comment $1 $ID; relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
 }
 
 wt_heads() {
@@ -675,7 +684,7 @@ stage_mr() {
   if answered_since $1 $ID; then
     mark_handled $1 $ID
     [[ -n "$GLID" ]] && echo $GLID >$GLHANDLED/$1
-    if [[ "$(wt_heads $1)" != "$H0" ]]; then unverify $1; note $1 "your reply answered on MR, new commits pushed, verify labels dropped, re-verify next: $(cat $LOG_DIR/$1.mr)"; else note $1 "your reply answered on MR: $(cat $LOG_DIR/$1.mr)"; fi
+    if [[ "$(wt_heads $1)" != "$H0" ]]; then unverify $1; info $1 "your reply answered on MR, new commits pushed, verify labels dropped, re-verify next: $(cat $LOG_DIR/$1.mr)"; else info $1 "your reply answered on MR: $(cat $LOG_DIR/$1.mr)"; fi
   elif fallback_comment $1 $ID; then mark_handled $1 $ID; note $1 "MR follow-up stuck, its conclusion posted to Jira, reply there: $(cat $LOG_DIR/$1.mr)"
   else relabel $1 ai-mr ai-fix-failed; note $1 "MR follow-up failed, see \`$LOG_DIR/$1.log\`"; fi
 }
@@ -696,7 +705,7 @@ stage_verify() {
     (( RC == 2 )) && return 2
   fi
   if (( RC == 0 )); then
-    relabel $KEY ai-verify-retry ai-verified; note $KEY "holdout scenarios pass: $(cat $LOG_DIR/$KEY.mr)"
+    relabel $KEY ai-verify-retry ai-verified; info $KEY "holdout scenarios pass: $(cat $LOG_DIR/$KEY.mr)"
   elif (( RC == 3 )); then
     relabel $KEY "" ai-verify-failed; note $KEY "verifier crashed or died mid-run, see \`$REPORT\` + \`$LOG_DIR/$KEY.log\`"
   elif (( RC == 4 )); then
@@ -709,7 +718,7 @@ stage_verify() {
     implement $KEY ${REPO%%,*} "--verify-fix $REPORT"
     if after_amend $KEY; then relabel $KEY ai-verify-retry ai-verify-failed
     elif [[ "$(wt_heads $KEY)" == "$H0" ]]; then relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios failed, fix round pushed nothing, needs you: \`$REPORT\` + Jira comment"
-    else note $KEY "holdout scenarios failed, fix pushed, re-verify next run ($(failed_scenarios $REPORT) first)"; fi
+    else info $KEY "holdout scenarios failed, fix pushed, re-verify next run ($(failed_scenarios $REPORT) first)"; fi
   fi
   return 0
 }
@@ -731,7 +740,7 @@ stage_review() {
   case $RC in
     0) relabel $KEY "" ai-reviewed; note $KEY "independent review clean: $MR" ;;
     1) relabel $KEY "" ai-reviewed; note $KEY "independent review: should-fix findings only, see the MR note: $MR" ;;
-    4) relabel $KEY "" ai-review-retry; note $KEY "independent review: must-fix findings, auto-fix next: $MR" ;;
+    4) relabel $KEY "" ai-review-retry; info $KEY "independent review: must-fix findings, auto-fix next: $MR" ;;
     *) relabel $KEY "" ai-review-findings; note $KEY "reviewer crashed or wrote no verdict, see \`$LOG_DIR/$KEY.log\`" ;;
   esac
   return 0
@@ -756,7 +765,7 @@ stage_rfix() {
   unverify $KEY
   (( RC == 0 || RC == 1 )) && wt_heads $KEY >$LOG_DIR/$KEY.reviewed
   case $RC in
-    0|1) relabel $KEY ai-review-retry ai-reviewed; note $KEY "review findings fixed, re-check $( (( RC )) && echo minor || echo clean ), re-verify next: $MR" ;;
+    0|1) relabel $KEY ai-review-retry ai-reviewed; info $KEY "review findings fixed, re-check $( (( RC )) && echo minor || echo clean ), re-verify next: $MR" ;;
     4) relabel $KEY ai-review-retry ai-review-findings; note $KEY "review findings fixed, but the re-check still blocks, needs you: $MR" ;;
     *) relabel $KEY ai-review-retry ai-review-findings; note $KEY "re-check crashed or wrote no verdict, see \`$LOG_DIR/$KEY.log\`" ;;
   esac
@@ -764,8 +773,8 @@ stage_rfix() {
 
 stage_done() {
   local KEY=$1 IDS="${*:2}"
-  if [[ -z "$IDS" ]]; then relabel $KEY "" ai-done; note $KEY "released"; return; fi
-  if resolve_sentry $KEY ${=IDS}; then relabel $KEY "" ai-done; note $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
+  if [[ -z "$IDS" ]]; then relabel $KEY "" ai-done; info $KEY "released"; return; fi
+  if resolve_sentry $KEY ${=IDS}; then relabel $KEY "" ai-done; info $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
 }
 
 stage_conflict() {

@@ -75,6 +75,40 @@ func TestGroup(t *testing.T) {
 	}
 }
 
+func TestOrder(t *testing.T) {
+	t0 := time.Now().Add(-time.Hour)
+	keys := func(rs []row) string {
+		var ks []string
+		for _, r := range rs {
+			ks = append(ks, r.key)
+		}
+		return strings.Join(ks, " ")
+	}
+	rs := []row{
+		{key: "T-1", stage: "mr", jira: true, seen: t0},
+		{key: "T-2", stage: "mr", jira: true, seen: t0.Add(time.Minute)},
+		{key: "T-3", stage: "plan gate", jira: true, seen: t0},
+	}
+	order(rs, t0.Add(2*time.Minute))
+	if got := keys(rs); got != "T-3 T-2 T-1" {
+		t.Fatalf("first order %q", got)
+	}
+	rs[2].seen = t0.Add(30 * time.Minute)
+	order(rs, t0.Add(30*time.Minute))
+	if got := keys(rs); got != "T-3 T-2 T-1" {
+		t.Errorf("log write reordered: %q", got)
+	}
+	for i := range rs {
+		if rs[i].key == "T-1" {
+			rs[i].stage = "reviewed"
+		}
+	}
+	order(rs, t0.Add(40*time.Minute))
+	if got := keys(rs); got != "T-1 T-3 T-2" {
+		t.Errorf("group change: %q", got)
+	}
+}
+
 func TestParseLog(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "DEV-1.log")
 	os.WriteFile(p, []byte("🔧 Bash {}\n✅ exit error=false cost=$0.5\n  VERDICT: fail\n13:20:15 💬 hi\n13:20:16 🆔 session s — reopen: cd /x && claude --resume s\n13:21:00 ✅ exit error=false cost=$0.25\n  VERDICT: pass\n"), 0o644)

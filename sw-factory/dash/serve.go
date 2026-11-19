@@ -161,7 +161,7 @@ func (s *server) rows() []row {
 		_, _, l := look(rows[i], mrs)
 		rows[i].mrNeeds = l == "conflict: b" || l == "rebase failed"
 	}
-	sort.SliceStable(rows, func(a, b int) bool { return group(rows[a]) < group(rows[b]) })
+	order(rows, time.Now())
 	return rows
 }
 

@@ -675,13 +675,40 @@ func collect(issues, todos []issue, busy bool, units map[string]string) []row {
 	for _, r := range rows {
 		out = append(out, *r)
 	}
-	sort.Slice(out, func(a, b int) bool {
-		if ga, gb := group(out[a]), group(out[b]); ga != gb {
-			return ga < gb
-		}
-		return out[a].seen.After(out[b].seen)
-	})
 	return out
+}
+
+type entry struct {
+	g  int
+	at time.Time
+}
+
+var (
+	enteredMu sync.Mutex
+	entered   = map[string]entry{}
+)
+
+func order(rows []row, now time.Time) {
+	enteredMu.Lock()
+	defer enteredMu.Unlock()
+	for _, r := range rows {
+		g := group(r)
+		if e, ok := entered[r.key]; !ok {
+			entered[r.key] = entry{g, r.seen}
+		} else if e.g != g {
+			entered[r.key] = entry{g, now}
+		}
+	}
+	sort.SliceStable(rows, func(a, b int) bool {
+		ea, eb := entered[rows[a].key], entered[rows[b].key]
+		switch {
+		case ea.g != eb.g:
+			return ea.g < eb.g
+		case !ea.at.Equal(eb.at):
+			return ea.at.After(eb.at)
+		}
+		return rows[a].key > rows[b].key
+	})
 }
 
 func ago(t time.Time) string {

@@ -126,7 +126,7 @@ Any other ticket (feature, chore, manual bug): I add labels `triage` + `repo-<di
 
 One Sentry issue at a time: `sentry-triage` skips the day (Slack note) while any ticket with a `sentry-*` label and labelled `triage|triaged|triage-failed|ai-fix|ai-mr|ai-fix-failed` is not Done AND its MR is not merged/closed (`glab mr list --all --search KEY` in the `repo-*` repo; no MR at all = blocking, so failed/unfixed tickets block until closed). Jira status doesn't matter — `On nightly` with a merged MR is fine. Sentry resolve waits for status `Done` (prod release), not Release candidate; a 404 (issue deleted/merged) counts as resolved, model answer logged to `<KEY>.log`. Stamp `~/.local/state/sw-factory/sentry-today` = already ran today (delete to re-run).
 
-Failures: `triage-failed` / `ai-fix-failed` label. Every run with activity posts a summary to Slack `#zimmi-claude` via `~/.claude/scripts/slack-post.sh` (incoming webhook, no LLM). Quiet timer runs → no post, but if nothing posted for 3 h a "sw-factory alive — N quiet runs since X" heartbeat goes out (state `.posted` mtime + `.quiet` in `~/.local/state/sw-factory`). No heartbeat for >3 h during 07–19 weekdays = worker dead → `systemctl --user status sw-factory`.
+Failures: `triage-failed` / `ai-fix-failed` label. Every run where I became on turn posts a summary to Slack `#zimmi-claude` via `~/.claude/scripts/slack-post.sh` (incoming webhook, no LLM); progress lines go to the ticket log only (see Notifications). Quiet timer runs → no post, but if nothing posted for 3 h a "sw-factory alive — N quiet runs since X" heartbeat goes out (state `.posted` mtime + `.quiet` in `~/.local/state/sw-factory`). No heartbeat for >3 h during 07–19 weekdays = worker dead → `systemctl --user status sw-factory`.
 
 ## Labels
 
@@ -241,7 +241,10 @@ Pick up manually instead: `cd ~/work/cleverfarm/repos/<repo> && cf-work DEV-XXXX
 
 ## Notifications
 
-- Slack `#zimmi-claude` via incoming webhook (`slack-post.sh`, same as nightly digests), one message per run with activity; notes kept until curl succeeds.
+- Slack `#zimmi-claude` via incoming webhook (`slack-post.sh`, same as nightly digests), one message per run with a `note`; notes kept until curl succeeds.
+- `note` (Slack) only where I am on turn: questions / PLAN ready, any failure / crash / block, review verdict that hands me the quiz, holdout proposal, stuck alerts, conflicts I must resolve. Same text for the same ticket within 24 h (`sent/<KEY>`) → not posted again, logged as `Slack skipped` instead.
+- `info` (no Slack, `  info: …` line in `<KEY>.log`, visible in the dash log tab): reply answered, draft MR, holdout pass, fix pushed / re-verify next, must-fix auto-fix next, released, agent rebase done.
+- Dash sidebar: within a group, rows sort by when they entered that group (log writes don't move them); a row whose label changed since I last opened it shows a ● after its key (per browser, `localStorage` `seenLbl`).
 - Webhook posts ping like any bot message. Jira comments come from my account → no Jira ping.
 
 ## Costs (DEV-2825 test)

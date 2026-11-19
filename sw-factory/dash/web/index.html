@@ -49,6 +49,7 @@ body.zoom #side{display:none}
 .row:hover{background:var(--hover)}
 .row.cur{background:var(--raised);border-left-color:var(--accent)}
 .row .ic{font-size:15px;text-align:center}
+.row.new .key::after{content:'●';color:var(--accent);font-size:11px;margin-left:6px;vertical-align:2px}
 .row .key{font:700 14px var(--mono);color:var(--fg)}
 .row .lbl{overflow:hidden;white-space:nowrap}
 .row .age{color:var(--dim);font:12.5px var(--mono)}
@@ -305,6 +306,14 @@ const say = (s, err) => { $('status').textContent = s; $('status').className = e
 const ball = r => `<span class="ball ${esc(r.Ball)}">${esc(r.Ball === '-' ? 'parked' : r.Ball)}</span>`
 const stage = r => `<span class="tag c${r.Running ? 32 : esc(r.Color)}">${esc(r.Running ? r.Phase || r.Label : r.Label)}</span>`
 const icon = r => r.Running ? '<i class="dot"></i>' : esc(r.Icon)
+let seenLbl = {}
+try { seenLbl = JSON.parse(localStorage.getItem('seenLbl') || '{}') } catch {}
+function markSeen() {
+  const first = !Object.keys(seenLbl).length
+  for (const r of S.Rows) if (first || r.Key === cur) seenLbl[r.Key] = r.Label
+  try { localStorage.setItem('seenLbl', JSON.stringify(seenLbl)) } catch {}
+}
+const isNew = r => seenLbl[r.Key] !== r.Label
 
 async function poll() {
   try {
@@ -331,6 +340,7 @@ async function poll() {
 }
 
 function render() {
+  markSeen()
   const rows = visible(), live = S.Rows.filter(r => !r.Hidden), other = S.Rows.filter(r => r.Group === 5).length, needs = live.filter(r => r.Group === 1).length, running = live.filter(r => r.Group === 0).length
   $('brand').className = 'brand' + (S.Busy ? ' busy' : '')
   $('brand').title = S.Busy ? 'worker busy' : 'worker idle'
@@ -347,7 +357,7 @@ function render() {
   let h = '', g = -1
   for (const r of rows) {
     if (r.Group !== g) { g = r.Group; h += `<div class="grp ${GROUPS[g][1]}">${GROUPS[g][0]}<span>${g === 5 ? other : rows.filter(x => x.Group === g).length}</span></div>` }
-    h += `<div class="row${r.Key === cur ? ' cur' : ''}" data-k="${esc(r.Key)}" title="${esc(r.Next)}"><span class="ic">${icon(r)}</span><span class="key">${esc(r.Key)}</span><span class="lbl">${stage(r)}</span><span class="age">${ago(r.Seen)}</span><span class="sum">${esc(r.Summary || '(no jira ticket)')}</span></div>`
+    h += `<div class="row${r.Key === cur ? ' cur' : ''}${isNew(r) ? ' new' : ''}" data-k="${esc(r.Key)}" title="${esc(r.Next)}"><span class="ic">${icon(r)}</span><span class="key">${esc(r.Key)}</span><span class="lbl">${stage(r)}</span><span class="age">${ago(r.Seen)}</span><span class="sum">${esc(r.Summary || '(no jira ticket)')}</span></div>`
   }
   if (!showOther && other && !query()) h += `<div class="grp c2">OTHER LOGS<span>${other} · z shows</span></div>`
   $('side').innerHTML = h || '<div class="grp c2">NOTHING MATCHES</div>'
