@@ -49,6 +49,8 @@ No user present — never ask, never wait. cwd = the worktree `cf-work` created 
      No code change (duplicate, already fixed) → the section holds one line `NONE: <reason>`.
    - **Terms** — glossary repos only, omit when empty: the entries to add or change, verbatim in the glossary's format (`**Term**:` line, definition, `_Avoid_`, `_CZ_`). The implementer copies them into `GLOSSARY.md`. A decision that is hard to reverse, surprising without context and a real trade-off → one line `[!] ADR candidate: <decision>`; never write an ADR headless.
    - `[?]` / `[!]` checklist from step 2
+
+   factory-worker fails the run unless `PLAN.md` has the headings exactly `## Requirements` (or `## Belongs in Sentry?`), `## Plan` and `## Implementation`.
 4a. Write holdout scenarios to `~/.local/state/sw-factory/holdout/<KEY>.md` (absolute path, outside the worktree). An independent verifier runs them in a browser against the MR's preview after the MR exists; the implementer can read but never edit them. Format, 3–8 scenarios:
    ```
    ## S1: <name>
@@ -85,6 +87,7 @@ Goal: the human answers questions in Jira instead of a session. One round = one 
    Then write the single line `ASK` to `~/.local/state/sw-factory/<KEY>.grill` (absolute path).
 5. No gaps → steps 4–5 as normal (settled decisions in Requirements, new assumptions as `[!]`), then write the single line `READY` to the same file.
 6. Round > 1 (no `PLAN.md`, last AI comment has `Otázky`): read the human reply in `TICKET.md` `## New comments`. `ok` accepts every `➡️`; `N jinak: X` overrides question N; free text answers what it addresses. Fold decisions into Zjištěno, recompute the frontier, then step 4 or 5. No round cap: ask as long as blocking gaps remain.
+7. Rerun of a round that already posted its plan comment (`PLAN.md` exists, last AI comment answers the reply): post nothing, read the last `PLAN.md` line of `~/.local/state/sw-factory/<KEY>.log` (why the previous run failed), add every heading step 4 requires that `PLAN.md` lacks, from the plan comment + code, then write `READY`.
 
 ## Holdout amend (`--holdout-amend`)
 
