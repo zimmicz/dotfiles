@@ -177,12 +177,12 @@ analyze() {
     echo "  worktree setup failed" | tee -a $LOG
     return 1
   fi
-  local PANE=$(wm_window $WT $LOG) GARGS=""
+  wm_window $WT $LOG; local GARGS=""
   if [[ -n "${GRILL:-}" ]]; then
     rm -f $LOG_DIR/$KEY.grill
     GARGS=" --grill --round $(( $(<$LOG_DIR/$KEY.round 2>/dev/null || echo 0) + 1 ))"
   fi
-  (cd $WT && TMUX_PANE=$PANE claude -p "/cf-work-headless $KEY$GARGS" \
+  (cd $WT && claude -p "/cf-work-headless $KEY$GARGS" \
     --model $TIER $DIRS --settings "$HEADLESS_SETTINGS" \
     --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$LOG_DIR/$KEY.grill) Write(/$TNOTES/$KEY.md) Edit(/$TNOTES/$KEY.md) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) Write(/$HOLDOUT/$KEY.api.md) Edit(/$HOLDOUT/$KEY.api.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_errors Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) \
@@ -229,9 +229,7 @@ wm_window() {
   local WT=$1 LOG=$2
   tmux ls >/dev/null 2>&1 || return 0
   tmux has-session -t sw-factory 2>/dev/null || tmux new-session -d -s sw-factory -n log
-  local PANE=$(tmux list-panes -s -t sw-factory -f "#{==:#{pane_current_path},$WT}" -F '#{pane_id}' | head -1)
-  [[ -n "$PANE" ]] || PANE=$(tmux new-window -d -t sw-factory: -n ${WT:t} -c $WT -P -F '#{pane_id}' "tail -n +1 -f --pid=$$ $LOG")
-  echo $PANE
+  [[ -n $(tmux list-panes -s -t sw-factory -f "#{==:#{pane_current_path},$WT}" -F '#{pane_id}') ]] || tmux new-window -d -t sw-factory: -n ${WT:t} -c $WT "tail -n +1 -f --pid=$$ $LOG"
 }
 
 implement() {
@@ -245,11 +243,11 @@ implement() {
   local TIER=$(grep -oP 'claude --model \K\w+' <<<"$SETUP" || echo sonnet)
   local DIRS=(); for D in ${(u)${(f)"$(grep -oP -- '--add-dir \K\S+' <<<"$SETUP")"}}; do DIRS+=(--add-dir $D); done
   [[ -n "$WT" && -f $WT/PLAN.md ]] || { echo "  no worktree/PLAN.md" | tee -a $LOG; return 1; }
-  local PANE=$(wm_window $WT $LOG) CR=($REPO) D
+  wm_window $WT $LOG; local CR=($REPO) D
   for D in ${(u)${(f)"$(grep -oP -- '--add-dir \K\S+' <<<"$SETUP")"}}; do [[ $D == $REPOS/* ]] && CR+=(${${D#$REPOS/}%%/*}); done
   local CONV=$(conventions $KEY ${(j:,:)${(u)CR}}) CARGS=()
   [[ -n "$CONV" ]] && CARGS=(--append-system-prompt "$CONV")
-  (cd $WT && TMUX_PANE=$PANE BASH_MAX_TIMEOUT_MS=2700000 claude -p "/cf-ticket-headless $KEY ${3:-}" $CARGS \
+  (cd $WT && BASH_MAX_TIMEOUT_MS=2700000 claude -p "/cf-ticket-headless $KEY ${3:-}" $CARGS \
     --model $TIER $DIRS --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config $LOG_DIR/$KEY.layout-media lean-ctx codegraph)" \
     --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__playwright Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
     --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**) Edit(/$PROPOSED/**) Write(/$PROPOSED/**)" \
@@ -335,9 +333,9 @@ verify() {
   rm -rf $OUT $MEDIA
   local CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-env/*' 2>/dev/null | sort -V | tail -1)
   local MCP=$(mcp_config $MEDIA)
-  local PANE=$(wm_window $WT0 $LOG)
+  wm_window $WT0 $LOG
   mkdir -p ~/cf-env-tmp
-  (cd $WT0 && TMUX_PANE=$PANE TMPDIR=$HOME/cf-env-tmp claude -p "/cf-holdout-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA")${4:+ failed=$4}" \
+  (cd $WT0 && TMPDIR=$HOME/cf-env-tmp claude -p "/cf-holdout-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA")${4:+ failed=$4}" \
     --model sonnet --settings "$HEADLESS_SETTINGS" \
     --strict-mcp-config --mcp-config "$MCP" \
     --allowedTools "Read Skill Write(/$OUT) Write(/$MEDIA/narration.tsv) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(bash $HOME/.claude/skills/cf-holdout-ui/narrate.sh $MEDIA $KEY) Bash(bash $HOME/.claude/skills/cf-holdout-api/run-scenarios.sh:*)" \
@@ -506,9 +504,9 @@ review() {
   fi
   echo "=== review${PRIOR:+ (incremental)} $KEY (${(j:, :)${(f)T}}) $(date -Iseconds)" | tee -a $LOG
   rm -f $OUT
-  local PANE=$(wm_window $WT0 $LOG) CONV=$(conventions $KEY $2) CARGS=()
+  wm_window $WT0 $LOG; local CONV=$(conventions $KEY $2) CARGS=()
   [[ -n "$CONV" ]] && CARGS=(--append-system-prompt "$CONV")
-  (cd $WT0 && TMUX_PANE=$PANE claude -p "/cf-review $KEY repos=${(j:,:)${(f)T}} branch=${WT0:t} report=$OUT$PRIOR" $CARGS \
+  (cd $WT0 && claude -p "/cf-review $KEY repos=${(j:,:)${(f)T}} branch=${WT0:t} report=$OUT$PRIOR" $CARGS \
     --model opus --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '' lean-ctx codegraph)" \
     --allowedTools "Read Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Write(/$OUT) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git merge-base:*) Bash(git fetch:*) Bash(glab mr note:*) Bash(glab api:*) Bash(jq:*)" \
     --disallowedTools "Edit Bash(git push:*) Bash(git commit:*) Bash(git checkout:*) Bash(git reset:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
@@ -598,8 +596,8 @@ resolve_conflict() {
       echo "  code conflict, MR under review → waiting for ai-rebase" | tee -a $LOG
       echo "$WHO conflicts with $TGT in code, under review → add MR label \`ai-rebase\` to resolve" >>$NOTES; return
     fi
-    local PANE=$(wm_window $WT $LOG)
-    (cd $WT && TMUX_PANE=$PANE claude -p "Rebase of branch $BR onto origin/$TGT is in progress in this worktree and stopped on conflicts. No human present, never ask. Run /mattpocock-skills:resolving-merge-conflicts. Intent of this branch: its MR $URL + PLAN.md / TICKET.md here if present. Intent of the other side: the commits on origin/$TGT touching each conflicted file (git log origin/$TGT -- <file>) and their MRs (glab api). Keep both intents. pnpm-lock.yaml: never hand-merge, git checkout --ours it, then pnpm install --lockfile-only. Continue with GIT_EDITOR=true git rebase --continue until the rebase is finished. Then run the repo's lint, typecheck and the tests touching the conflicted files (per its CLAUDE.md), fix only what the resolution broke, amend into the rebased commits. Never push, never skip or drop commits. Not confident about a hunk → stop. Write $REPORT: first line exactly RESOLVED or FAILED: <reason>, then markdown bullets for a reviewer skimming an MR note, one per conflicted file: - \`<path>\`: kept <X>, dropped <Y>, <why in one short clause> (max 2 lines each, no paragraphs). If the resolution forced a follow-up edit in a file that did not conflict, one more bullet for it. Last bullet: - Checks: <what ran, result>." \
+    wm_window $WT $LOG
+    (cd $WT && claude -p "Rebase of branch $BR onto origin/$TGT is in progress in this worktree and stopped on conflicts. No human present, never ask. Run /mattpocock-skills:resolving-merge-conflicts. Intent of this branch: its MR $URL + PLAN.md / TICKET.md here if present. Intent of the other side: the commits on origin/$TGT touching each conflicted file (git log origin/$TGT -- <file>) and their MRs (glab api). Keep both intents. pnpm-lock.yaml: never hand-merge, git checkout --ours it, then pnpm install --lockfile-only. Continue with GIT_EDITOR=true git rebase --continue until the rebase is finished. Then run the repo's lint, typecheck and the tests touching the conflicted files (per its CLAUDE.md), fix only what the resolution broke, amend into the rebased commits. Never push, never skip or drop commits. Not confident about a hunk → stop. Write $REPORT: first line exactly RESOLVED or FAILED: <reason>, then markdown bullets for a reviewer skimming an MR note, one per conflicted file: - \`<path>\`: kept <X>, dropped <Y>, <why in one short clause> (max 2 lines each, no paragraphs). If the resolution forced a follow-up edit in a file that did not conflict, one more bullet for it. Last bullet: - Checks: <what ran, result>." \
       --model opus --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '' lean-ctx codegraph)" \
       --allowedTools "Read Edit Write Skill mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Bash(git:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Bash(glab api:*) Bash(glab mr view:*) Bash(jq:*)" \
       --disallowedTools "Bash(git push:*) Bash(git reset --hard:*) Bash(git rebase --skip:*) Bash(git rebase --abort:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**) Edit(/$PROPOSED/**) Write(/$PROPOSED/**)" \
