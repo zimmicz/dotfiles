@@ -40,7 +40,7 @@ A `Conversation compacted` notice mid-run → before the next step re-read this 
 
 ## Verify
 
-5. Tests, lint, typecheck (`nr test`, `nr lint`, `nr typecheck` or project equivalents) must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix.
+5. Tests, lint, typecheck (`nr test`, `nr lint`, `nr typecheck` or project equivalents) must all pass. Fix your own failures; pre-existing failures unrelated to the change → note them, don't fix. A command whose result you need (tests, lint, typecheck, build, E2E) runs in the foreground: Bash `timeout` up to `2700000` (45 min), never `run_in_background`, never lean-ctx background jobs. `claude -p` ends with your turn and nothing wakes you up, so a pending background job dies unread and the run ends without an MR. Background only for servers you poll yourself in the same turn (Storybook, dev server).
 5a. Diff touches UI files (`*.tsx`, `*.css`, stories) → `/check-layout` (Playwright MCP, headless; auth routes → log in per its step 5): screenshots at desktop + mobile, all states. UI is not verified until this passes; its verdict table and screenshot paths go to `/cf-mr` (`## MR body`, Evidence), which uploads the screenshots to the MR.
 5b. New or changed E2E scenarios → run them locally: the repo's E2E command filtered to those scenarios, `CI=true TARGET=http://localhost:<this worktree's dev server port>`. E2E logs in by itself from `.env`, no logged-in browser needed.
 5c. Anything still unverified → list it in the MR description and the Jira comment with the exact error of the failed attempt. "Headless" / "no logged-in browser" / "will run in CI/preview" is never a reason.
