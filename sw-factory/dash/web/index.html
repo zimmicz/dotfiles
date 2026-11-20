@@ -198,7 +198,7 @@ th.num{font:700 12px var(--sans)}
 .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-top:16px;overflow:auto}
 .box h2{font-size:13px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--fg2);margin:0 0 14px;border:0;padding:0}
 .box table{width:100%}
-#nav button,#nosprint td:nth-child(-n+3){white-space:nowrap}#nosprint tr[data-k]{cursor:pointer}#nosprint tr.cur td{background:#4da6ff24}
+#nav button,#nosprint td:nth-child(-n+3),#uifix td:nth-child(-n+7){white-space:nowrap}#nosprint tr[data-k],#uifix tr[data-k]{cursor:pointer}#nosprint tr.cur td,#uifix tr.cur td{background:#4da6ff24}
 .bars{display:flex;align-items:flex-end;gap:4px;height:170px;border-bottom:2px solid var(--line2);padding-top:6px}
 .bars div{flex:1;background:linear-gradient(180deg,var(--cyan),var(--blue));min-height:2px;border-radius:4px 4px 0 0}
 .bars div:hover{background:var(--yellow)}
@@ -253,7 +253,8 @@ dialog h3{margin:0 0 14px;font-size:19px}
   <span id="pills" style="display:flex;gap:8px"></span>
   <div class="seg" id="nav">
     <button data-v="overview">Overview <kbd>1</kbd></button>
-    <button data-v="nosprint">Backlog <kbd>2</kbd></button>
+    <button data-v="uifix">UI fix <kbd>2</kbd></button>
+    <button data-v="nosprint">Backlog <kbd>3</kbd></button>
     <button data-v="board">Board <kbd>B</kbd></button>
     <button data-v="stats">Stats <kbd>S</kbd></button>
   </div>
@@ -270,6 +271,7 @@ dialog h3{margin:0 0 14px;font-size:19px}
 <main id="board" hidden></main>
 <main id="stats" class="stats" hidden></main>
 <main id="nosprint" class="stats" hidden></main>
+<main id="uifix" class="stats" hidden></main>
 <footer>
   <span class="hints"><span><kbd>j</kbd> <kbd>k</kbd> move</span><span><kbd>tab</kbd> tabs</span><span><kbd>a</kbd> approve</span><span><kbd>R</kbd> reply</span><span><kbd>t</kbd> retry</span><span><kbd>o</kbd> open</span><span><kbd>?</kbd> all keys</span></span>
   <span id="status"></span>
@@ -287,12 +289,12 @@ const GROUPS = [['RUNNING', 'c32'], ['NEEDS YOU', 'c33'], ['TODO', 'c35'], ['IN 
 const COLC = {todo: 'magenta', analysis: 'cyan', 'plan gate': 'yellow', implement: 'blue', verify: 'orange', review: 'magenta', quiz: 'yellow', merge: 'green', nightly: 'green', RC: 'green', done: 'dim'}
 const STAGEC = {analyze: 'cyan', implement: 'blue', 'verify-ui': 'orange', 'verify-api': 'orange', verify: 'orange', review: 'magenta', conflict: 'red'}
 const HELP = [
-  ['Navigate', [['j k ↑ ↓', 'move'], ['g G', 'top / bottom'], ['tab', 'next tab (shift: previous)'], ['^u ^d', 'scroll pane'], ['z', 'show other logs'], ['Z', 'zoom pane'], ['/', 'search any ticket, enter looks it up in Jira'], ['1 2 B S', 'overview / backlog / board / stats'], ['j k enter J r', 'backlog: move / open / Jira / reload']]],
+  ['Navigate', [['j k ↑ ↓', 'move'], ['g G', 'top / bottom'], ['tab', 'next tab (shift: previous)'], ['^u ^d', 'scroll pane'], ['z', 'show other logs'], ['Z', 'zoom pane'], ['/', 'search any ticket, enter looks it up in Jira'], ['1 2 3 B S', 'overview / ui fix / backlog / board / stats'], ['j k enter J M r', 'ui fix: move / open / Jira / MR / reload'], ['j k enter J r', 'backlog: move / open / Jira / reload']]],
   ['Factory  (asks to confirm)', [['a', 'approve plan → ai-fix'], ['R', 'reply in Jira, no confirm (Ctrl+V pastes image)'], ['t', 'retry failed stage'], ['w', 'run worker now'], ['f', 'feed todo to factory'], ['b', 'agent fixes MR conflict'], ['s', 'skip merge gate'], ['Q', 'quiz me → ai-quizzed'], ['A', 'accept holdout proposal → re-verify'], ['X', 'reject holdout proposal']]],
   ['Open', [['enter o', 'MR, else Jira'], ['J', 'Jira'], ['m', 'MR'], ['y', 'copy tab text'], ['l', 'load full log'], ['e', 'edit plan / holdout, proposal first (vim in tmux)'], ['c', 'resume session (tmux)']]],
   ['Other', [['r', 'refresh Jira'], ['i', 'factory status (Jira, timer, units)'], ['?', 'this help'], ['esc', 'close dialog / clear search']]],
 ]
-let S = {Rows: [], Tabs: ['log'], Cols: [], Repos: []}, extras = [], cur = '', tab = 0, view = 'overview', showOther = false, pending = null, bodyKey = '', src = '', days = 30, pick = null, images = {}, boot = true, ns = [], nsi = 0
+let S = {Rows: [], Tabs: ['log'], Cols: [], Repos: []}, extras = [], cur = '', tab = 0, view = 'overview', showOther = false, pending = null, bodyKey = '', src = '', days = 30, pick = null, images = {}, boot = true, ns = [], nsi = 0, uf = [], ufi = 0
 
 const all = () => [...S.Rows, ...extras.filter(e => !S.Rows.some(r => r.Key === e.Key))]
 const query = () => $('q').value.trim().toLowerCase()
@@ -327,11 +329,12 @@ async function poll() {
     boot = false
     const p = new URLSearchParams(location.hash.slice(1)), k = p.get('key')
     tab = Math.max(S.Tabs.indexOf(p.get('tab')), 0)
-    if (['board', 'stats', 'nosprint'].includes(p.get('view'))) view = p.get('view')
+    if (['board', 'stats', 'nosprint', 'uifix'].includes(p.get('view'))) view = p.get('view')
     if (k && all().some(r => r.Key === k)) cur = k
     else if (k) lookup(k, true)
     if (view === 'stats') renderStats()
     if (view === 'nosprint') renderNoSprint(true)
+    if (view === 'uifix') renderUIFix(true)
   }
   if (!sel().Key) cur = (visible()[0] || {}).Key || ''
   if ($('sys').open) showSys()
@@ -377,7 +380,7 @@ function render() {
   $('next').innerHTML = r.Key && r.Next ? `${ball(r)}<span>${esc(r.Next)}</span>` : ''
   $('tabs').innerHTML = S.Tabs.map((t, i) => `<span class="${i === tab ? 'on' : ''}" data-t="${i}">${t}</span>`).join('')
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === view))
-  for (const v of ['overview', 'nosprint', 'board', 'stats']) $(v).hidden = v !== view
+  for (const v of ['overview', 'uifix', 'nosprint', 'board', 'stats']) $(v).hidden = v !== view
   history.replaceState(null, '', '#' + new URLSearchParams({view, key: cur, tab: S.Tabs[tab]}))
   if (view === 'board') renderBoard()
 }
@@ -461,7 +464,23 @@ async function renderNoSprint(fetchIt) {
   const c = el.querySelector('tr.cur'); if (c) c.scrollIntoView({block: 'nearest'})
 }
 
-function go(v) { view = v; render(); if (v === 'stats') renderStats(); if (v === 'nosprint') renderNoSprint(true); if (v === 'overview') loadBody() }
+async function renderUIFix(fetchIt) {
+  const el = $('uifix')
+  if (fetchIt) {
+    el.innerHTML = '<p class="dim">loading…</p>'
+    const r = await fetch('/api/uifix')
+    if (!r.ok) { el.innerHTML = `<p class="c31">${esc(await r.text())}</p>`; return }
+    uf = await r.json(); ufi = Math.min(ufi, Math.max(uf.length - 1, 0))
+  }
+  const stC = {new: 'c35', wip: 'c32', deploy: 'c34', test: 'c33', merge: 'c32', done: 'c2', rejected: 'c2', error: 'c31'}
+  const upd = u => ago(Date.parse(u.replace(/([+-]\d\d)(\d\d)$/, '$1:$2')) / 1000)
+  const counts = Object.keys(stC).map(s => [s, uf.filter(i => i.State === s).length]).filter(([, c]) => c).map(([s, c]) => `${c} ${s}`)
+  const costs = uf.filter(i => i.Cost > 0), avg = costs.length ? ` · Ø $${(costs.reduce((a, i) => a + i.Cost, 0) / costs.length).toFixed(2)} per ticket` : ''
+  el.innerHTML = `<div class="box"><h2>UI fix · open or updated in 7 days · ${uf.length}</h2><p class="dim">${esc(counts.join(' · ') || 'nothing')}${avg}</p><table><tr><th>ticket</th><th>state</th><th>status</th><th>reporter</th><th>MR</th><th class="num">round</th><th class="num">cost</th><th>summary</th><th class="num">updated</th></tr>${uf.map((i, n) => `<tr class="${n === ufi ? 'cur' : ''}" data-k="${esc(i.Key)}"><td><b class="key">${esc(i.Key)}</b></td><td><span class="tag ${stC[i.State] || 'c2'}">${esc(i.State)}</span></td><td class="dim">${esc(i.Status)}</td><td>${esc(i.Reporter)}</td><td>${i.MRURL ? `<a href="${esc(i.MRURL)}" target="_blank">!${i.MR}</a>` : '<span class="dim">–</span>'}</td><td class="num">${i.Round || ''}</td><td class="num">${i.Cost ? '$' + i.Cost.toFixed(2) : ''}</td><td>${esc(i.Summary)}</td><td class="num">${upd(i.Updated)}</td></tr>`).join('')}</table></div>`
+  const c = el.querySelector('tr.cur'); if (c) c.scrollIntoView({block: 'nearest'})
+}
+
+function go(v) { view = v; render(); if (v === 'stats') renderStats(); if (v === 'nosprint') renderNoSprint(true); if (v === 'uifix') renderUIFix(true); if (v === 'overview') loadBody() }
 function select(k) { if (k === cur) return; cur = k; render(); if (view === 'overview') loadBody() }
 function move(d) { const rs = visible(), i = rs.findIndex(r => r.Key === cur); const n = rs[Math.min(Math.max(i + d, 0), rs.length - 1)]; if (n) select(n.Key) }
 function openURL(u, what) { u ? (window.open(u, '_blank'), say('opened ' + u)) : say('no ' + what, true) }
@@ -557,6 +576,7 @@ $('stats').onclick = e => {
   if (e.target.dataset.k) { e.preventDefault(); lookup(e.target.dataset.k) }
 }
 $('nosprint').onclick = e => { const t = e.target.closest('tr[data-k]'); if (t) lookup(t.dataset.k) }
+$('uifix').onclick = e => { const t = e.target.closest('tr[data-k]'); if (t && !e.target.closest('a')) lookup(t.dataset.k) }
 $('tabs').onclick = e => { if (e.target.dataset.t) { tab = +e.target.dataset.t; render(); loadBody() } }
 $('body').onclick = e => {
   const c = e.target.closest('.main [data-c]'), v = $('body').querySelector('.main video')
@@ -597,9 +617,14 @@ document.onkeydown = e => {
     if (d) { nsi = Math.min(Math.max(nsi + d, 0), ns.length - 1); renderNoSprint(); e.preventDefault(); return }
     if (nk) { nk(); e.preventDefault(); return }
   }
+  if (view === 'uifix') {
+    const d = {j: 1, ArrowDown: 1, k: -1, ArrowUp: -1}[k], it = uf[ufi], nk = {Enter: () => it && lookup(it.Key), o: () => it && lookup(it.Key), J: () => it && openURL('https://cleverfarm.atlassian.net/browse/' + it.Key, 'ticket'), M: () => it && openURL(it.MRURL, 'MR'), r: () => renderUIFix(true)}[k]
+    if (d) { ufi = Math.min(Math.max(ufi + d, 0), uf.length - 1); renderUIFix(); e.preventDefault(); return }
+    if (nk) { nk(); e.preventDefault(); return }
+  }
   const openMain = () => r.MR ? openURL(r.MR, 'MR') : openURL(r.JiraURL, 'jira ticket')
   const keys = {
-    '?': showHelp, i: showSys, '/':() => { $('q').focus(); $('q').select() }, '1': () => go('overview'), '2': () => go(view === 'nosprint' ? 'overview' : 'nosprint'), B: () => go(view === 'board' ? 'overview' : 'board'), S: () => go(view === 'stats' ? 'overview' : 'stats'),
+    '?': showHelp, i: showSys, '/':() => { $('q').focus(); $('q').select() }, '1': () => go('overview'), '2': () => go(view === 'uifix' ? 'overview' : 'uifix'), '3': () => go(view === 'nosprint' ? 'overview' : 'nosprint'), B: () => go(view === 'board' ? 'overview' : 'board'), S: () => go(view === 'stats' ? 'overview' : 'stats'),
     Z: () => document.body.classList.toggle('zoom'), z: () => { showOther = !showOther; render() },
     j: () => move(1), ArrowDown: () => move(1), k: () => move(-1), ArrowUp: () => move(-1), g: () => move(-1e6), Home: () => move(-1e6), G: () => move(1e6), End: () => move(1e6),
     Tab: () => { tab = (tab + (e.shiftKey ? S.Tabs.length - 1 : 1)) % S.Tabs.length; render(); loadBody() },

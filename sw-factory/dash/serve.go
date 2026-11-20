@@ -1149,6 +1149,14 @@ func (s *server) handler() http.Handler {
 		}
 		writeJSON(w, is)
 	})
+	mux.HandleFunc("GET /api/uifix", func(w http.ResponseWriter, r *http.Request) {
+		rows, err := fetchUIFix(uiFixStateDir())
+		if err != nil {
+			http.Error(w, "jira: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, rows)
+	})
 	mux.HandleFunc("GET /api/ticket", func(w http.ResponseWriter, r *http.Request) {
 		key, tab := r.URL.Query().Get("key"), r.URL.Query().Get("tab")
 		if !regexp.MustCompile(`^[\w.-]+$`).MatchString(key) || strings.Contains(key, "..") || !slices.Contains(webTabs, tab) {
