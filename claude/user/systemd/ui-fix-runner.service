@@ -1,0 +1,11 @@
+[Unit]
+Description=UI fix runner: Jira tickets labelled ui-fix → headless Claude fix in cf-farm-frontend (~/work/cleverfarm/agents/ui-fix)
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/share/fnm/node-versions/v22.22.1/installation/bin:%h/.local/bin:%h/bin:/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=%h/.config/jira.env
+EnvironmentFile=-%h/.config/ui-fix-runner.env
+WorkingDirectory=%h/work/cleverfarm/agents/ui-fix
+ExecStart=/usr/bin/env node agent/run.mjs
+TimeoutStartSec=90min

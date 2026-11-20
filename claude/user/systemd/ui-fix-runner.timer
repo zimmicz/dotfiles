@@ -1,0 +1,9 @@
+[Unit]
+Description=Poll Jira for ui-fix tickets every 2 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+
+[Install]
+WantedBy=timers.target
