@@ -110,6 +110,11 @@ Don't (Jira): greetings ("Ahoj"), thanks-for-the-catch, unicode emoji (👍 → 
 - MR created by Claude → 🤖 prefix line (see "Posted by Claude") at the very top.
 - Fill the real template, don't leave `<!-- Stručný popis -->` placeholders empty.
 
+## LinkedIn post
+
+- Short, plain: one-line personal context ("doma mám X, aplikace mi nevyhovuje"), then "Chtěl jsem:" bullets of own needs, then terse tech stack bullets.
+- No hook drama, no long feature explanations, no AI-lessons or savings paragraphs unless asked. (Michal rewrote a 2 600-char draft to ~850 chars, 2026-11-20: "ten text je divný".)
+
 ## Email
 
 No samples mined yet — infer: polite Czech, a touch more formal than Slack but
