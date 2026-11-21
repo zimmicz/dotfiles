@@ -69,6 +69,7 @@ ln -sf ${DOTFILES_DIR}/mise/config.toml ${CONFIG_DIR}/mise/config.toml
 ln -sf ${DOTFILES_DIR}/ackrc ~/.ackrc
 ln -sf ${DOTFILES_DIR}/gitconfig ~/.gitconfig
 ln -sf ${DOTFILES_DIR}/gitignore ~/.gitignore
+ln -sf ${DOTFILES_DIR}/gitattributes ~/.gitattributes
 ln -sf ${DOTFILES_DIR}/psqlrc ~/.psqlrc
 ln -sf ${DOTFILES_DIR}/tmux.conf ~/.tmux.conf
 ln -sf ${DOTFILES_DIR}/tmuxloader ~/.tmuxloader

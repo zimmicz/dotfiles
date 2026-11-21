@@ -1,5 +1,6 @@
 [core]
     excludesfile = ~/.gitignore
+    attributesfile = ~/.gitattributes
     pager = delta
     editor = /opt/nvim/bin/nvim
 [delta]
@@ -34,6 +35,9 @@
 [merge]
     tool = vim
     conflictstyle = zdiff3
+[merge "mergiraf"]
+    name = mergiraf
+    driver = mergiraf merge --git %O %A %B -s %S -x %X -y %Y -p %P -l %L
 [mergetool]
     prompt = false
     keepBackup = false
