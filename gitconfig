@@ -10,7 +10,7 @@
     side-by-side = true
 [diff]
     colorMoved = true
-    external = difft
+    algorithm = histogram
     tool = difftastic
 [difftool]
     prompt = false
@@ -28,11 +28,12 @@
     autoSetupRemote = true
 [branch]
     autosetuprebase = always
+    sort = -committerdate
 [core]
     compression = 0
 [merge]
     tool = vim
-    conflictstyle = diff3
+    conflictstyle = zdiff3
 [mergetool]
     prompt = false
     keepBackup = false
@@ -52,13 +53,13 @@
     cm = commit -m
     co = checkout
     cob = checkout -b
-    cof = !sh -c \"git for-each-ref --format='%(refname:short)' refs/heads | fzf | xargs git checkout\"
+    cof = !sh -c \"git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/heads | fzf | xargs git checkout\"
     comp = !sh -c \"git diff HEAD $1 -- $2\"
     dc = diff --word-diff --cached
+    dft = -c diff.external=difft diff
     dw = diff --word-diff --ignore-all-space
     f = fetch
     find = "!git log --color -p -S "
-    fixup = "!git log -n 50 --pretty=format:'%h %s' --no-merges | fzf | cut -c -7 | xargs -o git commit --fixup"
     hist = log --pretty=format:\"%h %ad | %s%d [%an]\" --graph --date=short
     i = init
     la = "!git config -l | grep alias | cut -c 7-"
@@ -83,6 +84,11 @@
 	spellcheck = false
 [rebase]
     autosquash = true
+    updateRefs = true
+    autoStash = true
+[rerere]
+    enabled = true
+    autoupdate = true
 [status]
     submodulesummary = 1
 ;[submodule]
@@ -92,3 +98,5 @@
 [credential "https://github.com"]
 	helper = 
 	helper = !/usr/bin/gh auth git-credential
+[maintenance]
+	repo = /home/zimmi/work/cleverfarm/repos/cf-farm-frontend
