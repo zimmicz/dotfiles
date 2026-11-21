@@ -108,3 +108,14 @@ if ! ~/.local/bin/tmux -V 2>/dev/null | grep -q "${TMUX_VERSION}"; then
     && install -m 755 ${TM_TMP}/tmux ~/.local/bin/tmux
   rm -rf ${TM_TMP}
 fi
+
+MERGIRAF_VERSION=0.20.0
+MERGIRAF_SHA256=4341127da8d1da29eced669fbacc1e5d6e530115098de0b82cc9dc551a1acf37
+if ! ~/.local/bin/mergiraf --version 2>/dev/null | grep -q "${MERGIRAF_VERSION}"; then
+  MG_TMP=$(mktemp -d)
+  curl -fsSL -o ${MG_TMP}/mergiraf.tar.gz https://codeberg.org/mergiraf/mergiraf/releases/download/v${MERGIRAF_VERSION}/mergiraf_x86_64-unknown-linux-gnu.tar.gz \
+    && [ "$(sha256sum ${MG_TMP}/mergiraf.tar.gz | cut -d' ' -f1)" = "${MERGIRAF_SHA256}" ] \
+    && tar -xzf ${MG_TMP}/mergiraf.tar.gz -C ${MG_TMP} \
+    && install -m 755 ${MG_TMP}/mergiraf ~/.local/bin/mergiraf
+  rm -rf ${MG_TMP}
+fi
