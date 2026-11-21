@@ -3,7 +3,7 @@ Description=sw-factory dispatcher: picks work, spawns each stage as its own sw-f
 
 [Service]
 Type=oneshot
-Environment=PATH=%h/.local/bin:%h/.fnm/aliases/default/bin:%h/bin:/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=%h/.local/bin:%h/.local/share/mise/shims:%h/bin:/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=%h/.config/jira.env
 EnvironmentFile=%h/.config/sw-factory.env
 ExecStart=%h/bin/factory-worker

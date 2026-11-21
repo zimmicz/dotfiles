@@ -9,13 +9,16 @@ fi
 . "$HOME/.cargo/env"
 
 # >>> lean-ctx shell hook >>>
-# Passthrough stubs: ensure _lc/_lc_compress exist in ALL zsh contexts
+# Passthrough stubs: ensure the alias targets (lean_ctx_track/_compress,
+# legacy _lc/_lc_compress) exist in ALL zsh contexts
 # (non-interactive subshells, eval, agent harnesses) so aliases that
 # reference them degrade gracefully instead of "command not found".
 # The full shell-hook.zsh overrides these when loaded via .zshrc.
 _lc()          { command "$@"; }
 _lc_compress() { command "$@"; }
-if [[ -z "$LEAN_CTX_ACTIVE" && -z "$LEAN_CTX_NO_HOOK" && -n "$ZSH_EXECUTION_STRING" ]] \
+lean_ctx_track()    { command "$@"; }
+lean_ctx_compress() { command "$@"; }
+if [[ -z "$LEAN_CTX_ACTIVE" && -z "$LEAN_CTX_DISABLED" && -z "$LEAN_CTX_NO_HOOK" && -n "$ZSH_EXECUTION_STRING" ]] \
   && [[ "$ZSH_EXECUTION_STRING" != *"__CURSOR_SANDBOX"* ]] \
   && [[ "$ZSH_EXECUTION_STRING" != *"dump_zsh_state"* ]] \
   && [[ "$ZSH_EXECUTION_STRING" != *"lean-ctx hook "* ]] \

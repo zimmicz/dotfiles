@@ -21,7 +21,7 @@ ENV HOME=/home/${USERNAME} \
     USER=${USERNAME} \
     DCLAUDE_UID=${UID} \
     SHELL=/bin/zsh \
-    PATH=/home/${USERNAME}/.fnm/aliases/default/bin:/home/${USERNAME}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    PATH=/opt/node/bin:/home/${USERNAME}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     DISABLE_AUTOUPDATER=1
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

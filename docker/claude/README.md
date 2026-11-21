@@ -39,7 +39,7 @@ Do not start it in a worktree where an sw-factory stage is running; it does not 
 | `~/.claude/projects` | rw (resume, nightly reflection) |
 | `~/.claude` config: settings, CLAUDE.md, LEARNED.md, hooks, plugins, skills, `.credentials.json` | ro |
 | everything else Claude writes to `~/.claude` | volume `dclaude-state` |
-| `~/dotfiles`, `~/bin`, `~/.fnm`, claude binary | ro |
+| `~/dotfiles`, `~/bin`, mise node (`/opt/node`), `~/.local/bin/lean-ctx`, claude binary | ro |
 | pnpm store | volume `dclaude-pnpm` |
 | `~/.claude.json` | throwaway copy |
 
