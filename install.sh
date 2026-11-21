@@ -62,8 +62,11 @@ ln -sf ${DOTFILES_DIR}/bspwm/bspwmrc ${CONFIG_DIR}/bspwm/bspwmrc
 ln -sf ${DOTFILES_DIR}/sxhkd/sxhkdrc ${CONFIG_DIR}/sxhkd/sxhkdrc
 ln -sf ${DOTFILES_DIR}/yabar/yabar.conf ${CONFIG_DIR}/yabar/yabar.conf
 
+mkdir -p ${CONFIG_DIR}/lazygit ${CONFIG_DIR}/mise
+ln -sf ${DOTFILES_DIR}/lazygit/config.yml ${CONFIG_DIR}/lazygit/config.yml
+ln -sf ${DOTFILES_DIR}/mise/config.toml ${CONFIG_DIR}/mise/config.toml
+
 ln -sf ${DOTFILES_DIR}/ackrc ~/.ackrc
-ln -sf ${DOTFILES_DIR}/dir_bookmarks ~/.dir_bookmarks
 ln -sf ${DOTFILES_DIR}/gitconfig ~/.gitconfig
 ln -sf ${DOTFILES_DIR}/gitignore ~/.gitignore
 ln -sf ${DOTFILES_DIR}/psqlrc ~/.psqlrc

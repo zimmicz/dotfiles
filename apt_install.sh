@@ -1,2 +1,2 @@
 sudo apt update
-sudo apt install scrot imagemagick git livegrep fzf autorandr
+sudo apt install scrot imagemagick git livegrep fzf autorandr bat

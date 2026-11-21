@@ -23,6 +23,7 @@ zstyle ':prezto:*:*' color 'yes'
 
 # Set the Prezto modules to load (browse modules).
 # The order matters.
+zstyle ':prezto:load' pmodule-dirs $HOME/.zprezto-contrib
 zstyle ':prezto:load' pmodule \
   'environment' \
   'terminal' \
@@ -32,6 +33,8 @@ zstyle ':prezto:load' pmodule \
   'directory' \
   'spectrum' \
   'utility' \
+  'completion' \
+  'fzf-tab' \
   'prompt' \
   'git' \
   'syntax-highlighting' \

@@ -17,7 +17,6 @@ fi
 
 alias c="command claude --enable-auto-mode"
 alias xclaude="command claude --dangerously-skip-permissions"
-alias claude='echo "Use c instead" && false'
 alias cr="command claude --resume"
 alias tf="terraform "
 alias lg="lazygit"
@@ -25,14 +24,12 @@ alias g="git "
 alias nr="command npm run"
 alias pnr="command pnpm run"
 npm() { if [[ "$1" == "run" ]]; then echo "Use nr instead" && return 1; fi; command npm "$@"; }
-alias nvm="fnm"
 alias ...="cd ../.."
 alias untar='tar -xvzf'
 alias ntar='tar -cf'
 alias tl='tmuxloader'
 alias vim='/opt/nvim/bin/nvim'
 alias nvim='/opt/nvim/bin/nvim'
-autoload -Uz compinit && compinit
 alias k=kubectl
 export KUBE_EDITOR=/opt/nvim/bin/nvim
 command -v kubectl >/dev/null && source <(kubectl completion zsh) && compdef k=kubectl
@@ -76,31 +73,25 @@ reclaude() {
 }
 
 unalias cdg 2> /dev/null
-cdg() {
-   local dest_dir=$(< ~/.dir_bookmarks | fzf )
-   if [[ $dest_dir != '' ]]; then
-      cd "$dest_dir"
-   fi
-}
-
 unalias sl 2> /dev/null
 
 # fzf
+export FZF_DEFAULT_COMMAND='fdfind --type f --hidden --exclude .git'
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_CTRL_T_OPTS="--preview 'batcat --color=always --line-range :200 {}'"
+export FZF_ALT_C_COMMAND='fdfind --type d --hidden --exclude .git'
 source /usr/share/doc/fzf/examples/key-bindings.zsh
 source /usr/share/doc/fzf/examples/completion.zsh
+zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls -1 --color=always $realpath'
 
-# fnm
-export PATH="/home/zimmi/.local/share/fnm:$PATH"
-eval "`fnm env --use-on-cd`"
+eval "$(mise activate zsh)"
+eval "$(zoxide init zsh)"
 . "/home/zimmi/.deno/env"
 
 # Added by flyctl installer
 export FLYCTL_INSTALL="/home/zimmi/.fly"
 export PATH="$FLYCTL_INSTALL/bin:$PATH"
 
-#THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
-export SDKMAN_DIR="$HOME/.sdkman"
-[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
 # lean-ctx shell hook — begin
 if [ -f "/home/zimmi/.config/lean-ctx/shell-hook.zsh" ]; then
 . "/home/zimmi/.config/lean-ctx/shell-hook.zsh"
