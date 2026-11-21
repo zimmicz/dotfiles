@@ -183,11 +183,27 @@ exec --no-startup-id autorandr --change --default mobile
 exec --no-startup-id copyq
 exec --no-startup-id nm-applet
 exec --no-startup-id redshift
+exec --no-startup-id xss-lock --transfer-sleep-lock -- ~/bin/lock.sh
+exec --no-startup-id autotiling
+
+bindsym $mod+Shift+o move scratchpad
+bindsym $mod+o scratchpad show
+
+workspace_auto_back_and_forth yes
+bindsym $mod+Tab workspace back_and_forth
+
+bindsym $mod+g exec --no-startup-id rofi -show window -show-icons
+bindsym Print exec --no-startup-id flameshot gui
+
+bindsym $mod+m exec i3-input -F 'mark %s' -l 1 -P 'Mark: '
+bindsym $mod+apostrophe exec i3-input -F '[con_mark="%s"] focus' -l 1 -P 'Goto: '
+
+hide_edge_borders smart
 
 # Pulse Audio controls
-bindsym XF86AudioRaiseVolume exec --no-startup-id pactl -- set-sink-volume 0 +5% #increase sound volume
-bindsym XF86AudioLowerVolume exec --no-startup-id pactl -- set-sink-volume 0 -5% #decrease sound volume
-bindsym XF86AudioMute exec --no-startup-id pactl -- set-sink-mute 0 toggle # mute sound
+bindsym XF86AudioRaiseVolume exec --no-startup-id pactl -- set-sink-volume @DEFAULT_SINK@ +5% #increase sound volume
+bindsym XF86AudioLowerVolume exec --no-startup-id pactl -- set-sink-volume @DEFAULT_SINK@ -5% #decrease sound volume
+bindsym XF86AudioMute exec --no-startup-id pactl -- set-sink-mute @DEFAULT_SINK@ toggle # mute sound
 
 # Media player controls
 bindsym XF86AudioPlay exec playerctl play
