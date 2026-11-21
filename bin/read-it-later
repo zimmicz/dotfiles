@@ -10,7 +10,7 @@ set +a
 
 STATE=$HOME/.local/state/read-it-later
 mkdir -p $STATE
-LOG=$STATE/run-$(date +%F-%H%M)$( (( DRY )) && echo -dry).json
+STAMP=$(date +%F-%H%M)$( (( DRY )) && echo -dry)
 
 export DISPLAY=${DISPLAY:-:0}
 if ! pgrep -x chromium >/dev/null; then
@@ -26,28 +26,52 @@ if (( DRY )); then
 fi
 
 cd $HOME/work/cleverfarm/agents
-claude -p "$PROMPT" \
-  --agent read-it-later-organizer \
-  --chrome \
-  --settings '{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false}}' \
-  --allowedTools "mcp__claude_ai_Notion mcp__claude-in-chrome WebFetch Bash(jira:*) Bash(jq:*)" \
-  $DENY \
-  --output-format stream-json --verbose \
-  </dev/null | tee $LOG \
-  | jq --unbuffered -r 'select(.type=="assistant") | .message.content[]? | if .type=="tool_use" then "→ \(.name | sub("^mcp__.*__"; ""))" elif .type=="text" then .text else empty end' 2>/dev/null
 
-DONE=$(grep '"type":"result"' $LOG | tail -1)
-RESULT=$(print -r -- "$DONE" | jq -r '.result // empty' 2>/dev/null)
+REPORT=()
+FAILED=()
 
-if (( DRY )); then
-  print -r -- "$DONE" | jq -r '"cost: $\(.total_cost_usd)"' 2>/dev/null
-  exit 0
+run() {
+  local agent=$1 tools=$2 heading=$3
+  local log=$STATE/run-$STAMP-$agent.json
+  print -r -- "== $agent"
+  claude -p "$PROMPT" \
+    --agent $agent \
+    --chrome \
+    --settings '{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false}}' \
+    --allowedTools "$tools" \
+    $DENY \
+    --output-format stream-json --verbose \
+    </dev/null | tee $log \
+    | jq --unbuffered -r 'select(.type=="assistant") | .message.content[]? | if .type=="tool_use" then "→ \(.name | sub("^mcp__.*__"; ""))" elif .type=="text" then .text else empty end' 2>/dev/null
+
+  local res=$(grep '"type":"result"' $log | tail -1)
+  local result=$(print -r -- "$res" | jq -r '.result // empty' 2>/dev/null)
+
+  if (( DRY )); then
+    print -r -- "$res" | jq -r '"cost: $\(.total_cost_usd)"' 2>/dev/null
+    return
+  fi
+
+  if [[ "$(print -r -- "$res" | jq -r '.is_error' 2>/dev/null)" != false || -z "$result" ]]; then
+    FAILED+=("$agent selhal, log: $log")
+    return
+  fi
+
+  [[ "$result" == NOTHING ]] || REPORT+=("**$heading**"$'\n'"$result")
+}
+
+run read-it-later-organizer "mcp__claude_ai_Notion mcp__claude-in-chrome WebFetch Bash(jira:*) Bash(jq:*)" "→ Jira"
+run read-it-later-followup "mcp__claude_ai_Notion mcp__claude-in-chrome WebFetch" "→ Followupy"
+
+(( DRY )) && exit 0
+
+if (( ${#FAILED} )); then
+  print -rl -- $FAILED | ~/.claude/scripts/slack-post.sh "Číst později: chyba"
 fi
 
-if [[ "$(print -r -- "$DONE" | jq -r '.is_error' 2>/dev/null)" != false || -z "$RESULT" ]]; then
-  print -r -- "read-it-later selhal, log: $LOG" | ~/.claude/scripts/slack-post.sh "Číst později: chyba"
-  exit 1
+if (( ${#REPORT} )); then
+  print -r -- "${(pj:\n\n:)REPORT}" | ~/.claude/scripts/slack-post.sh "Číst později"
 fi
 
-[[ "$RESULT" == NOTHING ]] && exit 0
-print -r -- "$RESULT" | ~/.claude/scripts/slack-post.sh "Číst později → Jira"
+(( ${#FAILED} )) && exit 1
+exit 0
