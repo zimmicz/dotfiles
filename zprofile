@@ -17,9 +17,9 @@ fi
 # Editors
 #
 
-export PSQL_EDITOR='vim'
-export EDITOR='vim'
-export VISUAL='vim'
+export PSQL_EDITOR='nvim'
+export EDITOR='nvim'
+export VISUAL='nvim'
 export PAGER='less'
 
 #
@@ -78,11 +78,10 @@ if [ -d "$HOME/bin" ] ; then
     PATH="$HOME/bin:$PATH"
 fi
 
-PATH=$PATH:/usr/local/go/bin
+PATH=$PATH:/usr/local/go/bin:/opt/nvim/bin
 
 TMPPREFIX="${TMPDIR%/}/zsh"
 export TERM=screen-256color
-export EDITOR='vim'
 
 export KEYTIMEOUT=1
 
