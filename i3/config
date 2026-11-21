@@ -115,7 +115,7 @@ set $mode_system System (l) lock, (e) logout, (s) suspend, (r) reboot, (Ctrl+s) 
 mode "$mode_system" {
     bindsym l exec --no-startup-id ~/bin/lock.sh, mode "default"
     bindsym e exec --no-startup-id i3-msg exit, mode "default"
-    bindsym s exec --no-startup-id i3lock && systemctl suspend, mode "default"
+    bindsym s exec --no-startup-id ~/bin/lock.sh && systemctl suspend, mode "default"
     bindsym r exec --no-startup-id systemctl reboot, mode "default"
     bindsym Ctrl+s exec --no-startup-id systemctl poweroff -i, mode "default"
 
@@ -171,7 +171,7 @@ exec_always "setxkbmap -layout us,cz -option 'grp:alt_shift_toggle'"
 exec_always --no-startup-id feh --bg-fill /home/$USER/pictures/wallpapers/astronaut.png
 
 # Lock the session
-bindsym $mod+Ctrl+l exec "i3lock"
+bindsym $mod+Ctrl+l exec --no-startup-id ~/bin/lock.sh
 
 # Floating windows
 for_window [class="Enpass"] floating enable resize set 640 480
