@@ -1,0 +1,30 @@
+i3  $mod+Shift+o → okno do scratchpadu; $mod+o → vytáhne / schová ho
+i3  $mod+Tab → předchozí workspace (stejně tak $mod+<číslo WS, na kterém už jsi>)
+i3  $mod+g → rofi seznam všech oken, napiš kus titulku, Enter → skočí tam
+i3  Print → flameshot výřez obrazovky, ctrl+c → obrázek ve schránce
+i3  $mod+m a → označ okno písmenem a; $mod+' a → kdykoli skoč zpět na něj
+i3  autotiling dělí podle delší strany okna → $mod+h / $mod+v skoro nepotřebuješ
+tmux  ` g → lazygit v plovoucím okně pro aktuální repo, q zavře
+tmux  ` S → fzf výběr session, i neběžící z tmuxloaderu (založí ji)
+tmux  copy-mode: ` [ → v → výběr → y nebo Enter → systémová schránka
+tmux  myš: kolečko scrolluje, tažení hrany mění velikost, Shift+drag = nativní výběr
+lazygit  z → undo poslední akce; ctrl+z → redo
+lazygit  F na commitu → staged změny jako fixup do něj (bez ručního rebase)
+lazygit  A → staged změny přidá do posledního commitu (amend)
+lazygit  S na commitu → squash do předchozího
+lazygit  C na commitu → kopíruj, ve větvi V → cherry-pick
+lazygit  W → diffing menu: označ commit/větev a porovnej s jiným
+lazygit  w ve Files → commit bez pre-commit hooků
+git  git dft → diff přes difftastic (podle syntaxe, ne řádků)
+git  rebase -i na stacku větví posune i závislé větve (rebase.updateRefs)
+git  rerere: stejný konflikt podruhé vyřeší git sám
+git  git rebase s rozdělanou prací → autoStash, žádný ruční stash
+git  git branch / git cof → nejnovější větve nahoře
+git  konflikt ukazuje i ||||||| base → vidíš, co obě strany měnily
+zsh  z <kus jména> → skok do častého adresáře; zi → výběr přes fzf
+zsh  ctrl+t → fzf soubor s náhledem; vloží cestu do příkazu
+zsh  alt+c → fzf výběr adresáře a cd do něj
+zsh  ctrl+r → fzf hledání v historii příkazů
+zsh  <Tab> → fzf-tab výběr kandidátů; u cd s náhledem obsahu
+mise  mise use node@20 → verze jen pro tenhle adresář (mise.toml); mise ls → co je kde
+mise  .nvmrc v repu → po cd se node přepne sám

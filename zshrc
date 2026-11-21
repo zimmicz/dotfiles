@@ -88,6 +88,26 @@ eval "$(mise activate zsh)"
 eval "$(zoxide init zsh)"
 . "/home/zimmi/.deno/env"
 
+_habit_hint() {
+  local h
+  case $1 in
+    cd\ .*|cd\ -*) ;;
+    cd\ */*/*) h="z ${${${1#cd }%/}:t}" ;;
+    lg|lazygit) [[ -n $TMUX ]] && h='` g = lazygit popup' ;;
+    tl|tl\ *|tmuxloader*) h='` S = výběr session přes fzf' ;;
+    history*) h='ctrl+r = fzf historie' ;;
+    find\ *-name*) h='ctrl+t = fzf soubor s náhledem' ;;
+  esac
+  [[ -n $h ]] && print -r -- $'\e[33m'"tip: $h"$'\e[0m'
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec _habit_hint
+
+() {
+  local tips=(${(f)"$(<~/dotfiles/tips.txt)"})
+  print -r -- $'\e[36m'"${tips[RANDOM % $#tips + 1]}"$'\e[0m'
+}
+
 # Added by flyctl installer
 export FLYCTL_INSTALL="/home/zimmi/.fly"
 export PATH="$FLYCTL_INSTALL/bin:$PATH"
