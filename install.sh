@@ -51,6 +51,8 @@ ln -sf ${DOTFILES_DIR}/i3blocks/battery ${CONFIG_DIR}/i3blocks/battery
 ln -sf ${DOTFILES_DIR}/i3blocks/keyboard-layout ${CONFIG_DIR}/i3blocks/keyboard-layout
 ln -sf ${DOTFILES_DIR}/vifm/vifmrc ${CONFIG_DIR}/vifm/vifmrc
 ln -sf ${DOTFILES_DIR}/dunst/dunstrc ${CONFIG_DIR}/dunst/dunstrc
+mkdir -p ${CONFIG_DIR}/autorandr
+ln -sf ${DOTFILES_DIR}/autorandr/postswitch ${CONFIG_DIR}/autorandr/postswitch
 
 ln -sf ${DOTFILES_DIR}/redshift.conf ${CONFIG_DIR}/redshift.conf
 

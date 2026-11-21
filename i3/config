@@ -179,6 +179,7 @@ for_window [class="copyq"] floating enable resize set 640 480
 for_window [title="Calculator"] floating enable resize set 640 480
 
 # Startup applications
+exec --no-startup-id autorandr --change --default mobile
 exec --no-startup-id copyq
 exec --no-startup-id nm-applet
 exec --no-startup-id redshift
