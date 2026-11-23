@@ -819,7 +819,7 @@ stage_sentry() {
 
 stage_deps() {
   touch $LOG_DIR/.deps-checked
-  ${SELF:h}/deps-triage
+  ${SELF:h}/deps-triage | tee $LOG_DIR/deps.status
 }
 
 run_stage() {

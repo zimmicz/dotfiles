@@ -103,6 +103,7 @@ for R in cf-farm-frontend can-frontend; do
   if B=$(blocking $R); then echo "$R: blocked by $B"; continue; fi
   BOT=$(glab api "projects/:id/merge_requests?state=opened&labels=dependencies&order_by=created_at&sort=asc&per_page=100" </dev/null \
     | jq -c '.[] | select(.author.username | test("^project_[0-9]+_bot"))') || { echo "$R: MR lookup failed"; continue }
+  [[ -n "$BOT" ]] || { echo "$R: no open bot MR"; continue }
   while read -r MR; do
     [[ -z "$MR" ]] && continue
     IID=$(jq -r .iid <<<$MR) DEDUP=dependabot-$R-$(jq -r .iid <<<$MR)

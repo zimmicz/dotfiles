@@ -321,6 +321,7 @@ try { seenLbl = JSON.parse(localStorage.getItem('seenLbl') || '{}') } catch {}
 function markSeen() {
   const first = !Object.keys(seenLbl).length
   for (const r of S.Rows) if (first || r.Key === cur) seenLbl[r.Key] = r.Label
+const deps = r => (r.Labels || []).includes('deps') ? '<span class="tag c35">deps</span> ' : ''
   try { localStorage.setItem('seenLbl', JSON.stringify(seenLbl)) } catch {}
 }
 const isNew = r => seenLbl[r.Key] !== r.Label
@@ -362,13 +363,15 @@ function render() {
     running && `<span class="pill run"><b>${running}</b> running</span>`,
     `<span class="pill"><b>${live.length}</b> tickets</span>`,
     `<span class="pill"><b>$${live.reduce((a, r) => a + r.Cost, 0).toFixed(2)}</b></span>`,
+  const dl = S.DepsLines || []
     S.Svc === 'failed' && '<span class="pill bad">dispatcher failed</span>',
     S.JiraErr ? `<span class="pill bad">jira: ${esc(S.JiraErr)}</span>` : S.JiraAge > 180 && `<span class="pill warn">jira ${S.JiraAge / 60 | 0}m old</span>`,
+    `<span class="pill stat ${dl.some(l => /failed/.test(l)) ? 'bad' : dl.some(l => /blocked|waiting/.test(l)) ? 'warn' : ''}" id="depsP" title="${esc('dependabot lane, last run ' + S.DepsAgo + ' ago\n' + (dl.join('\n') || 'nothing reported'))}">deps · ${esc(S.DepsAgo)}</span>`,
   ].filter(Boolean).join('')
   let h = '', g = -1
   for (const r of rows) {
     if (r.Group !== g) { g = r.Group; h += `<div class="grp ${GROUPS[g][1]}">${GROUPS[g][0]}<span>${g === 5 ? other : rows.filter(x => x.Group === g).length}</span></div>` }
-    h += `<div class="row${r.Key === cur ? ' cur' : ''}${isNew(r) ? ' new' : ''}" data-k="${esc(r.Key)}" title="${esc(r.Next)}"><span class="ic">${icon(r)}</span><span class="key">${esc(r.Key)}</span><span class="lbl">${stage(r)}</span><span class="age">${ago(r.Seen)}</span><span class="sum">${esc(r.Summary || '(no jira ticket)')}</span></div>`
+    h += `<div class="row${r.Key === cur ? ' cur' : ''}${isNew(r) ? ' new' : ''}" data-k="${esc(r.Key)}" title="${esc(r.Next)}"><span class="ic">${icon(r)}</span><span class="key">${esc(r.Key)}</span><span class="lbl">${stage(r)}</span><span class="age">${ago(r.Seen)}</span><span class="sum">${deps(r)}${esc(r.Summary || '(no jira ticket)')}</span></div>`
   }
   if (!showOther && other && !query()) h += `<div class="grp c2">OTHER LOGS<span>${other} · z shows</span></div>`
   $('side').innerHTML = h || '<div class="grp c2">NOTHING MATCHES</div>'
@@ -384,6 +387,7 @@ function render() {
     r.MR && `<a class="chip" href="${esc(r.MR)}" target="_blank">MR !${esc(r.MRIID)} ↗</a>`,
     r.MRDetail && `<span class="chip">${esc(r.MRDetail)}</span>`,
   ].filter(Boolean).join('')
+    deps(r) && `<span class="chip stage c35">dependabot lane</span>`,
   $('next').className = r.Ball || ''
   $('next').innerHTML = r.Key && r.Next ? `${ball(r)}<span>${esc(r.Next)}</span>` : ''
   $('tabs').innerHTML = S.Tabs.map((t, i) => `<span class="${i === tab ? 'on' : ''}" data-t="${i}">${t}</span>`).join('')
@@ -436,7 +440,7 @@ function renderBoard() {
   const rows = all().filter(r => r.Col && (!query() || (r.Key + ' ' + r.Summary).toLowerCase().includes(query())))
   $('board').innerHTML = S.Cols.map(c => {
     const rs = rows.filter(r => r.Col === c)
-    return `<div class="col" style="--c:var(--${COLC[c] || 'dim'})"><h3>${esc(c)}<span>${rs.length}</span></h3><div class="cards">${rs.map(r => `<div class="card ${esc(r.Ball)}${r.Key === cur ? ' cur' : ''}" data-k="${esc(r.Key)}"><div class="top"><b>${esc(r.Key)}</b><span>${icon(r)} ${stage(r)}</span></div><div class="s">${esc(r.Summary)}</div><div class="n">${ball(r)}<span>${esc(r.Next)}</span><i>${ago(r.Seen)}</i></div></div>`).join('')}</div></div>`
+    return `<div class="col" style="--c:var(--${COLC[c] || 'dim'})"><h3>${esc(c)}<span>${rs.length}</span></h3><div class="cards">${rs.map(r => `<div class="card ${esc(r.Ball)}${r.Key === cur ? ' cur' : ''}" data-k="${esc(r.Key)}"><div class="top"><b>${esc(r.Key)}</b><span>${icon(r)} ${stage(r)}</span></div><div class="s">${deps(r)}${esc(r.Summary)}</div><div class="n">${ball(r)}<span>${esc(r.Next)}</span><i>${ago(r.Seen)}</i></div></div>`).join('')}</div></div>`
   }).join('')
 }
 
@@ -525,7 +529,7 @@ async function showSys() {
   $('sys').innerHTML = '<h3>Factory status</h3>' + rows.map(r => `<div class="sr ${esc(r.Level)}"><b>${esc(r.Name)}</b><span>${esc(r.Value)}</span></div>`).join('') + '<p class="foot">refreshes while open · <kbd>i</kbd> or <kbd>esc</kbd> closes</p>'
   if (!$('sys').open) $('sys').showModal()
 }
-$('pills').onclick = e => { if (e.target.closest('#statP')) showSys() }
+$('pills').onclick = e => { if (e.target.closest('#statP, #depsP')) showSys() }
 
 function showHelp() {
   $('help').innerHTML = '<h3>Keys</h3><div class="cols">' + HELP.map(([t, ks]) => `<div><h4>${t}</h4>${ks.map(([k, d]) => `<div class="k"><b>${esc(k)}</b><span>${esc(d)}</span></div>`).join('')}</div>`).join('') + '</div><p class="foot">on turn: <span class="ball you">you</span> <span class="ball factory">factory</span> <span class="ball reviewer">reviewer</span> <span class="ball ci">ci</span> · any key closes</p>'

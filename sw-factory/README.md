@@ -131,7 +131,7 @@ DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentr
 | minor/patch, pipeline green | `triaged` + `ai-fix` | no analysis, no plan gate: template `PLAN.md` (rebase onto develop, no source change) + `holdout-templates/deps-<repo>.md` copied to `holdout/<KEY>.md`, both attached, 🤖 Jira comment → `impl` next tick |
 | major or pipeline red | `triage` | analysis (`/cf-work-headless`, deps section: breaking changes vs our usage, smoke of the screens using the packages) → plan gate as usual |
 
-Then the usual flow. `impl` rebases the bot's commit onto develop and regenerates the lockfile (`cf-ticket-headless` deps section); once our draft MR exists the worker closes the bot MR with a 🤖 "superseded by" note. Shortcut fails (worktree) → labels back to `triage`.
+Then the usual flow. `impl` rebases the bot's commit onto develop and regenerates the lockfile (`cf-ticket-headless` deps section); once our draft MR exists the worker closes the bot MR with a 🤖 "superseded by" note. Shortcut fails (worktree) → labels back to `triage`. The worker tees each run's output to `deps.status`; `factory-dash` shows it as the `deps` pill in the header (last run, per-repo result in the tooltip and in status `i`; yellow = blocked / waiting, red = failed) and puts a `deps` badge on the lane's tickets.
 
 Any other ticket (feature, chore, manual bug): I add labels `triage` + `repo-<dir>` → same flow from `[triaged]` on; PLAN.md starts with Requirements instead of "Belongs in Sentry?". On Done it just gets `ai-done`.
 

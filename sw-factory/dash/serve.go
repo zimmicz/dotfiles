@@ -1052,6 +1052,19 @@ func (s *server) report(name string) string {
 
 type statusRow struct{ Name, Value, Level string }
 
+func depsLane() (string, []string) {
+	fi, err := os.Stat(filepath.Join(stateDir, ".deps-checked"))
+	if err != nil {
+		return "never", nil
+	}
+	b, _ := os.ReadFile(filepath.Join(stateDir, "deps.status"))
+	var lines []string
+	if t := strings.TrimSpace(string(b)); t != "" {
+		lines = strings.Split(t, "\n")
+	}
+	return ago(fi.ModTime()), lines
+}
+
 func sysShow(unit string, props ...string) map[string]string {
 	out, _ := exec.Command("systemctl", "--user", "show", unit, "-p", strings.Join(props, ",")).Output()
 	m := map[string]string{}
@@ -1099,7 +1112,14 @@ func (s *server) statusRows() []statusRow {
 	if workerBusy() {
 		worker = statusRow{"Worker process", "busy", "ok"}
 	}
-	rows = append(rows, timer, disp, worker)
+	depsAgo, depsLines := depsLane()
+	deps := statusRow{"Dependabot lane", "last run " + depsAgo + " · " + or(strings.Join(depsLines, " · "), "nothing reported"), "ok"}
+	if strings.Contains(deps.Value, "failed") {
+		deps.Level = "bad"
+	} else if strings.Contains(deps.Value, "blocked") || strings.Contains(deps.Value, "waiting") {
+		deps.Level = "warn"
+	}
+	rows = append(rows, timer, disp, worker, deps)
 	units, _ := exec.Command("systemctl", "--user", "list-units", "sw-factory-*", "--plain", "--no-legend", "--all").Output()
 	n := 0
 	for _, l := range strings.Split(string(units), "\n") {
@@ -1181,7 +1201,8 @@ func (s *server) handler() http.Handler {
 		if s.jiraErr != nil {
 			jerr = s.jiraErr.Error()
 		}
-		writeJSON(w, map[string]any{"Rows": out, "Busy": workerBusy(), "Svc": strings.TrimSpace(string(svc)), "JiraErr": jerr,
+		depsAgo, depsLines := depsLane()
+		writeJSON(w, map[string]any{"DepsAgo": depsAgo, "DepsLines": depsLines, "Rows": out, "Busy": workerBusy(), "Svc": strings.TrimSpace(string(svc)), "JiraErr": jerr,
 			"JiraAge": int(time.Since(s.jiraAt).Seconds()), "Status": s.status, "Repos": repos(), "Cols": boardCols, "Tabs": webTabs})
 	})
 	mux.HandleFunc("GET /api/nosprint", func(w http.ResponseWriter, r *http.Request) {
