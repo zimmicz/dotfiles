@@ -81,6 +81,8 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 
 Per-tick priority (finish in-flight work before starting new): env → reply → mr → rfix → verify → review → conflict → new → impl → done → sentry. `verify` takes any `ai-mr` ticket without `ai-verified` / `ai-verify-failed` / `ai-review-retry`; `review` runs on `ai-verified` tickets without a review label (worktree + open MR needed), so the behaviour check comes first and the reviewer sees code that already works. First run reviews the whole MR; after an `mr` follow-up or `rfix` push, `unverify` also drops `ai-reviewed`, so verify runs again, then `review` re-checks only the commits pushed since the last clean / minor review (heads in `<KEY>.reviewed`; no new commits → relabel only). `rfix` is capped at `RFIX_MAX` rounds per ticket (default 2, counter `<KEY>.rfix-count`), then `ai-review-findings`. Each review logs `findings: must=<n> should=<n> convention=<n>` in `<KEY>.log`. A stage already running for a ticket (unit `sw-factory-<KEY>-*` active) is not spawned again. `verify` is spawned only when its preview is ready (not ready for `STALL_HOURS`, default 4 → one Slack line with the reason: no holdout file, no worktree / open MR, pipeline not green + MR link, Amplify note missing; repeated daily while stuck), `conflict` only when the MR head / draft / `ai-rebase` state changed since the last handled one (discovery every `CONFLICT_EVERY` min, default 5). Stage timeouts (`RuntimeMaxSec`): impl / mr / rfix / conflict / verify / env 110 min, review 45 min, new / reply / sentry 30 min, done 5 min.
 
+Usage limit (`You've hit your 5-hour limit · resets 5pm`): `stream` sees that result line, writes the reset time to `~/.local/state/sw-factory/.limit` (unparseable → 30 min) and the stage stops at its next label / Slack / Jira write (`limit_bail`, exit 2): labels stay, no `*-failed`, no comment, `rfix-count` and `ai-verify-retry` given back, `  usage limit hit, stage abandoned` in `<KEY>.log`. Until the reset every tick (also `factory-worker KEY`) prints `usage limit until …, tick skipped` and exits; after it the same labels spawn the same stages again. Limit lifted earlier (extra usage, other plan): `rm ~/.local/state/sw-factory/.limit`.
+
 All locks are `flock -n -o`: `-o` keeps the lock fd out of claude / pnpm / MCP children, so a leftover background process can't hold a slot forever. Each stage unit gets `EnvironmentFile=~/.config/sw-factory.env` and the dispatcher's `PATH` (transient units inherit neither). `TRIAGE_DRY=1 factory-worker` prints what it would spawn, spawns nothing.
 | interactive sub-agents (`/cf-ticket` verify, `/cf-epic` slices) | inside that session only (agent panel / transcript), not in the dashboard |
 
@@ -286,6 +288,7 @@ create ticket ~$0.45 · analysis ~$0.65 · reply ~$0.4 · implement ~$1.6 (opus)
 - editing an old non-AI comment counts as a new reply if it's the last one
 - merge gate runs only with the timer (Mon–Fri 07–18): a new head pipeline outside those hours has no `cf-factory` status until the next tick, so it is mergeable meanwhile
 - MCP login expiry → runs fail. sentry-triage without `TRIAGE_DONE` → one Slack note per day (`sentry-failed-noted` stamp) with the `TRIAGE_FAILED` reason; fix Sentry auth via `/mcp` → claude.ai Sentry. Worker failures → `*-failed` labels / logs
+- usage limit: `sentry-triage` / `deps-triage` run their own `claude -p` without the limit detection (skipped only once a ticket stage has written `.limit`); while `.limit` holds, the whole tick is skipped, so the merge gate and `done` wait too; no Slack line, only the journal + `<KEY>.log`
 - Persistent catch-up can fire once on Saturday if the laptop was off at Friday's last slot (daily stamp keeps it to one ticket)
 - a `triage-failed` / `ai-fix-failed` ticket blocks new issues until I close or relabel it; same for `deps` tickets per repo
 - can-frontend `deps` tickets are not verified in a browser (holdout `NONE:`, verify passes on CI alone): check the preview by hand before merging
@@ -308,6 +311,8 @@ Ownership: `env-owned/<env>` (content = ticket key) is written only for an env t
 By hand: `factory-worker DEV-X --env` re-runs the latest `env:` comment. Not covered: the implementer's `/check-layout` does not use the env.
 
 ## Rollback
+
+Usage-limit handling: `git -C ~/dotfiles checkout sw-factory-pre-limit-2026-11-23 -- sw-factory/bin/factory-worker && rm -f ~/.local/state/sw-factory/.limit*`
 
 Dyn-env lane: `git -C ~/dotfiles checkout sw-factory-pre-dyn-env-2026-11-23 -- sw-factory bin/cf-work && rm ~/.claude/skills/cf-env-resolve/SKILL.md && (cd ~/dotfiles/sw-factory/dash && go build -o ~/bin/factory-dash . && systemctl --user restart factory-dash)`. Envs it created stay: `ls ~/.local/state/sw-factory/env-owned`, destroy by hand.
 

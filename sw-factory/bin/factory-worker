@@ -47,7 +47,32 @@ foreach inputs as $m ({b: 0, n: 0, c: 0, peak: 0};
   | .b = (if $m.type == "system" and $m.subtype == "compact_boundary" then 0 else ([.b, .nb] | max) end);
   .lines[])'
 
-stream() { jq --unbuffered -nr "$STREAM_JQ" }
+LIMIT=$LOG_DIR/.limit
+
+limit_mark() {
+  local NOW=$(date +%s) T=$(date -d "${${${1#*resets }%% \(*}//,/}" +%s 2>/dev/null || echo 0)
+  (( T )) || T=$(( NOW + 1800 ))
+  (( T <= NOW )) && (( T += 86400 ))
+  echo $(( T + 60 )) >$LIMIT
+  touch $LIMIT.$$
+}
+
+limited() { [[ -f $LIMIT.$$ ]] }
+
+limit_bail() {
+  limited || return 0
+  rm -f $LIMIT.$$
+  echo "  usage limit hit, stage abandoned, labels untouched, re-runs after $(date -d @$(<$LIMIT) '+%a %H:%M')" | tee -a $LOG_DIR/$1.log
+  exit 2
+}
+
+stream() {
+  local L
+  jq --unbuffered -nr "$STREAM_JQ" | while IFS= read -r L; do
+    print -r -- "$L"
+    if [[ $L == "You've hit your "*limit* ]]; then limit_mark "$L"; fi
+  done
+}
 
 search() {
   local Q=${1/#project = DEV AND /project = DEV AND (assignee = currentUser() OR assignee is EMPTY) AND }
@@ -79,7 +104,7 @@ snap_all() {
   jira GET "/rest/api/3/issue/$1/comment?maxResults=1000" | jq -r '[.comments[].id | tonumber] | max // 0'
 }
 
-mark_handled() { echo ${2:-0} >$HANDLED/$1 }
+mark_handled() { limit_bail $1; echo ${2:-0} >$HANDLED/$1 }
 
 has_label() {
   jira GET "/rest/api/2/issue/$1?fields=labels" | jq -e '.fields.labels as $l | any($ARGS.positional[]; . as $x | $l | index($x) != null)' --args "${@:2}" >/dev/null
@@ -126,6 +151,7 @@ answered_since() {
 }
 
 fallback_comment() {
+  limit_bail $1
   answered_since $1 $2 && return 1
   local R=$(jq -r 'select(.type == "result") | .result // empty' $LOG_DIR/$1.stream.jsonl 2>/dev/null)
   [[ -n "$R" ]] || return 1
@@ -150,6 +176,7 @@ awaiting_reply() { reply_filter true }
 not_awaiting() { reply_filter false }
 
 note() {
+  limit_bail $1
   local F=$SENT/$1
   local -a R=($F(Nmh-24))
   (( ${#R} )) && [[ "$(<$F)" == "$2" ]] && { info $1 "Slack skipped, same as last note: $2"; return }
@@ -158,16 +185,19 @@ note() {
 }
 
 info() {
+  limit_bail $1
   print -r -- "  info: $2" >>$LOG_DIR/$1.log
 }
 
 relabel() {
+  limit_bail $1
   local OPS="{\"add\":\"$3\"}"
   [[ -n "$2" ]] && OPS="{\"remove\":\"$2\"},$OPS"
   jira PUT "/rest/api/2/issue/$1" "{\"update\":{\"labels\":[$OPS]}}" >/dev/null
 }
 
 unlabel() {
+  limit_bail $1
   jira PUT "/rest/api/2/issue/$1" "{\"update\":{\"labels\":[{\"remove\":\"$2\"}]}}" >/dev/null
 }
 
@@ -236,6 +266,7 @@ amend() {
 proposal() { [[ -f $PROPOSED/$1.md || -f $PROPOSED/$1.api.md ]] }
 
 after_amend() {
+  limit_bail $1
   if amend $1; then
     note $1 "holdout change proposed, review in dash (A accept / X reject): $(paste -sd' ' $PROPOSED/$1.why 2>/dev/null)"
     return 0
@@ -794,6 +825,7 @@ wt_heads() {
 }
 
 unverify() {
+  limit_bail $1
   jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"},{"remove":"ai-quizzed"},{"remove":"ai-reviewed"}]}}' >/dev/null
 }
 
@@ -851,6 +883,7 @@ stage_verify() {
     relabel $KEY "" ai-verify-retry
     H0=$(wt_heads $KEY)
     implement $KEY ${REPO%%,*} "--verify-fix $REPORT"
+    limited && jira PUT "/rest/api/2/issue/$KEY" '{"update":{"labels":[{"remove":"ai-verify-retry"}]}}' >/dev/null
     if after_amend $KEY; then relabel $KEY ai-verify-retry ai-verify-failed
     elif [[ "$(wt_heads $KEY)" == "$H0" ]]; then relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios failed, fix round pushed nothing, needs you: \`$REPORT\` + Jira comment"
     else info $KEY "holdout scenarios failed, fix pushed, re-verify next run ($(failed_scenarios $REPORT) first)"; fi
@@ -891,6 +924,7 @@ stage_rfix() {
   fi
   echo $(( N + 1 )) >$LOG_DIR/$KEY.rfix-count
   implement $KEY $2 "--review-fix $LOG_DIR/$1.review.md"
+  limited && echo $N >$LOG_DIR/$KEY.rfix-count
   if [[ "$(wt_heads $KEY)" == "$H0" ]]; then
     relabel $KEY ai-review-retry ai-review-findings; note $KEY "review findings not fixed (no commits pushed), see \`$LOG_DIR/$KEY.review.md\`"
     return 0
@@ -915,6 +949,7 @@ stage_env() {
     echo "  resuming pipeline $PID ($ACT $EN)" | tee -a $LOG
   else
     env_resolve $KEY $CID
+    limit_bail $KEY
     echo $CID >$ENVHANDLED/$KEY
     echo "  resolved: $(head -1 $OUT 2>/dev/null || echo nothing)" | tee -a $LOG
     if [[ "$(head -1 $OUT 2>/dev/null)" == ASK\ * ]]; then
@@ -1026,7 +1061,9 @@ run_stage() {
 
 if [[ "${1:-}" == --stage ]]; then
   stage_$2 "${@:3}"
-  exit $?
+  RC=$?
+  rm -f $LIMIT.$$
+  exit $RC
 fi
 
 if [[ "${1:-}" == --run ]]; then
@@ -1041,6 +1078,11 @@ fi
 
 if [[ "${2:-}" == --conventions ]]; then
   conventions ${1:u} "$(ticket_repos ${1:u})"
+  exit 0
+fi
+
+if [[ -f $LIMIT ]] && (( $(<$LIMIT) > $(date +%s) )); then
+  echo "usage limit until $(date -d @$(<$LIMIT) '+%a %H:%M'), tick skipped (override: rm $LIMIT)"
   exit 0
 fi
 

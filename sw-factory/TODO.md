@@ -30,3 +30,7 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - No per-env lock: with `VERIFY_SLOTS` > 1 two tickets on one env overwrite each other's FE.
    - `env: zruš to` while a create is running waits for that pipeline to end (same lock).
    - Resolver may call `glab api` with any path; only `-X` / `--method` prefixes are denied (prefix patterns, see item 5).
+8. Usage-limit handling (2026-11-23, rollback tag `sw-factory-pre-limit-2026-11-23`, README "Slots" + "Known gaps"). Tested: `zsh -n`, `stream` + `limit_mark` + `limit_bail` in isolation (5pm, 11:30pm, `Nov 25, 9am`, no reset time, normal result, agent quoting the phrase). Not tested: a real limit hit, the tick skip (`TRIAGE_DRY=1 factory-worker` with a stamp in `.limit`).
+   - `sentry-triage` / `deps-triage`: no limit detection of their own.
+   - No Slack line when the limit hits; dash does not show it.
+   - Tick skip also stops the merge gate and `done`.

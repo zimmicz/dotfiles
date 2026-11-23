@@ -584,6 +584,7 @@
         <li>Only my own MR notes trigger <code>mr</code>; reviewers’ MR notes wait until I comment.</li>
         <li>A fix I push by hand leaves <code>ai-verified</code> and <code>ai-reviewed</code> standing (no re-review); pushes answering my comments and verify-fix pushes re-verify, then get a delta review.</li>
         <li>Verify blocked with no scenario run (browser down, no login, preview dead) retries by itself, 2 times, 10 min apart (<code>BLOCKED_MAX</code>, <code>BLOCKED_WAIT</code>). Verify blocked after some scenarios ran (missing flag, no data), or still blocked after the retries, parks the ticket as <code>ai-verify-failed</code> before any review happened; <code>factory-worker KEY --review</code> runs it by hand.</li>
+        <li>Claude usage limit hit mid-stage: the stage stops without touching labels, Slack or Jira, the dispatcher skips every tick until the reset time from the limit message (<code>.limit</code>), then the same labels start the same stages again. Limit lifted earlier: <code>rm ~/.local/state/sw-factory/.limit</code>. Sentry and deps triage do not detect the limit themselves; merge gate and <code>done</code> wait too.</li>
         <li><code>factory-dash</code> still judges “needs you” by the last comment, not the handled id.</li>
         <li>Ticket on an <code>env-&lt;name&gt;</code> label: only <code>verify</code> uses that dyn-env, the implementer's layout check does not. One frontend per env: a second ticket verified on the same env replaces the first one's preview.</li>
       </ul></div>
