@@ -109,7 +109,8 @@ DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentr
 [ai-verified]  MR note with per-scenario verdicts
   │  fail → 1 retry: "/cf-ticket-headless KEY --verify-fix <report>" pushes fix [ai-verify-retry] → re-verify, failed scenarios first (`failed=S3,S5`), one still failing → rest not run. Fix round pushed nothing → [ai-verify-failed], no re-verify
   │                         scenario contradicts ticket/PLAN.md → implementer only appends `S#: reason` to holdout-suspect/KEY.md (mr follow-up too, on my comment) → amend: "/cf-work-headless KEY --holdout-amend" (sonnet, sandbox dir with copies of TICKET/PLAN/holdout/verify report, code + notes + git denied) writes holdout-proposed/KEY.md + .why, or only .why (kept) → [ai-verify-failed] ✏️ holdout proposal, verify blocked until I press A / X in dash
-  │  fail again / blocked / crash → [ai-verify-failed] = needs me, no review happens (`factory-worker KEY --review` by hand)
+  │  blocked and no scenario got a pass / fail (browser down, no login, preview dead) → auto-retry, max `BLOCKED_MAX` (2) per verify, `BLOCKED_WAIT` (10) min apart (counter `<KEY>.blocked-retry`, log line `blocked-retry: N/2`); UI verify only
+  │  fail again / blocked with some scenarios run / still blocked after the retries / crash → [ai-verify-failed] = needs me, no review happens (`factory-worker KEY --review` by hand)
   │  factory-worker          stage review (whole MR first, later only the delta since the last review): fresh claude -p "/cf-review" (opus, read-only) reads the MR diff vs PLAN.md + the injected repo conventions (a written-rule violation in added lines = must-fix) (+ `GLOSSARY.md` where one exists: new or renamed name with an `_Avoid_` word = must-fix; prose, UI copy, unrenamed legacy name = should-fix), every finding with a failure scenario, posts ONE MR note
   │                         clean / should-fix only → [ai-reviewed]. blocking → [ai-review-retry] → stage rfix ("/cf-ticket-headless --review-fix <report>", impl slot) fixes EVERY finding once, then "/cf-review … prior=<KEY>.review.prev.md since=<heads>" re-checks only the pushed delta (fixed / open / new per prior finding)
   │                         re-check clean or minor → [ai-reviewed] + verify labels dropped (verify runs again on the fixed code). pushed nothing / still blocking / crash → [ai-review-findings] = needs me (verify still runs)
@@ -158,7 +159,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run where I became on t
 | `ai-fix-failed` | agent bailed out (see its Jira comment) or no MR. A run that ended without a Jira comment of its own (bot comments older than the run don't count) gets one posted by the worker (its final answer). Implementer runs with `BASH_MAX_TIMEOUT_MS=2700000` so tests run in the foreground; a background job dies with `claude -p`. `mr` follow-up stuck like that stays `ai-mr`, my next reply re-runs it | factory-worker |
 | `ai-verify-retry` | holdout failed once, fix pushed, waiting for re-verify | factory-worker |
 | `ai-verified` | holdout scenarios pass on the preview; gates `review`. Dropped (with `ai-verify-failed` / `ai-verify-retry`) when an `mr` follow-up or `rfix` pushes new commits, so `verify` runs again, and `ai-reviewed` goes too (delta re-review after verify); other review labels stay | factory-worker |
-| `ai-verify-failed` | holdout failed after retry, blocked, or verifier crashed | factory-worker |
+| `ai-verify-failed` | holdout failed after retry, blocked (after 2 auto-retries when no scenario ran), or verifier crashed | factory-worker |
 | `ai-quizzed` | I passed `/cf-quiz` on the current MR code; gates `cf-factory` green. Dropped with the verify labels when new commits land | /cf-quiz (me) |
 | `ai-done` | ticket Done, Sentry issues resolved | factory-worker |
 | `ai-gate-skip` (GitLab MR label) | override: `cf-factory` merge gate goes green whatever the Jira labels | me (`s` in factory-dash) |
@@ -281,3 +282,5 @@ create ticket ~$0.45 · analysis ~$0.65 · reply ~$0.4 · implement ~$1.6 (opus)
 ## Rollback
 
 Review-conventions work (branch `review-conventions`): `git -C ~/dotfiles checkout sw-factory-pre-review-conventions-2026-11-17 -- sw-factory claude/cleverfarm`
+
+Auto-retry of blocked verify: `git -C ~/dotfiles checkout sw-factory-pre-blocked-retry-2026-11-23 -- sw-factory/bin/factory-worker sw-factory/bin/factory-compare` (or `BLOCKED_MAX=0` in `~/.config/sw-factory.env` = off). Measure: `factory-compare 2026-11-23T10:00:00+01:00`, row `verify runs ending blocked` (before: 29 %, 58 of 194, all parked)

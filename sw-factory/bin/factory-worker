@@ -295,11 +295,13 @@ verify_targets() {
 }
 
 verify_blocker() {
-  local F=$(mktemp)
+  local F=$(mktemp) BR
   if [[ ! -f $HOLDOUT/$1.md ]]; then
     echo "no holdout scenarios file"
   elif proposal $1; then
     echo "holdout proposal waiting for Michal (dash A/X)"
+  elif BR=($LOG_DIR/$1.blocked-retry(Nmm-${BLOCKED_WAIT:-10})) && (( ${#BR} )); then
+    echo "verify blocked by the environment, auto-retry $(<$BR)/${BLOCKED_MAX:-2} after ${BLOCKED_WAIT:-10} min"
   elif WHY=$F verify_targets $1 $2 >/dev/null </dev/null; then
     rm -f $F
     return 1
@@ -706,6 +708,15 @@ stage_mr() {
 
 failed_scenarios() { sed -nE 's/^(S[0-9]+) [^—]*: fail.*/\1/p' $1 2>/dev/null | paste -sd, - }
 
+blocked_retry() {
+  local F=$LOG_DIR/$1.blocked-retry N=0
+  [[ -f $F ]] && N=$(<$F)
+  grep -qE '^S[0-9]+ [^—]*: (pass|fail)' $2 2>/dev/null && return 1
+  (( N >= ${BLOCKED_MAX:-2} )) && return 1
+  echo $(( N + 1 )) >$F
+  echo "  blocked-retry: $(( N + 1 ))/${BLOCKED_MAX:-2}" >>$LOG_DIR/$1.log
+}
+
 stage_verify() {
   local KEY=$1 REPO=$2 RC H0 FAILED="" REPORT=$LOG_DIR/$1.verify.md
   has_label $KEY ai-verified ai-verify-failed ai-review-retry && { echo "  already verified or in rfix (stale search index), skipped"; return 0 }
@@ -713,6 +724,8 @@ stage_verify() {
   verify $KEY $REPO ui "$FAILED"
   RC=$?
   (( RC == 2 )) && return 2
+  if (( RC == 4 )) && blocked_retry $KEY $REPORT; then return 0; fi
+  rm -f $LOG_DIR/$KEY.blocked-retry
   if (( RC == 0 )) && [[ -f $HOLDOUT/$KEY.api.md ]]; then
     REPORT=$LOG_DIR/$KEY.verify-api.md
     verify $KEY $REPO api
