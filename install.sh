@@ -43,7 +43,7 @@ systemctl --user enable factory-dash.service && systemctl --user restart factory
 mkdir -p ~/.local/share/applications
 ln -sf ${DOTFILES_DIR}/sw-factory/applications/factory-dash.desktop ~/.local/share/applications/factory-dash.desktop
 
-claude mcp get playwright > /dev/null 2>&1 || claude mcp add -s user playwright -- npx -y @playwright/mcp@latest --headless
+claude mcp get playwright > /dev/null 2>&1 || claude mcp add -s user playwright -- npx -y @playwright/mcp@latest --headless --executable-path /usr/bin/chromium --secrets ~/.config/cleverfarm/e2e.env
 
 ln -sf ${DOTFILES_DIR}/i3/config ${CONFIG_DIR}/i3/config
 ln -sf ${DOTFILES_DIR}/i3blocks/config ${CONFIG_DIR}/i3blocks/config

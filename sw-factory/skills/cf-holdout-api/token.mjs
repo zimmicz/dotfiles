@@ -7,23 +7,24 @@ const { chromium } = createRequire(`${fe}/package.json`)("@playwright/test");
 
 const read = (file) => {
   try {
-    return readFileSync(`${fe}/${file}`, "utf8");
+    return readFileSync(file, "utf8");
   } catch {
     return "";
   }
 };
 const pick = (text, key) => text.match(new RegExp(`^${key}=["']?([^"'\\n]*)`, "m"))?.[1];
+const secrets = read(`${homedir()}/.config/cleverfarm/e2e.env`);
 
-const target = pick(read("env.example"), "TARGET") ?? "nightly";
+const target = pick(read(`${fe}/env.example`), "TARGET") ?? "nightly";
 const appUrl = {
   nightly: "https://nightly.dev.cleverfarm.cz",
   staging: "https://staging.dev.cleverfarm.cz",
   prod: "https://app.cleverfarm.cz",
 }[target] ?? target;
-const username = pick(read(".env"), "FE_AUTOMATION_EMAIL") ?? pick(read("env.example"), "FE_AUTOMATION_EMAIL");
-const password = pick(read(".env"), "FE_AUTOMATION_PSW");
+const username = pick(secrets, "FE_AUTOMATION_EMAIL");
+const password = pick(secrets, "FE_AUTOMATION_PSW");
 if (!username || !password) {
-  console.error("FE_AUTOMATION_EMAIL (env.example) or FE_AUTOMATION_PSW (.env) missing in cf-farm-frontend");
+  console.error("FE_AUTOMATION_EMAIL or FE_AUTOMATION_PSW missing in ~/.config/cleverfarm/e2e.env");
   process.exit(1);
 }
 

@@ -21,7 +21,7 @@ SENT=$LOG_DIR/sent
 mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED $SUSPECT $PROPOSED $SENT
 
 HEADLESS_SETTINGS='{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false,"slack@claude-plugins-official":false,"cf-planning@cleverfarm":false,"cf-release@cleverfarm":false,"cf-kb@cleverfarm":false,"cf-eod@cleverfarm":false,"cf-bug-report@cleverfarm":false,"cf-cli-skill@cleverfarm":false,"cf-investigator@cleverfarm":false,"cf-cc@cleverfarm":false,"typescript-lsp@claude-plugins-official":false}}'
-PW_ARGS='["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools"]'
+PW_ARGS='["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--secrets","'"$HOME"'/.config/cleverfarm/e2e.env"]'
 
 mcp_config() {
   local PW=${1:-}; shift
