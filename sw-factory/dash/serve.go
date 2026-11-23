@@ -591,6 +591,7 @@ func tmuxWindow(detached bool, name, cmd string) error {
 
 type actionReq struct {
 	Key, Action, Repo, Tab, Text string
+	Title, Type, Epic            string
 	Dry                          bool
 	Images                       map[string]string
 }
@@ -665,28 +666,52 @@ func (s *server) editFiles(r row, tab string) error {
 	return nil
 }
 
-func (s *server) reply(key, text string, images map[string]string) error {
-	dir, err := os.MkdirTemp("", "factory-reply-"+key+"-*")
+func attachPasted(key, text, prefix string, images map[string]string) (string, error) {
+	dir, err := os.MkdirTemp("", "factory-"+prefix+"-"+key+"-*")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer os.RemoveAll(dir)
 	for name, data := range images {
 		_, b64, ok := strings.Cut(data, ";base64,")
 		raw, derr := base64.StdEncoding.DecodeString(b64)
 		if !pasteRe.MatchString(name) || !ok || derr != nil {
-			return fmt.Errorf("bad pasted image %s", name)
+			return "", fmt.Errorf("bad pasted image %s", name)
 		}
 		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
-			return err
+			return "", err
 		}
 		text = strings.ReplaceAll(text, "!"+name+"!", "!"+filepath.Join(dir, name)+"!")
 	}
-	body, err := uploadImages(text, dir, "reply-"+time.Now().Format("20060102-150405"), func(p, name string) error { return jiraAttach(key, p, name) })
+	return uploadImages(text, dir, prefix+"-"+time.Now().Format("20060102-150405"), func(p, name string) error { return jiraAttach(key, p, name) })
+}
+
+func (s *server) reply(key, text string, images map[string]string) error {
+	body, err := attachPasted(key, text, "reply", images)
 	if err != nil {
 		return err
 	}
 	return jiraReq("POST", "/rest/api/2/issue/"+key+"/comment", map[string]string{"body": body}, nil)
+}
+
+func newTicket(a actionReq) (string, error) {
+	key, err := createTicket(a.Title, a.Text, a.Type, a.Repo, a.Epic)
+	if err != nil {
+		return "", err
+	}
+	if len(a.Images) > 0 {
+		desc, err := attachPasted(key, a.Text, "new", a.Images)
+		if err != nil {
+			return "", fmt.Errorf("%s created without triage: %w", key, err)
+		}
+		if err := jiraReq("PUT", "/rest/api/2/issue/"+key, map[string]any{"fields": map[string]string{"description": desc}}, nil); err != nil {
+			return "", fmt.Errorf("%s created without triage: %w", key, err)
+		}
+	}
+	if err := relabel(key, "", "triage"); err != nil {
+		return "", fmt.Errorf("%s created without triage: %w", key, err)
+	}
+	return key + " created (" + a.Type + ", repo-" + a.Repo + ", triage)", nil
 }
 
 func (s *server) acceptHoldout(key string) error {
@@ -713,6 +738,24 @@ func (s *server) acceptHoldout(key string) error {
 func (s *server) action(a actionReq) (ask string, run func() (string, error), kick bool, err error) {
 	if a.Action == "refresh" {
 		return "", func() (string, error) { return "refreshing jira", nil }, false, nil
+	}
+	if a.Action == "new" {
+		a.Title, a.Epic = strings.TrimSpace(a.Title), strings.ToUpper(strings.TrimSpace(a.Epic))
+		switch {
+		case a.Title == "":
+			return "", nil, false, fmt.Errorf("title empty, not created")
+		case !slices.Contains(repos(), a.Repo):
+			return "", nil, false, fmt.Errorf("unknown repo %q", a.Repo)
+		case !slices.Contains(newTypes, a.Type):
+			return "", nil, false, fmt.Errorf("unknown type %q", a.Type)
+		case a.Epic != "" && !jiraKey.MatchString(a.Epic):
+			return "", nil, false, fmt.Errorf("bad epic key %q", a.Epic)
+		}
+		epic := ""
+		if a.Epic != "" {
+			epic = ", epic " + a.Epic
+		}
+		return fmt.Sprintf("create %s %q in active sprint, labels triage + repo-%s%s?", a.Type, a.Title, a.Repo, epic), func() (string, error) { return newTicket(a) }, true, nil
 	}
 	r, ok := s.find(a.Key)
 	if !ok {

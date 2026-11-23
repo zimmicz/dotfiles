@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -186,6 +187,53 @@ func feed(key, repo string) error {
 	return jiraReq("PUT", "/rest/api/2/issue/"+key, map[string]any{"update": map[string]any{"labels": ops}}, nil)
 }
 
+var newTypes = []string{"Technical", "Task", "Bug"}
+
+func product(repo string) string {
+	switch {
+	case strings.HasPrefix(repo, "can-"):
+		return "11707"
+	case repo == "cf-agroevidence":
+		return "11711"
+	case repo == "cf-iot" || repo == "irrigation":
+		return "11712"
+	case repo == "cf-satellite":
+		return "11713"
+	case strings.HasPrefix(repo, "telematics-"):
+		return "11714"
+	}
+	return "11710"
+}
+
+func createTicket(title, desc, typ, repo, epic string) (string, error) {
+	me := myAccount()
+	if me == "" {
+		return "", fmt.Errorf("jira myself lookup failed")
+	}
+	var sp struct{ Values []struct{ ID int } }
+	if err := jiraReq("GET", "/rest/agile/1.0/board/198/sprint?state=active", nil, &sp); err != nil {
+		return "", err
+	}
+	f := map[string]any{
+		"project": map[string]string{"key": "DEV"}, "issuetype": map[string]string{"name": typ}, "summary": title, "description": desc,
+		"assignee": map[string]string{"accountId": me}, "customfield_13543": []map[string]string{{"id": product(repo)}}, "labels": []string{"repo-" + repo},
+	}
+	if len(sp.Values) > 0 {
+		f["customfield_10007"] = sp.Values[0].ID
+	}
+	if epic != "" {
+		f["parent"] = map[string]string{"key": epic}
+	}
+	var out struct{ Key string }
+	if err := jiraReq("POST", "/rest/api/2/issue", map[string]any{"fields": f}, &out); err != nil {
+		return "", err
+	}
+	if out.Key == "" {
+		return "", fmt.Errorf("jira create returned no key")
+	}
+	return out.Key, nil
+}
+
 type mrRaw struct {
 	State                       string
 	Draft                       bool
@@ -326,7 +374,8 @@ func jiraReq(method, path string, body, out any) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("jira %s %s: %s", method, path, resp.Status)
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 300))
+		return fmt.Errorf("jira %s %s: %s %s", method, path, resp.Status, strings.TrimSpace(string(b)))
 	}
 	if out == nil {
 		return nil
