@@ -56,12 +56,12 @@ if [[ -z "$JIRA_EMAIL" || -z "$JIRA_TOKEN" ]]; then
 fi
 
 if ! command -v jira >/dev/null; then
-  echo "Error: jira wrapper not on PATH (ln -s <cf-knowledge-base>/claude/scripts/jira ~/bin/jira)"
+  echo "Error: jira wrapper not on PATH (ln -s ~/dotfiles/bin/jira ~/bin/jira)"
   exit 1
 fi
 
 echo "→ Fetching $TICKET..."
-ISSUE=$(jira GET "/rest/api/2/issue/$TICKET?fields=summary,description,status,assignee,priority,issuetype,labels,comment,parent,issuelinks")
+ISSUE=$(jira GET "/rest/api/2/issue/$TICKET?fields=summary,description,status,assignee,priority,issuetype,labels,comment,parent,issuelinks,customfield_10007")
 
 SUMMARY=$(jq -r '.fields.summary' <<<"$ISSUE")
 STATUS=$(jq -r '.fields.status.name' <<<"$ISSUE")
@@ -122,6 +122,16 @@ if [[ -z "$NO_CLAIM" && "$STATUS" != "In Progress" ]]; then
     jira POST "/rest/api/2/issue/$TICKET/transitions" "{\"transition\":{\"id\":\"$TRANSITION_ID\"}}" >/dev/null
   else
     echo "  (no In Progress transition from '$STATUS', skipping)"
+  fi
+fi
+
+if jq -e '[.fields.customfield_10007[]? | select(.state != "closed")] | length == 0' <<<"$ISSUE" >/dev/null; then
+  SPRINT=$(jira GET "/rest/agile/1.0/board/198/sprint?state=active" | jq -r '.values[0].id // empty')
+  if [[ -n "$SPRINT" ]]; then
+    echo "→ Adding to active sprint $SPRINT..."
+    jira POST "/rest/agile/1.0/sprint/$SPRINT/issue" "{\"issues\":[\"$TICKET\"]}" >/dev/null || echo "  (sprint add failed)"
+  else
+    echo "  (no active sprint found, skipping)"
   fi
 fi
 
