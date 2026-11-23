@@ -281,6 +281,8 @@ DESC_LEN=$(jq -r '.fields.description // "" | length' <<<"$ISSUE")
 BULLETS=$(jq -r '.fields.description // "" | [scan("(?m)^\\s*[*#-]")] | length' <<<"$ISSUE")
 if [[ -n "$CF_MODEL" ]]; then
   TIER="$CF_MODEL"; REASON="CF_MODEL override"
+elif (( DESC_LEN < 80 )); then
+  TIER="opusplan"; REASON="desc ${DESC_LEN}ch, nothing to size by → large (opus plans, sonnet implements)"
 elif (( DESC_LEN > 600 || BULLETS >= 3 || ${#WORKTREES} > 1 )); then
   TIER="opusplan"; REASON="desc ${DESC_LEN}ch, ${BULLETS} bullets, ${#WORKTREES} repos → large (opus plans, sonnet implements)"
 else

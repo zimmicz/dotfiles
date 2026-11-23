@@ -17,3 +17,8 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - Labels (`ai-fix`, `triage`, `ai-gate-skip`, `ai-rebase`) are acted on whoever set them; comments are owner-filtered.
    - Deny-lists are prefix patterns: `glab mr merge|approve` denied, `glab api:*` allowed; FE project has `merge_requests_author_approval: true`. Direct push to develop/staging/production is blocked server-side.
    - `factory-stats`: counts review verdicts as verify runs, `implementing` never matches.
+6. DEV-3873 retro changes (2026-11-23, rollback tag `sw-factory-pre-dev3873-retro-2026-11-23`, README "Requirements don't get lost between rounds"). Not exercised on a real ticket yet, only `zsh -n` + a function test of `unrunnable` / `plan_ok`:
+   - 2026-11-30: on the next 3 feature tickets check `notes/<KEY>.md` has `## Sources` + `## Acceptance criteria` with verbatim rows, `PLAN.md` carries the table with `Where`, and count MR follow-ups vs DEV-3873 v1 (2 rework rounds, 3 blocked verifies, reset).
+   - In-flight tickets: a follow-up on a `PLAN.md` written before the change must add `### Acceptance criteria` or it lands in `triage-failed`.
+   - Open decision: FE change whose BE lives only on a feature / dyn env (DEV-3873: `dev-3657-pasture`). The preview runs against nightly, so every scenario is `DATA: missing` and the gate refuses `ai-fix`. Option: verifier redeploys that env with `FE_BRANCH=<branch>` (touches an env the BE dev uses).
+   - Unverified: `--model opusplan` in `claude -p` for `impl` (no plan mode headless, so probably sonnet throughout). The sizing change only moves the analysis to opus.

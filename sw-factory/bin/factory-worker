@@ -84,9 +84,17 @@ plan_ok() {
   grep -qE '^## (Requirements|Belongs in Sentry)' $1 || M+=("## Requirements/Belongs in Sentry?")
   grep -q '^## Plan$' $1 || M+=("## Plan")
   grep -q '^## Implementation$' $1 || M+=("## Implementation")
+  grep -q '^## Requirements' $1 && ! grep -q '^### Acceptance criteria$' $1 && M+=("### Acceptance criteria")
   (( $#M )) || return 0
   echo "  PLAN.md lacks: ${(j:, :)M}" | tee -a $2
   return 1
+}
+
+unrunnable() {
+  local F=$HOLDOUT/$1.md
+  [[ -f $F ]] || return 1
+  awk '/^## S/{if(n&&!b)ok=1; n=1; b=0} /DATA: missing|^Given: same as S/{b=1} END{exit (n&&!b)||ok ? 1 : 0}' $F || return 1
+  grep -m1 -o 'DATA: missing.*' $F
 }
 
 grill_bump() {
@@ -303,6 +311,8 @@ verify_blocker() {
     echo "no holdout scenarios file"
   elif proposal $1; then
     echo "holdout proposal waiting for Michal (dash A/X)"
+  elif unrunnable $1 >/dev/null; then
+    echo "no holdout scenario can run ($(unrunnable $1))"
   elif BR=($LOG_DIR/$1.blocked-retry(Nmm-${BLOCKED_WAIT:-10})) && (( ${#BR} )); then
     echo "verify blocked by the environment, auto-retry $(<$BR)/${BLOCKED_MAX:-2} after ${BLOCKED_WAIT:-10} min"
   elif WHY=$F verify_targets $1 $2 >/dev/null </dev/null; then
@@ -681,7 +691,13 @@ Superseded by $(cat $LOG_DIR/$1.mr) ($1)." >/dev/null && glab api -X PUT "projec
 }
 
 stage_impl() {
-  local ID=$(snap_human $1) S=$(snap_all $1)
+  local ID=$(snap_human $1) S=$(snap_all $1) U
+  if [[ ! -f $LOG_DIR/$1.blind ]] && U=$(unrunnable $1); then
+    echo "=== implement $1 refused: no holdout scenario can run ($U)" | tee -a $LOG_DIR/$1.log
+    relabel $1 ai-fix triaged
+    note $1 "not implementing: no holdout scenario can run, nobody would see the UI before you ($U). Fix the fixture / env and reply in Jira, or accept blind: \`touch $LOG_DIR/$1.blind\` + re-add \`ai-fix\`"
+    return 0
+  fi
   if implement $1 ${2-}; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; info $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; has_label $1 deps && close_bot_mr $1; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; info $1 "already fixed, closed as duplicate, Sentry resolves next run"; else fallback_comment $1 $S; relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
 }
 
@@ -714,6 +730,7 @@ failed_scenarios() { sed -nE 's/^(S[0-9]+) [^—]*: fail.*/\1/p' $1 2>/dev/null 
 blocked_retry() {
   local F=$LOG_DIR/$1.blocked-retry N=0
   [[ -f $F ]] && N=$(<$F)
+  unrunnable $1 >/dev/null && return 1
   grep -qE '^S[0-9]+ [^—]*: (pass|fail)' $2 2>/dev/null && return 1
   (( N >= ${BLOCKED_MAX:-2} )) && return 1
   echo $(( N + 1 )) >$F
