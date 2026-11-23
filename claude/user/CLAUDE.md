@@ -24,15 +24,13 @@ When a repository's documentation and its existing code disagree, follow the con
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 
-In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
+Only repos with a `.codegraph/` dir at root are indexed (today: cf-farm-frontend, cf-knowledge-base). Worktrees under `<repo>/.worktrees/` may have their own `.codegraph/`. No `.codegraph/` → skip CodeGraph entirely; indexing is the user's decision.
 
-- **MCP tool** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them, including dynamic-dispatch hops grep can't follow. Name a file or symbol in the query to read its current line-numbered source. If it's listed but deferred, load it by name via tool search.
-- **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
+In indexed repos, use CodeGraph BEFORE grep/find/reading files, and over `ctx_callgraph` for callers/callees/impact (pre-indexed, follows dynamic dispatch, returns source):
 
-If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
+- **MCP** `codegraph_explore`: local scope only in the indexed repos + their worktrees (not global, to save RAM). If deferred, load via tool search.
+- **Shell** (works anywhere, also when MCP absent): `codegraph explore "<symbol names or question>"`, same output.
 <!-- CODEGRAPH_END -->
-
-In CodeGraph-indexed repos, prefer `codegraph_explore` over `ctx_callgraph` for callers/callees/impact — it is pre-indexed, follows dynamic dispatch, and returns source. `ctx_callgraph` only as fallback where no `.codegraph/` exists.
 
 <!-- lean-ctx -->
 <!-- lean-ctx-claude-v13 -->
