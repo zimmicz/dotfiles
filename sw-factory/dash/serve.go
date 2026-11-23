@@ -1288,6 +1288,21 @@ func (s *server) handler() http.Handler {
 		}
 		writeJSON(w, map[string]string{"HTML": s.report(name)})
 	})
+	mux.HandleFunc("POST /api/ask", func(w http.ResponseWriter, r *http.Request) {
+		var a struct{ Q string }
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&a); err != nil || strings.TrimSpace(a.Q) == "" {
+			http.Error(w, "empty question", http.StatusBadRequest)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+		defer cancel()
+		ans, err := s.ask(ctx, a.Q)
+		if err != nil {
+			writeJSON(w, map[string]string{"Err": err.Error()})
+			return
+		}
+		writeJSON(w, map[string]string{"HTML": mdHTML(askKeyRe.ReplaceAllString(ans, "[$0](#k=$0)"))})
+	})
 	mux.HandleFunc("POST /api/action", func(w http.ResponseWriter, r *http.Request) {
 		var a actionReq
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 40<<20)).Decode(&a); err != nil {

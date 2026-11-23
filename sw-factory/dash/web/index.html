@@ -250,6 +250,11 @@ dialog h3{margin:0 0 14px;font-size:19px}
 .nf input,.nf select,.nf textarea{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line2);border-radius:9px;padding:8px 12px;font:inherit;outline:0}
 .nf textarea{min-height:220px;font:15px/1.55 var(--mono);resize:vertical}
 .nf :focus{border-color:var(--accent)}
+#ask{width:820px}
+#ask input{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line2);border-radius:9px;padding:10px 14px;font:inherit;font-size:16px;outline:0}
+#ask input:focus{border-color:var(--accent)}
+#askA{max-height:60vh;overflow:auto;margin-top:12px;font-size:16px;line-height:1.6}
+#askA a{color:var(--cyan);font-family:var(--mono);cursor:pointer}
 .foot{color:var(--fg2);font-size:13.5px;margin:14px 0 0}
 @media (max-width:900px){main#overview{flex-direction:column}#side{width:auto;max-height:36vh;border-right:0;border-bottom:1px solid var(--line)}header{flex-wrap:wrap;padding:8px 12px}#q{width:150px}footer .hints{display:none}#head{padding:14px 16px 0}#title{font-size:20px}#tabs{padding:10px 8px 0;overflow:auto}#body{padding:16px}.cm.me{margin-left:16px}}
 </style>
@@ -289,6 +294,7 @@ dialog h3{margin:0 0 14px;font-size:19px}
 <dialog id="sys"></dialog>
 <dialog id="pick"><h3 id="pickT"></h3><input id="pickQ" autocomplete="off" placeholder="filter repos"><div id="pickL"></div><p class="foot"><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>enter</kbd> pick · <kbd>esc</kbd> cancel</p></dialog>
 <dialog id="new"><h3>New ticket for the factory</h3><div class="nf"><label for="newT">title</label><input id="newT" autocomplete="off" placeholder="Česky, např. Migrace can-frontend z npm na pnpm"><label for="newR">repo</label><select id="newR"></select><label for="newY">type</label><select id="newY"><option>Technical</option><option>Task</option><option>Bug</option></select><label for="newE">epic</label><input id="newE" autocomplete="off" placeholder="DEV-1234, optional"><label for="newX">description</label><textarea id="newX" placeholder="Co a proč, česky…"></textarea></div><div id="newThumbs"></div><p class="foot"><kbd>tab</kbd> next field · <kbd>Ctrl</kbd>+<kbd>V</kbd> paste image · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> create · <kbd>esc</kbd> cancel, draft kept</p></dialog>
+<dialog id="ask"><h3>Ask the factory</h3><input id="askQ" autocomplete="off" placeholder="What's the state of the npm to pnpm migration?"><div id="askA" class="md"></div><p class="foot"><kbd>enter</kbd> ask · click a ticket key to open it · <kbd>esc</kbd> close · read-only, changes nothing</p></dialog>
 <dialog id="reply"><h3 id="replyT"></h3><textarea id="replyX" placeholder="Write the reply…"></textarea><div id="thumbs"></div><p class="foot"><kbd>Ctrl</kbd>+<kbd>V</kbd> paste image · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> send · <kbd>esc</kbd> cancel</p></dialog>
 <script>
 const $ = id => document.getElementById(id)
@@ -300,7 +306,7 @@ const HELP = [
   ['Navigate', [['j k ↑ ↓', 'move'], ['g G', 'top / bottom'], ['tab', 'next tab (shift: previous)'], ['^u ^d', 'scroll pane'], ['z', 'show other logs'], ['Z', 'zoom pane'], ['/', 'search any ticket, enter looks it up in Jira'], ['1 2 3 B S', 'overview / ui fix / backlog / board / stats'], ['j k enter J M r', 'ui fix: move / open / Jira / MR / reload'], ['j k enter J r', 'backlog: move / open / Jira / reload']]],
   ['Factory  (asks to confirm)', [['a', 'approve plan → ai-fix'], ['R', 'reply in Jira, no confirm (Ctrl+V pastes image)'], ['t', 'retry failed stage'], ['w', 'run worker now'], ['f', 'feed todo to factory'], ['n', 'new ticket → factory (triage + repo)'], ['b', 'agent fixes MR conflict'], ['s', 'skip merge gate'], ['Q', 'quiz me → ai-quizzed'], ['A', 'accept holdout proposal → re-verify'], ['X', 'reject holdout proposal']]],
   ['Open', [['enter o', 'MR, else Jira'], ['J', 'Jira'], ['m', 'MR'], ['y', 'copy tab text'], ['l', 'load full log'], ['e', 'edit plan / holdout, proposal first (vim in tmux)'], ['c', 'resume session (tmux)']]],
-  ['Other', [['r', 'refresh Jira'], ['i', 'factory status (Jira, timer, units)'], ['?', 'this help'], ['esc', 'close dialog / clear search']]],
+  ['Other', [['q', 'ask the factory a question (read-only)'], ['r', 'refresh Jira'], ['i', 'factory status (Jira, timer, units)'], ['?', 'this help'], ['esc', 'close dialog / clear search']]],
 ]
 let S = {Rows: [], Tabs: ['log'], Cols: [], Repos: []}, extras = [], cur = '', tab = 0, view = 'overview', showOther = false, pending = null, bodyKey = '', src = '', days = 30, pick = null, images = {}, newImages = {}, boot = true, ns = [], nsi = 0, uf = [], ufi = 0
 
@@ -315,13 +321,13 @@ const ago = t => { if (!t) return '-'; const d = Date.now() / 1000 - t; return d
 const say = (s, err) => { $('status').textContent = s; $('status').className = err ? 'err' : '' }
 const ball = r => `<span class="ball ${esc(r.Ball)}">${esc(r.Ball === '-' ? 'parked' : r.Ball)}</span>`
 const stage = r => `<span class="tag c${r.Running ? 32 : esc(r.Color)}">${esc(r.Running ? r.Phase || r.Label : r.Label)}</span>`
+const deps = r => (r.Labels || []).includes('deps') ? '<span class="tag c35">deps</span> ' : ''
 const icon = r => r.Running ? '<i class="dot"></i>' : esc(r.Icon)
 let seenLbl = {}
 try { seenLbl = JSON.parse(localStorage.getItem('seenLbl') || '{}') } catch {}
 function markSeen() {
   const first = !Object.keys(seenLbl).length
   for (const r of S.Rows) if (first || r.Key === cur) seenLbl[r.Key] = r.Label
-const deps = r => (r.Labels || []).includes('deps') ? '<span class="tag c35">deps</span> ' : ''
   try { localStorage.setItem('seenLbl', JSON.stringify(seenLbl)) } catch {}
 }
 const isNew = r => seenLbl[r.Key] !== r.Label
@@ -357,16 +363,16 @@ function render() {
   $('brand').className = 'brand' + (S.Busy ? ' busy' : '')
   $('brand').title = S.Busy ? 'worker busy' : 'worker idle'
   const health = S.JiraErr || S.Svc === 'failed' ? 'bad' : S.JiraAge > 180 ? 'warn' : 'run'
+  const dl = S.DepsLines || []
   $('pills').innerHTML = [
     `<span class="pill stat ${health}" id="statP" title="factory status (i)">● status · jira ${S.JiraAge < 60 ? S.JiraAge + 's' : (S.JiraAge / 60 | 0) + 'm'}</span>`,
+    `<span class="pill stat ${dl.some(l => /failed/.test(l)) ? 'bad' : dl.some(l => /blocked|waiting/.test(l)) ? 'warn' : ''}" id="depsP" title="${esc('dependabot lane, last run ' + S.DepsAgo + ' ago\n' + (dl.join('\n') || 'nothing reported'))}">deps · ${esc(S.DepsAgo)}</span>`,
     needs && `<span class="pill warn"><b>${needs}</b> need you</span>`,
     running && `<span class="pill run"><b>${running}</b> running</span>`,
     `<span class="pill"><b>${live.length}</b> tickets</span>`,
     `<span class="pill"><b>$${live.reduce((a, r) => a + r.Cost, 0).toFixed(2)}</b></span>`,
-  const dl = S.DepsLines || []
     S.Svc === 'failed' && '<span class="pill bad">dispatcher failed</span>',
     S.JiraErr ? `<span class="pill bad">jira: ${esc(S.JiraErr)}</span>` : S.JiraAge > 180 && `<span class="pill warn">jira ${S.JiraAge / 60 | 0}m old</span>`,
-    `<span class="pill stat ${dl.some(l => /failed/.test(l)) ? 'bad' : dl.some(l => /blocked|waiting/.test(l)) ? 'warn' : ''}" id="depsP" title="${esc('dependabot lane, last run ' + S.DepsAgo + ' ago\n' + (dl.join('\n') || 'nothing reported'))}">deps · ${esc(S.DepsAgo)}</span>`,
   ].filter(Boolean).join('')
   let h = '', g = -1
   for (const r of rows) {
@@ -381,13 +387,13 @@ function render() {
   $('meta').innerHTML = !r.Key ? '' : [
     `<span class="chip stage c${r.Running ? 32 : esc(r.Color)}">${icon(r)} ${esc(r.Running ? r.Phase || r.Label : r.Label)}</span>`,
     `<span class="chip"><b>$${r.Cost.toFixed(2)}</b></span>`,
+    deps(r) && `<span class="chip stage c35">dependabot lane</span>`,
     r.Verdict && `<span class="chip stage ${r.Verdict === 'pass' ? 'c32' : 'c31'}">verify ${esc(r.Verdict)}</span>`,
     `<span class="chip">${ago(r.Seen)} ago</span>`,
     r.JiraURL && `<a class="chip" href="${esc(r.JiraURL)}" target="_blank">Jira ↗</a>`,
     r.MR && `<a class="chip" href="${esc(r.MR)}" target="_blank">MR !${esc(r.MRIID)} ↗</a>`,
     r.MRDetail && `<span class="chip">${esc(r.MRDetail)}</span>`,
   ].filter(Boolean).join('')
-    deps(r) && `<span class="chip stage c35">dependabot lane</span>`,
   $('next').className = r.Ball || ''
   $('next').innerHTML = r.Key && r.Next ? `${ball(r)}<span>${esc(r.Next)}</span>` : ''
   $('tabs').innerHTML = S.Tabs.map((t, i) => `<span class="${i === tab ? 'on' : ''}" data-t="${i}">${t}</span>`).join('')
@@ -584,6 +590,21 @@ $('replyX').onkeydown = e => {
   }
 }
 
+function openAsk() { $('ask').showModal(); $('askQ').focus(); $('askQ').select() }
+$('askQ').onkeydown = async e => {
+  e.stopPropagation()
+  if (e.key !== 'Enter' || !$('askQ').value.trim() || $('askQ').disabled) return
+  const t0 = Date.now(), tick = setInterval(() => { $('askA').innerHTML = `<p class="dim">reading tickets… ${(Date.now() - t0) / 1000 | 0}s</p>` }, 1000)
+  $('askQ').disabled = true
+  try {
+    const d = await (await fetch('/api/ask', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({Q: $('askQ').value})})).json()
+    clearInterval(tick)
+    $('askA').innerHTML = d.Err ? `<p class="c31">${esc(d.Err)}</p>` : d.HTML
+  } catch (err) { clearInterval(tick); $('askA').innerHTML = `<p class="c31">${esc(err)}</p>` }
+  $('askQ').disabled = false; $('askQ').focus()
+}
+$('askA').onclick = e => { const a = e.target.closest('a[href^="#k="]'); if (a) { e.preventDefault(); $('ask').close(); lookup(a.getAttribute('href').slice(3)) } }
+
 function openNew() {
   const r = $('newR').value || 'cf-farm-frontend'
   $('newR').innerHTML = S.Repos.map(p => `<option>${esc(p)}</option>`).join('')
@@ -666,7 +687,7 @@ document.onkeydown = e => {
     Enter: openMain, o: openMain, J: () => openURL(r.JiraURL, 'jira ticket'), m: () => openURL(r.MR, 'MR'),
     r: () => { say('refreshing jira'); act('refresh') }, y: () => navigator.clipboard.writeText(src).then(() => say(S.Tabs[tab] + ' copied')),
     l: () => { tab = 0; render(); bodyKey = ''; loadBody(true) }, e: () => act('edit', {Tab: S.Tabs[tab]}), c: () => act('resume'),
-    a: () => act('approve'), t: () => act('retry'), R: openReply, b: () => act('rebase'), s: () => act('skipgate'), f: openPick, n: openNew,Q: () => act('quiz'), w: () => act('worker'),
+    a: () => act('approve'), t: () => act('retry'), R: openReply, b: () => act('rebase'), s: () => act('skipgate'), f: openPick, n: openNew, q: openAsk, Q: () => act('quiz'), w: () => act('worker'),
     A: () => act('holdoutAccept'), X: () => act('holdoutReject'),
   }
   if (keys[k]) { keys[k](); e.preventDefault() }
