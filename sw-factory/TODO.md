@@ -34,3 +34,9 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - `sentry-triage` / `deps-triage`: no limit detection of their own.
    - No Slack line when the limit hits; dash does not show it.
    - Tick skip also stops the merge gate and `done`.
+9. Verify unblock (2026-11-23, rollback tag `sw-factory-pre-verify-unblock-2026-11-23`, README Flow verify lines + Rollback). Tested: `zsh -n`, `test/verify-rules.zsh` (data-only rule, can-frontend scenario parsing), stream jq `⚠️ mcp … failed` line, dry tick, dash `go test`. `MCP_TIMEOUT` read from the Claude CLI source (it sets the "connection timed out after Nms" limit), not run headless (agent shell can't start `claude`).
+   - `systemctl --user restart factory-dash` (binary rebuilt, service not restarted).
+   - 2026-11-30: `factory-compare 2026-11-23T22:00:00+01:00`, rows `verify runs without Playwright` (before 9 since 11-16), `verify runs ending blocked` (before 35 %), `blocked runs accepted as data-only`, `can-frontend verifies skipped`.
+   - First data-only ticket: check `unverified/<KEY>.md`, Slack line, dash `hand-check S…`, quiz asks the unverified scenarios first; next verify logs `skip (DATA last round …)`, MR note marks them not re-run.
+   - First can-frontend ticket with UI scenarios: report `VERDICT: unverified`, no verifier session, `ai-verified`.
+   - Verifier may tag a UI bug that hides existing data as `DATA:`; watch the first reports. Backstop is the quiz.

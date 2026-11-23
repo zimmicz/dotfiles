@@ -64,6 +64,10 @@ FND=$(gawk "/^=== review/ { ts = \$NF } /^  findings: must=/ { match(\$0, /must=
   | while IFS=$'\t' read -r TS M S C; do printf '%s\t%s\t%s\t%s\n' $(period_of $TS) $M $S $C; done)
 BLK=$(gawk '/^=== / { v = /^=== verify/; ts = $NF } v && /^  VERDICT: / { print ts "\t" $2 "\t0" } v && /^  blocked-retry: / { print ts "\tretry\t0" }' $LOG_DIR/DEV-*.log \
   | while IFS=$'\t' read -r TS V Z; do printf '%s\t%s\n' $(period_of $TS) $V; done)
+VX=$(gawk '/^=== / { v = /^=== verify-ui/; ts = $NF; m = 0 } v && !m && /CONNECT_TIMEOUT|⚠️ mcp playwright/ { m = 1; print ts "\tmcp" } v && /^  unverified: / { print ts "\tdata" } v && /verifier not started/ { print ts "\tnopreview" }' $LOG_DIR/DEV-*.log \
+  | while IFS=$'\t' read -r TS V; do printf '%s\t%s\n' $(period_of $TS) $V; done)
+vx() { gawk -F'\t' -v p=$1 -v k=$2 '$1 == p && $2 == k { n++ } END { print n + 0 }' <<<"$VX" }
+
 blk() { gawk -F'\t' -v p=$1 '$1 == p { if ($2 == "retry") r++; else { t++; if ($2 == "blocked") b++ } } END { if (t) printf "%d%% (%d of %d), %d auto-retried, %d parked", 100 * b / t, b, t, r, b - r; else print "-" }' <<<"$BLK" }
 
 med() { grep -vx -- '-' | grep -v '^$' | sort -n | gawk '{ a[NR] = $1 } END { if (!NR) { print "-"; exit } m = NR % 2 ? a[(NR + 1) / 2] : (a[NR / 2] + a[NR / 2 + 1]) / 2; p = a[int(NR * 0.9 + 0.5) > NR ? NR : int(NR * 0.9 + 0.5)]; if (NR < 5) printf "%.4g\n", m; else printf "%.4g (p90 %.4g)\n", m, p }' }
@@ -91,6 +95,9 @@ row "verify calls before 1st screenshot" "$(col before verify-ui 6 | med)" "$(co
 row "verify runs per ticket" "$(per_ticket before verify-ui)" "$(per_ticket after verify-ui)"
 row "same-pipeline re-verifies" "$(same_pipe before)" "$(same_pipe after)"
 row "verify runs ending blocked" "$(blk before)" "$(blk after)"
+row "verify runs without Playwright (MCP connect failed)" "$(vx before mcp)" "$(vx after mcp)"
+row "blocked runs accepted as data-only (unverified → quiz)" "$(vx before data)" "$(vx after data)"
+row "can-frontend verifies skipped (no preview → quiz)" "$(vx before nopreview)" "$(vx after nopreview)"
 row "implement rounds per ticket" "$(per_ticket before implement)" "$(per_ticket after implement)"
 row "analyze runs per ticket" "$(per_ticket before analyze)" "$(per_ticket after analyze)"
 row "TICKET.md bytes at stage start" "$(col before '*' 12 | med)" "$(col after '*' 12 | med)"

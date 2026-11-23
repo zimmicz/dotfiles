@@ -20,12 +20,14 @@ PROPOSED=$LOG_DIR/holdout-proposed
 SENT=$LOG_DIR/sent
 ENVOWN=$LOG_DIR/env-owned
 ENVHANDLED=$LOG_DIR/handled-env
+UNVERIFIED=$LOG_DIR/unverified
 ENVPROJ=cleverfarm%2Fcleverfarm%2Finfrastructure%2Fcf-dev-kubernetes
 CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-env/*' 2>/dev/null | sort -V | tail -1)
-mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED $SUSPECT $PROPOSED $SENT $ENVOWN $ENVHANDLED ~/cf-env-tmp
+mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED $SUSPECT $PROPOSED $SENT $ENVOWN $ENVHANDLED $UNVERIFIED ~/cf-env-tmp
 
 HEADLESS_SETTINGS='{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false,"slack@claude-plugins-official":false,"cf-planning@cleverfarm":false,"cf-release@cleverfarm":false,"cf-kb@cleverfarm":false,"cf-eod@cleverfarm":false,"cf-bug-report@cleverfarm":false,"cf-cli-skill@cleverfarm":false,"cf-investigator@cleverfarm":false,"cf-cc@cleverfarm":false,"typescript-lsp@claude-plugins-official":false}}'
-PW_ARGS='["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--secrets","'"$HOME"'/.config/cleverfarm/e2e.env"]'
+export MCP_TIMEOUT=${MCP_TIMEOUT:-120000}
+PW_ARGS='["--prefer-offline","-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--secrets","'"$HOME"'/.config/cleverfarm/e2e.env"]'
 
 mcp_config() {
   local PW=${1:-}; shift
@@ -38,7 +40,7 @@ STREAM_JQ='def ctx: ((.message.usage.input_tokens // 0) + (.message.usage.cache_
 foreach inputs as $m ({b: 0, n: 0, c: 0, peak: 0};
   (if $m.type == "assistant" then .n += 1 | .c = ($m | ctx) | .peak = ([.peak, .c] | max) | .nb = ((.c / 50000) | floor) else .nb = .b end)
   | .lines = ((now | localtime | strftime("%T")) as $t
-    | [ (if $m.type == "system" and $m.subtype == "init" then "🆔 session \($m.session_id) — reopen: cd \($m.cwd) && claude --resume \($m.session_id) — transcript ~/.claude/projects/\($m.cwd | gsub("[/.]"; "-"))/\($m.session_id).jsonl"
+    | [ (if $m.type == "system" and $m.subtype == "init" then ("🆔 session \($m.session_id) — reopen: cd \($m.cwd) && claude --resume \($m.session_id) — transcript ~/.claude/projects/\($m.cwd | gsub("[/.]"; "-"))/\($m.session_id).jsonl", ($m.mcp_servers[]? | select(.status != "connected") | "⚠️ mcp \(.name) \(.status)"))
         elif $m.type == "system" and $m.subtype == "compact_boundary" then "🧹 compacted (\($m.compactMetadata.trigger // "?"), \((($m.compactMetadata.preTokens // 0) / 1000) | floor)K before)"
         elif $m.type == "assistant" then ($m.message.content[] | if .type == "text" then "💬 " + .text elif .type == "tool_use" then "🔧 " + .name + " " + (.input | tostring)[0:200] else empty end)
         elif $m.type == "result" then "✅ exit error=\($m.is_error) cost=$\($m.total_cost_usd) turns=\(.n) peak=\((.peak / 1000) | floor)K\n\($m.result // "")" else empty end),
@@ -128,6 +130,16 @@ unrunnable() {
   [[ -f $F ]] || return 1
   awk '/^## S/{if(n&&!b)ok=1; n=1; b=0} /DATA: missing|^Given: same as S/{b=1} END{exit (n&&!b)||ok ? 1 : 0}' $F || return 1
   grep -m1 -o 'DATA: missing.*' $F
+}
+
+DATA_RE='^S[0-9]+ [^—]*: blocked — DATA:'
+NOPREVIEW_SED='s/^(## )?(S[0-9]+): *(.*)$/\2 \3: blocked — NO PREVIEW: can-frontend has no reachable preview, check by hand/p'
+
+data_only() {
+  grep -qE '^S[0-9]+ [^—]*: (fail|not run)' $1 && return 1
+  grep -qE '^S[0-9]+ [^—]*: pass' $1 || return 1
+  grep -E '^S[0-9]+ [^—]*: blocked' $1 | grep -vqE "$DATA_RE" && return 1
+  grep -E "$DATA_RE" $1 | grep -oE '^S[0-9]+' | paste -sd, -
 }
 
 grill_bump() {
@@ -464,18 +476,36 @@ verify() {
   fi
   echo "=== verify-$KIND $KEY (${(j:, :)TARGETS}${EN:+, env $EN}) $(date -Iseconds)" | tee -a $LOG
   [[ -n "$EL" && -z "$EN" ]] && echo "  env $EL is gone, verifying as if the ticket had no env label" | tee -a $LOG
-  local MEDIA=$LOG_DIR/$KEY.verify-media
+  local MEDIA=$LOG_DIR/$KEY.verify-media SKIP=$LOG_DIR/$KEY.data-skip
+  rm -f $SKIP
+  if [[ $KIND == ui ]]; then
+    rm -f $UNVERIFIED/$KEY.md
+    [[ -f $OUT && $OUT -nt $SCEN ]] && grep -E "$DATA_RE" $OUT >$SKIP
+    [[ -s $SKIP ]] && echo "  skip (DATA last round, holdout unchanged): $(grep -oE '^S[0-9]+' $SKIP | paste -sd, -)" | tee -a $LOG || rm -f $SKIP
+  fi
   rm -rf $OUT $MEDIA
+  if [[ $KIND == ui && -z "$EN" && ${(j:,:)RS} == can-frontend ]] && ! grep -q '^NONE:' $SCEN; then
+    { echo "VERDICT: unverified (can-frontend has no reachable preview)"
+      sed -nE "$NOPREVIEW_SED" $SCEN } >$OUT
+    grep -E '^S[0-9]+ ' $OUT >$UNVERIFIED/$KEY.md
+    echo "  VERDICT: unverified (can-frontend has no reachable preview, verifier not started)" | tee -a $LOG
+    return 0
+  fi
   local MCP=$(mcp_config $MEDIA)
   wm_window $WT0 $LOG
-  (cd $WT0 && TMPDIR=$HOME/cf-env-tmp claude -p "/cf-holdout-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}${EN:+ env=$EN deploy=1}$([[ $KIND == ui ]] && echo " video=$MEDIA")${4:+ failed=$4}" \
+  (cd $WT0 && TMPDIR=$HOME/cf-env-tmp claude -p "/cf-holdout-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}${EN:+ env=$EN deploy=1}$([[ $KIND == ui ]] && echo " video=$MEDIA")${4:+ failed=$4}$([[ -s $SKIP ]] && echo " skip=$SKIP")" \
     --model sonnet --settings "$HEADLESS_SETTINGS" \
     --strict-mcp-config --mcp-config "$MCP" \
     --allowedTools "Read Skill Write(/$OUT) Write(/$MEDIA/narration.tsv) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(bash $HOME/.claude/skills/cf-holdout-ui/narrate.sh $MEDIA $KEY) Bash(bash $HOME/.claude/skills/cf-holdout-api/run-scenarios.sh:*)" \
     --disallowedTools "Edit Bash(git:*) Edit(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
-  local VERDICT=$(head -1 $OUT 2>/dev/null)
+  local VERDICT=$(head -1 $OUT 2>/dev/null) U
   echo "  ${VERDICT:-no report}" | tee -a $LOG
+  if [[ $KIND == ui && $VERDICT == "VERDICT: blocked"* ]] && U=$(data_only $OUT) && [[ -n $U ]]; then
+    grep -E "$DATA_RE" $OUT >$UNVERIFIED/$KEY.md
+    echo "  unverified: $U (blocked by missing data only, rest pass) → counts as verified, hand-check in quiz" | tee -a $LOG
+    return 0
+  fi
   case $VERDICT in
     "VERDICT: pass"*) return 0 ;;
     "VERDICT: fail"*) return 1 ;;
@@ -827,6 +857,7 @@ wt_heads() {
 unverify() {
   limit_bail $1
   jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"},{"remove":"ai-quizzed"},{"remove":"ai-reviewed"}]}}' >/dev/null
+  rm -f $UNVERIFIED/$1.md
 }
 
 stage_mr() {
@@ -872,7 +903,12 @@ stage_verify() {
     (( RC == 2 )) && return 2
   fi
   if (( RC == 0 )); then
-    relabel $KEY ai-verify-retry ai-verified; info $KEY "holdout scenarios pass: $(cat $LOG_DIR/$KEY.mr)"
+    relabel $KEY ai-verify-retry ai-verified
+    if [[ -s $UNVERIFIED/$KEY.md ]]; then
+      info $KEY "holdout scenarios pass, unverified $(grep -oE '^S[0-9]+' $UNVERIFIED/$KEY.md | paste -sd, -) (no data / no preview): hand-check them in the quiz (Q): $(cat $LOG_DIR/$KEY.mr)"
+    else
+      info $KEY "holdout scenarios pass: $(cat $LOG_DIR/$KEY.mr)"
+    fi
   elif (( RC == 3 )); then
     relabel $KEY "" ai-verify-failed; note $KEY "verifier crashed or died mid-run, see \`$REPORT\` + \`$LOG_DIR/$KEY.log\`"
   elif (( RC == 4 )); then

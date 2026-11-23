@@ -191,10 +191,20 @@ func (s *server) out(r row) rowOut {
 	}
 	n := nextSteps[label]
 	o.Ball, o.Next = or(n[0], "-"), n[1]
+	if ids := unverifiedIDs(r.key); ids != "" && o.Ball == "you" {
+		o.Next += " · hand-check " + ids
+	}
 	if r.running {
 		o.Ball, o.Next = "factory", "running: "+or(r.phase, "worker")
 	}
 	return o
+}
+
+var scenarioIDRe = regexp.MustCompile(`(?m)^S\d+`)
+
+func unverifiedIDs(key string) string {
+	b, _ := os.ReadFile(filepath.Join(stateDir, "unverified", key+".md"))
+	return strings.Join(scenarioIDRe.FindAllString(string(b), -1), ",")
 }
 
 func (s *server) find(key string) (row, bool) {

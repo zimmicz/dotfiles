@@ -287,3 +287,17 @@ func TestAcceptProposal(t *testing.T) {
 		t.Fatal("second accept should fail")
 	}
 }
+
+func TestUnverifiedIDs(t *testing.T) {
+	old := stateDir
+	stateDir = t.TempDir()
+	defer func() { stateDir = old }()
+	if got := unverifiedIDs("DEV-1"); got != "" {
+		t.Fatalf("no file: got %q", got)
+	}
+	os.MkdirAll(filepath.Join(stateDir, "unverified"), 0o755)
+	os.WriteFile(filepath.Join(stateDir, "unverified", "DEV-1.md"), []byte("S7 Group: blocked — DATA: none\nS8 Machine: blocked — DATA: none\n"), 0o644)
+	if got := unverifiedIDs("DEV-1"); got != "S7,S8" {
+		t.Fatalf("got %q", got)
+	}
+}
