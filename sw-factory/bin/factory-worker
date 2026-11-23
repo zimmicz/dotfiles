@@ -26,7 +26,7 @@ PW_ARGS='["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/b
 mcp_config() {
   local PW=${1:-}; shift
   jq -nc --arg pw "$PW" --argjson pwargs "$PW_ARGS" --slurpfile c ~/.claude.json --args '
-    ($c[0].mcpServers | with_entries(select(.key | IN($ARGS.positional[])))) as $m
+    ($c[0].mcpServers + {codegraph: {type: "stdio", command: "codegraph", args: ["serve", "--mcp"]}} | with_entries(select(.key | IN($ARGS.positional[])))) as $m
     | {mcpServers: ($m + (if $pw == "" then {} else {playwright: {type: "stdio", command: "npx", args: ($pwargs + ["--output-dir", $pw])}} end))}' "$@"
 }
 

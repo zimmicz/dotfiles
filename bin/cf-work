@@ -192,6 +192,7 @@ for DIR in $REPO_DIRS; do
       flock "$DIR/.git" git -C "$DIR" worktree add "$WT" "origin/$BASE" -b "$BRANCH"
     fi
     [[ -f "$DIR/.env" ]] && cp "$DIR/.env" "$WT/.env"
+    [[ -d "$DIR/.codegraph" ]] && (cd "$WT" && flock ~/.claude claude mcp add -s local codegraph -- codegraph serve --mcp > /dev/null)
   fi
   WORKTREES+=("$WT")
 done
