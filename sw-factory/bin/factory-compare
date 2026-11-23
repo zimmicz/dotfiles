@@ -73,6 +73,9 @@ memc() { gawk -F'\t' -v p=$1 -v s=$2 -v c=$3 '$1 == p && $2 == s { print $c }' <
 memlow() { gawk -F'\t' -v p=$1 '$1 == p && (m == "" || $4 < m) { m = $4 } END { print (m == "" ? "-" : m) }' <<<"$MEMR" }
 memswap() { gawk -F'\t' -v p=$1 '$1 == p { t++; if ($5 > 0) s++ } END { if (t) printf "%d of %d", s, t; else print "-" }' <<<"$MEMR" }
 
+TICKR=$([[ -f $LOG_DIR/ticks.tsv ]] && while IFS=$'\t' read -r TS TD TT GM SP; do printf '%s\t%s\t%s\t%s\n' $(period_of $TS) $TD $TT $GM; done <$LOG_DIR/ticks.tsv)
+tickc() { gawk -F'\t' -v p=$1 -v c=$2 -v g=${3:-} '$1 == p && (g == "" || $4 == g) { print $c }' <<<"$TICKR" | med }
+
 blk() { gawk -F'\t' -v p=$1 '$1 == p { if ($2 == "retry") r++; else { t++; if ($2 == "blocked") b++ } } END { if (t) printf "%d%% (%d of %d), %d auto-retried, %d parked", 100 * b / t, b, t, r, b - r; else print "-" }' <<<"$BLK" }
 
 med() { grep -vx -- '-' | grep -v '^$' | sort -n | gawk '{ a[NR] = $1 } END { if (!NR) { print "-"; exit } m = NR % 2 ? a[(NR + 1) / 2] : (a[NR / 2] + a[NR / 2 + 1]) / 2; p = a[int(NR * 0.9 + 0.5) > NR ? NR : int(NR * 0.9 + 0.5)]; if (NR < 5) printf "%.4g\n", m; else printf "%.4g (p90 %.4g)\n", m, p }' }
@@ -107,6 +110,9 @@ for S in impl mr verify review rfix new reply; do
   row "$S cgroup memory.peak MB (incl. page cache)" "$(memc before $S 3)" "$(memc after $S 3)"
 done
 row "lowest MemAvailable MB at a stage start" "$(memlow before)" "$(memlow after)"
+row "dispatcher tick: s until stages spawn (dry profile 2026-11-23: ~30, GitLab scan 13 of it)" "$(tickc before 2)" "$(tickc after 2)"
+row "dispatcher tick: total s" "$(tickc before 3)" "$(tickc after 3)"
+row "tick until spawn, GitLab events vs full scan" "-" "$(tickc after 2 events) / $(tickc after 2 full)"
 row "stages ending with swap in use" "$(memswap before)" "$(memswap after)"
 row "implement rounds per ticket" "$(per_ticket before implement)" "$(per_ticket after implement)"
 row "analyze runs per ticket" "$(per_ticket before analyze)" "$(per_ticket after analyze)"

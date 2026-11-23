@@ -607,6 +607,30 @@ gl_pending() {
   [[ -n "$(gl_unanswered $1 $2 </dev/null)" ]]
 }
 
+gl_event_keys() {
+  local EV P I N K B H M=$LOG_DIR/.gl-mr-keys
+  GLME=${GLME:-$(glab api user </dev/null | jq -r .username)}
+  [[ -n "$GLME" ]] || return 1
+  EV=$(glab api "events?action=commented&after=$(date -d '4 days ago' +%F)&per_page=100" </dev/null) || return 1
+  touch $M
+  jq -r --arg me "$GLME" "$GL_PINGED"'.[] | select(.note.noteable_type == "MergeRequest" and (.note.system | not))
+      | select((.note.body | startswith("🤖") or contains("writing on Michal") | not) and (.note | pinged | not))
+      | "\(.project_id) \(.note.noteable_iid) \(.note.id)"' <<<$EV \
+    | while read -r P I N; do
+      K=$(awk -v k="$P:$I" '$1 == k { print $2; exit }' $M)
+      if [[ -z $K ]]; then
+        B=$(glab api "projects/$P/merge_requests/$I" </dev/null) || continue
+        K=$(jq -r '.source_branch // empty' <<<$B | grep -oiP '^dev-\d+')
+        K=${${K:u}:--}
+        echo "$P:$I $K" >>$M
+      fi
+      [[ $K == - ]] && continue
+      H=0
+      [[ -f $GLHANDLED/$K ]] && H=$(<$GLHANDLED/$K)
+      (( N > H )) && echo $K
+    done | sort -u
+}
+
 conv_add() { CONV_L+=("$1"); CONV_B+=("$2"); CONV_N+=("$3"); CONV_S+=($(print -rn -- "$2" | wc -c)); }
 
 conv_collect() {
@@ -1128,6 +1152,9 @@ if [[ -f $LIMIT ]] && (( $(<$LIMIT) > $(date +%s) )); then
   exit 0
 fi
 
+zmodload zsh/datetime
+T0=$EPOCHREALTIME GLMODE=-
+
 stage_class() { case $1 in impl|mr|verify|review) echo $1 ;; rfix) echo impl ;; esac }
 stage_timeout() { case $1 in impl|mr|rfix|conflict|verify|env) echo 110min ;; review) echo 45min ;; done) echo 5min ;; *) echo 30min ;; esac }
 
@@ -1230,11 +1257,21 @@ else
       | while read -r K R; do grill_remind $K; done
   fi
   MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | awaiting_reply)
-  GLCHECKED=($LOG_DIR/.glnotes-checked(Nmm-${GL_EVERY:-2}))
-  if (( ! ${#GLCHECKED} )) || [[ -n "${TRIAGE_DRY:-}" ]]; then
+  GLCHECKED=($LOG_DIR/.glnotes-checked(Nmm-${GL_FULL_EVERY:-10}))
+  if (( ! ${#GLCHECKED} )); then
+    GLK=all
     [[ -n "${TRIAGE_DRY:-}" ]] || touch $LOG_DIR/.glnotes-checked
+  elif ! GLK=$(gl_event_keys); then
+    echo "lookup failed: gitlab events, full MR note scan"
+    GLK=all
+  fi
+  GLMODE=events
+  [[ $GLK == all ]] && GLMODE=full
+  [[ -n "${TRIAGE_DRY:-}" ]] && echo "gl notes: $GLMODE${GLK:+, keys: ${GLK//$'\n'/ }}"
+  if [[ -n $GLK ]]; then
+    GLK=" ${GLK//$'\n'/ } "
     MR_REPLIES+=$'\n'$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
-      | while read -r K R; do gl_pending $K $R </dev/null && echo "$K ${R%%,*}"; done)
+      | while read -r K R; do [[ $GLK == " all " || $GLK == *" $K "* ]] && gl_pending $K $R </dev/null && echo "$K ${R%%,*}"; done)
     MR_REPLIES=$(awk 'NF && !s[$1]++' <<<$MR_REPLIES)
   fi
   RFIX=$(search 'project = DEV AND labels = ai-mr AND labels = ai-review-retry AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$ROWS_JQ")
@@ -1276,8 +1313,10 @@ WORK=$(
     echo "sentry sentry"
   fi
 )
+TD=$EPOCHREALTIME
 dispatch <<<"$WORK"
 [[ -z "${1:-}" ]] && gate_all 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected)'
+[[ -z "${1:-}" && -z "${TRIAGE_DRY:-}" ]] && LC_NUMERIC=C printf '%s\t%.1f\t%.1f\t%s\t%d\n' "$(date -Iseconds -d @${T0%.*})" $(( TD - T0 )) $(( EPOCHREALTIME - T0 )) $GLMODE $SPAWNED >>$LOG_DIR/ticks.tsv
 
 if [[ -n "${1:-}" ]]; then
   (( SPAWNED )) || { echo "nothing spawned: ticket already running, no free slot, or no work for its labels" >&2; exit 75 }
