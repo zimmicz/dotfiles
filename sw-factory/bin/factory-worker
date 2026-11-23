@@ -18,7 +18,11 @@ TNOTES=$LOG_DIR/notes
 SUSPECT=$LOG_DIR/holdout-suspect
 PROPOSED=$LOG_DIR/holdout-proposed
 SENT=$LOG_DIR/sent
-mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED $SUSPECT $PROPOSED $SENT
+ENVOWN=$LOG_DIR/env-owned
+ENVHANDLED=$LOG_DIR/handled-env
+ENVPROJ=cleverfarm%2Fcleverfarm%2Finfrastructure%2Fcf-dev-kubernetes
+CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-env/*' 2>/dev/null | sort -V | tail -1)
+mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED $SUSPECT $PROPOSED $SENT $ENVOWN $ENVHANDLED ~/cf-env-tmp
 
 HEADLESS_SETTINGS='{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false,"slack@claude-plugins-official":false,"cf-planning@cleverfarm":false,"cf-release@cleverfarm":false,"cf-kb@cleverfarm":false,"cf-eod@cleverfarm":false,"cf-bug-report@cleverfarm":false,"cf-cli-skill@cleverfarm":false,"cf-investigator@cleverfarm":false,"cf-cc@cleverfarm":false,"typescript-lsp@claude-plugins-official":false}}'
 PW_ARGS='["-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--secrets","'"$HOME"'/.config/cleverfarm/e2e.env"]'
@@ -52,14 +56,18 @@ search() {
 
 JME=$(jira GET /rest/api/3/myself | jq -r '.accountId // empty')
 [[ -n "$JME" ]] || { echo "lookup failed: jira myself (accountId), refusing to read comments"; exit 1 }
-HUMAN_JQ='def ai: (.body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m);
+HUMAN_JQ='def txt: (.body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end);
+def ai: txt | contains($m);
 def pinged: (.body // "") | (if type == "string" then [scan("\\[~(?:accountid:)?([^\\]]+)\\]") | .[0]] else [.. | objects | select(.type == "mention") | .attrs.id] end) | any(. != "'$JME'");
-def human: (ai | not) and .author.accountId == "'$JME'" and (pinged | not);'
+def envc: txt | test("^\\s*env:"; "i");
+def mine: (ai | not) and .author.accountId == "'$JME'" and (pinged | not);
+def human: mine and (envc | not);
+def envcmd: mine and envc;'
 GL_PINGED='def pinged: [.body | scan("(?:^|[^\\w.@/`])@([\\w.-]*\\w)") | .[0]] | any(. != $me);'
 
 handled_json() {
   local F
-  for F in $HANDLED/*(N); do echo "${F:t} $(<$F)"; done \
+  for F in ${1:-$HANDLED}/*(N); do echo "${F:t} $(<$F)"; done \
     | jq -Rn '[inputs | split(" ") | select(length == 2) | {(.[0]): (.[1] | tonumber)}] | add // {}'
 }
 
@@ -269,9 +277,83 @@ implement() {
 
 why() { [[ -n "${WHY:-}" ]] && echo "$1" >$WHY; return 2 }
 
+cf_env() { TMPDIR=$HOME/cf-env-tmp $CF_ENV "$@" </dev/null }
+
+ticket_env() {
+  jira GET "/rest/api/3/issue/$1?fields=labels" | jq -r '[.fields.labels[] | select(startswith("env-")) | ltrimstr("env-")] | first // empty'
+}
+
+env_state() {
+  local J
+  J=$(glab api "projects/$ENVPROJ/environments?name=dynamic/$1" </dev/null 2>/dev/null) && jq -e 'type == "array"' <<<$J >/dev/null 2>&1 || { echo failed; return }
+  jq -r 'if any(.[]; .state == "available") then "up" else "gone" end' <<<$J
+}
+
+verify_env() {
+  local E=$(ticket_env $1) S
+  [[ -n "$E" ]] || return 0
+  S=$(env_state $E)
+  [[ $S == failed ]] && { why "lookup failed: state of dyn-env $E"; return 2 }
+  [[ $S == up ]] && echo $E
+  return 0
+}
+
+env_unverify() {
+  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"}]}}' >/dev/null
+}
+
+env_reverify() {
+  search 'project = DEV AND labels = ai-mr AND labels in (ai-verified, ai-verify-failed) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected)' 50 \
+    | jq -r '.issues[] | "\(.key) \([.fields.labels[] | select(startswith("env-")) | ltrimstr("env-")] | first // "")"' \
+    | while read -r K E; do
+        [[ "$E" == "$(cat $LOG_DIR/$K.verify-env 2>/dev/null)" ]] && continue
+        if [[ -n "${TRIAGE_DRY:-}" ]]; then echo "would re-verify $K: env label '${E:-none}', verified on '$(cat $LOG_DIR/$K.verify-env 2>/dev/null)'"; continue; fi
+        env_unverify $K </dev/null
+        info $K "env label changed to '${E:-none}' since the last verify, verify labels dropped, re-verify next"
+      done
+}
+
+env_say() {
+  jira add-comment $1 "🤖 _${AI_MARK}. Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._
+$2" >/dev/null </dev/null
+}
+
+env_resolve() {
+  local KEY=$1 LOG=$LOG_DIR/$1.log OUT=$LOG_DIR/$1.env-cmd ASK=$LOG_DIR/$1.env-ask
+  local WT=($REPOS/*/.worktrees/${KEY}-*(N/[1]))
+  jira GET "/rest/api/2/issue/$KEY/comment/$2" | jq -r '.body // empty' >$ASK
+  rm -f $OUT
+  [[ -s $ASK ]] || return 1
+  (cd ${WT:-$LOG_DIR} && claude -p "/cf-env-resolve $KEY request=$ASK out=$OUT env=$(ticket_env $KEY) repos=$(ticket_repos $KEY) branch=${WT:t}" \
+    --model sonnet --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '')" \
+    --allowedTools "Read Skill Write(/$OUT) Bash(glab api:*) Bash(glab mr list:*) Bash($CF_ENV list) Bash($CF_ENV status:*) Bash($CF_ENV log:*) Bash(jq:*)" \
+    --disallowedTools "Edit Bash(git:*) Bash($CF_ENV run:*) Bash(glab api -X:*) Bash(glab api --method:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
+    --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
+  [[ -s $OUT ]]
+}
+
+env_parse() {
+  local W=(${=$(head -1 $1 2>/dev/null)}) A
+  [[ ${W[1]:-} == RUN && ${W[2]:-} == (create|redeploy|destroy|wake|sleep|set-sleep|set-db-size|use) ]] || return 1
+  [[ ${W[3]:-} =~ '^[a-z0-9-]{3,40}$' ]] || return 1
+  for A in ${W[4,-1]}; do [[ $A =~ '^[A-Z_]+=[A-Za-z0-9_.:,/-]*$' ]] || return 1; done
+  print -r -- ${W[2,-1]}
+}
+
+env_done() {
+  local F EN R
+  for F in $ENVOWN/*(N); do
+    [[ "$(<$F)" == $1 ]] || continue
+    EN=${F:t}
+    if R=$(cf_env run destroy $EN 2>&1) && [[ $R == pipeline\ * ]]; then rm -f $F; info $1 "ticket Done, dyn-env $EN destroy started: ${${=R}[3]}"
+    else note $1 "dyn-env \`$EN\` destroy did not start, destroy it by hand: ${R[1,200]}"; fi
+  done
+}
+
 verify_targets() {
-  local KEY=$1 R WT MR PID IID PIPE SHA PS
+  local KEY=$1 R WT MR PID IID PIPE SHA PS EN
   [[ -n "$2" ]] || { why "no repo-* label"; return 2 }
+  EN=$(verify_env $KEY) || return 2
   for R in ${(s:,:)2}; do
     WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
     [[ -n "$WT" ]] || { why "no worktree in $R"; return 2 }
@@ -284,7 +366,7 @@ verify_targets() {
       | jq -e 'all(.[]; .status == "success" or .status == "manual" or .status == "skipped" or (.status == "failed" and .allow_failure))' >/dev/null && PS=success
     [[ "$PS" == success ]] || { why "pipeline ${PS:-missing} in $R, $(jq -r .web_url <<<$MR)"; return 2 }
     SHA=$(jq -r .sha <<<$PIPE)
-    if [[ $2 == cf-farm-frontend ]] && ! grep -q '^NONE:' $HOLDOUT/$KEY.md 2>/dev/null && ! glab api --paginate "projects/$PID/merge_requests/$IID/notes?per_page=100" </dev/null \
+    if [[ $2 == cf-farm-frontend && -z "$EN" ]] && ! grep -q '^NONE:' $HOLDOUT/$KEY.md 2>/dev/null && ! glab api --paginate "projects/$PID/merge_requests/$IID/notes?per_page=100" </dev/null \
         | jq -se --arg s "${SHA[1,8]}" 'add | any(.[]; (.body | contains("amplify-preview-url")) and (.body | contains("@ " + $s)))' >/dev/null; then
       AJ=($(glab api "projects/$PID/pipelines/$(jq -r .id <<<$PIPE)/jobs?per_page=100" </dev/null | jq -r '.[] | select(.name == "use Nightly backend") | "\(.id) \(.status) \(.web_url)"'))
       if [[ ${AJ[2]} != failed ]]; then
@@ -343,14 +425,19 @@ verify() {
   WTA=($REPOS/${RS[1]}/.worktrees/${KEY}-*(N/[1]))
   [[ -n "$WTA" ]] || return 2
   WT0=$WTA
-  echo "=== verify-$KIND $KEY (${(j:, :)TARGETS}) $(date -Iseconds)" | tee -a $LOG
+  local EL="" EN=""
+  if [[ $KIND == ui ]]; then
+    EL=$(ticket_env $KEY)
+    EN=$(verify_env $KEY) || return 2
+    print -r -- "$EL" >$LOG_DIR/$KEY.verify-env
+  fi
+  echo "=== verify-$KIND $KEY (${(j:, :)TARGETS}${EN:+, env $EN}) $(date -Iseconds)" | tee -a $LOG
+  [[ -n "$EL" && -z "$EN" ]] && echo "  env $EL is gone, verifying as if the ticket had no env label" | tee -a $LOG
   local MEDIA=$LOG_DIR/$KEY.verify-media
   rm -rf $OUT $MEDIA
-  local CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-env/*' 2>/dev/null | sort -V | tail -1)
   local MCP=$(mcp_config $MEDIA)
   wm_window $WT0 $LOG
-  mkdir -p ~/cf-env-tmp
-  (cd $WT0 && TMPDIR=$HOME/cf-env-tmp claude -p "/cf-holdout-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}$([[ $KIND == ui ]] && echo " video=$MEDIA")${4:+ failed=$4}" \
+  (cd $WT0 && TMPDIR=$HOME/cf-env-tmp claude -p "/cf-holdout-$KIND $KEY repos=${(j:,:)TARGETS} branch=${WT0:t}${EN:+ env=$EN deploy=1}$([[ $KIND == ui ]] && echo " video=$MEDIA")${4:+ failed=$4}" \
     --model sonnet --settings "$HEADLESS_SETTINGS" \
     --strict-mcp-config --mcp-config "$MCP" \
     --allowedTools "Read Skill Write(/$OUT) Write(/$MEDIA/narration.tsv) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(bash $HOME/.claude/skills/cf-holdout-ui/narrate.sh $MEDIA $KEY) Bash(bash $HOME/.claude/skills/cf-holdout-api/run-scenarios.sh:*)" \
@@ -819,8 +906,95 @@ stage_rfix() {
   esac
 }
 
+stage_env() {
+  local KEY=$2 CID=${3:-0} LOG=$LOG_DIR/$2.log PF=$LOG_DIR/$2.env-pipe OUT=$LOG_DIR/$2.env-cmd
+  local ACT EN PID URL="" RES ST W=() WHYNOT
+  echo "=== env $KEY (comment $CID) $(date -Iseconds)" | tee -a $LOG
+  if [[ -f $PF ]]; then
+    read -r PID ACT EN URL <$PF
+    echo "  resuming pipeline $PID ($ACT $EN)" | tee -a $LOG
+  else
+    env_resolve $KEY $CID
+    echo $CID >$ENVHANDLED/$KEY
+    echo "  resolved: $(head -1 $OUT 2>/dev/null || echo nothing)" | tee -a $LOG
+    if [[ "$(head -1 $OUT 2>/dev/null)" == ASK\ * ]]; then
+      env_say $KEY "K prostředí potřebuju upřesnit: $(head -1 $OUT | cut -c5-)
+Nic jsem nespustil. Odpověz novým komentářem, který začíná {{env:}}."
+      note $KEY "env request needs an answer, see Jira"
+      return 0
+    fi
+    if ! W=($(env_parse $OUT)); then
+      env_say $KEY "Požadavek na prostředí se mi nepodařilo převést na příkaz, nic jsem nespustil. Zkus to znovu komentářem, který začíná {{env:}}."
+      note $KEY "env request not resolved, see \`$LOG\`"
+      return 0
+    fi
+    ACT=${W[1]} EN=${W[2]} WHYNOT=$(sed -n '2,6p' $OUT)
+    if [[ $ACT == use ]]; then
+      if [[ "$(env_state $EN)" != up ]]; then
+        env_say $KEY "Prostředí {{$EN}} neexistuje (nebo se nepodařilo ověřit jeho stav), štítek jsem nenastavil."
+        return 0
+      fi
+      relabel $KEY "$(ticket_env $KEY | sed 's/^./env-&/')" env-$EN
+      env_unverify $KEY
+      env_say $KEY "Ticket se bude ověřovat na prostředí {{$EN}} (https://$EN.dev.cleverfarm.cz), štítek {{env-$EN}}. Při ověření do něj nasadím frontend z větve ticketu."
+      info $KEY "env: uses $EN"
+      return 0
+    fi
+    if [[ $ACT == destroy && "$(cat $ENVOWN/$EN 2>/dev/null)" != $KEY ]]; then
+      env_say $KEY "Prostředí {{$EN}} jsem nezrušil: nevytvořila ho factory pro tento ticket. Zruš ho prosím ručně."
+      return 0
+    fi
+    if [[ $ACT == create && "$(env_state $EN)" != gone ]]; then
+      env_say $KEY "Prostředí {{$EN}} už existuje (nebo se nepodařilo ověřit jeho stav), nové jsem nevytvořil. Použít ho: {{env: použij $EN}}."
+      return 0
+    fi
+    RES=$(cf_env run $ACT $EN ${W[3,-1]} 2>&1)
+    if [[ $RES != pipeline\ * ]]; then
+      env_say $KEY "Příkaz {{cf-env.sh run ${W[*]}}} se nespustil:
+{noformat}
+$RES
+{noformat}"
+      note $KEY "env $ACT $EN did not start, see Jira"
+      return 0
+    fi
+    PID=${${=RES}[2]} URL=${${=RES}[3]}
+    echo "$PID $ACT $EN $URL" >$PF
+    [[ $ACT == create ]] && echo $KEY >$ENVOWN/$EN
+    env_say $KEY "Spouštím {{cf-env.sh run ${W[*]}}}
+Pipeline: $URL$([[ $ACT == create ]] && echo "
+Vytvoření trvá asi 20 minut, prostředí stojí zhruba 0,75 USD denně a přes noc a víkend spí.")${WHYNOT:+
+$WHYNOT}
+Špatně? Napiš {{env: zruš to}}."
+  fi
+  ST=$(cf_env wait $PID 2>&1 | tee -a $LOG | sed -n 1p)
+  rm -f $PF
+  if [[ $ST != *": success "* ]]; then
+    env_say $KEY "{{$ACT $EN}} nedoběhlo (${ST:-bez odpovědi}): $URL"
+    note $KEY "env $ACT \`$EN\` failed: $URL"
+    return 0
+  fi
+  case $ACT in
+    create)
+      relabel $KEY "$(ticket_env $KEY | sed 's/^./env-&/')" env-$EN
+      env_unverify $KEY
+      env_say $KEY "Prostředí {{$EN}} běží: https://$EN.dev.cleverfarm.cz
+Štítek {{env-$EN}}: ověření poběží tam, s frontendem z větve ticketu. Až bude ticket Done, prostředí samo zruším." ;;
+    redeploy)
+      env_unverify $KEY
+      env_say $KEY "Nasazeno do {{$EN}}: https://$EN.dev.cleverfarm.cz. Ověření poběží znovu." ;;
+    destroy)
+      rm -f $ENVOWN/$EN
+      [[ "$(ticket_env $KEY)" == $EN ]] && unlabel $KEY env-$EN
+      env_say $KEY "Prostředí {{$EN}} je zrušené." ;;
+    *) env_say $KEY "Hotovo: {{$ACT $EN}}." ;;
+  esac
+  info $KEY "env: $ACT $EN done ($URL)"
+  return 0
+}
+
 stage_done() {
   local KEY=$1 IDS="${*:2}"
+  env_done $KEY
   if [[ -z "$IDS" ]]; then relabel $KEY "" ai-done; info $KEY "released"; return; fi
   if resolve_sentry $KEY ${=IDS}; then relabel $KEY "" ai-done; info $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
 }
@@ -845,7 +1019,7 @@ run_stage() {
   (( RC == 75 )) && echo "  $2 busy in another stage, skipped"
   if (( RC != 0 && RC != 2 && RC != 75 )); then
     echo "  stage $1 $2 crashed, exit $RC"
-    note $2 "stage $1 crashed (exit $RC), see \`journalctl --user -u 'sw-factory-*'\`"
+    note ${2#env-} "stage $1 crashed (exit $RC), see \`journalctl --user -u 'sw-factory-*'\`"
   fi
   return $RC
 }
@@ -871,7 +1045,7 @@ if [[ "${2:-}" == --conventions ]]; then
 fi
 
 stage_class() { case $1 in impl|mr|verify|review) echo $1 ;; rfix) echo impl ;; esac }
-stage_timeout() { case $1 in impl|mr|rfix|conflict|verify) echo 110min ;; review) echo 45min ;; done) echo 5min ;; *) echo 30min ;; esac }
+stage_timeout() { case $1 in impl|mr|rfix|conflict|verify|env) echo 110min ;; review) echo 45min ;; done) echo 5min ;; *) echo 30min ;; esac }
 
 RUNNING=(${(f)"$(systemctl --user list-units 'sw-factory-*' --state=active,activating,deactivating --plain --no-legend | awk '{print $1}')"})
 TAKEN=() SPAWNED=0
@@ -936,8 +1110,10 @@ dispatch() {
   done
 }
 
-NEW="" IMPL="" REPLIES="" MR_REPLIES="" VERIFY="" DONE="" CONFLICT="" REVIEW="" RFIX="" DEPS=""
-if [[ -n "${1:-}" ]]; then
+NEW="" IMPL="" REPLIES="" MR_REPLIES="" VERIFY="" DONE="" CONFLICT="" REVIEW="" RFIX="" DEPS="" ENVQ=""
+if [[ -n "${1:-}" && "${2:-}" == --env ]]; then
+  ENVQ=$(search "key = ${1:u}" 1 | jq -r --arg m "$AI_MARK" "$HUMAN_JQ"' .issues[] | ((.fields.comment.comments // []) | map(select(envcmd)) | last) as $c | select($c != null) | "env-\(.key) \(.key) \($c.id)"')
+elif [[ -n "${1:-}" ]]; then
   LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
   if [[ -n "${GRILL:-}" && " $LABELS " == *" needs-answer "* ]]; then
     REPLIES=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
@@ -953,6 +1129,13 @@ if [[ -n "${1:-}" ]]; then
     NEW=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
   fi
 else
+  ENVQ=$(search 'project = DEV AND labels in (triage, triaged, needs-answer, triage-failed, ai-fix, ai-fix-failed, ai-mr) AND statusCategory != Done ORDER BY updated DESC' 50 \
+    | jq -r --arg m "$AI_MARK" --argjson H "$(handled_json $ENVHANDLED)" "$HUMAN_JQ"' .issues[]
+      | ((.fields.comment.comments // []) | map(select(envcmd)) | last) as $c
+      | select($c != null and (($c.id | tonumber) > ($H[.key] // 0))) | "env-\(.key) \(.key) \($c.id)"')
+  for F in $LOG_DIR/*.env-pipe(N); do K=${${F:t}%.env-pipe}; ENVQ+=$'\n'"env-$K $K 0"; done
+  ENVQ=$(awk 'NF && !s[$1]++' <<<$ENVQ)
+  env_reverify
   NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
   REPLY_LABELS=triaged GRILL_HOLD=""
   [[ -n "${GRILL:-}" ]] && REPLY_LABELS="triaged, needs-answer" GRILL_HOLD=" AND labels not in (needs-answer)"
@@ -994,6 +1177,7 @@ fi
 
 LASTFAIL=($LOG_DIR/sentry-last.txt(Nmm-15))
 WORK=$(
+  emit env "$ENVQ"
   emit reply "$REPLIES"
   emit mr "$MR_REPLIES"
   emit rfix "$RFIX"

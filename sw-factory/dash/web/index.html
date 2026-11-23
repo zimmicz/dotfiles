@@ -306,6 +306,7 @@ const HELP = [
   ['Navigate', [['j k ↑ ↓', 'move'], ['g G', 'top / bottom'], ['tab', 'next tab (shift: previous)'], ['^u ^d', 'scroll pane'], ['z', 'show other logs'], ['Z', 'zoom pane'], ['/', 'search any ticket, enter looks it up in Jira'], ['1 2 3 B S', 'overview / ui fix / backlog / board / stats'], ['j k enter J M r', 'ui fix: move / open / Jira / MR / reload'], ['j k enter J r', 'backlog: move / open / Jira / reload']]],
   ['Factory  (asks to confirm)', [['a', 'approve plan → ai-fix'], ['R', 'reply in Jira, no confirm (Ctrl+V pastes image)'], ['t', 'retry failed stage'], ['w', 'run worker now'], ['f', 'feed todo to factory'], ['n', 'new ticket → factory (triage + repo)'], ['b', 'agent fixes MR conflict'], ['s', 'skip merge gate'], ['Q', 'quiz me → ai-quizzed'], ['A', 'accept holdout proposal → re-verify'], ['X', 'reject holdout proposal']]],
   ['Open', [['enter o', 'MR, else Jira'], ['J', 'Jira'], ['m', 'MR'], ['y', 'copy tab text'], ['l', 'load full log'], ['e', 'edit plan / holdout, proposal first (vim in tmux)'], ['c', 'resume session (tmux)']]],
+  ['Dyn-env  (R, comment starts with env:)', [['env: new', 'env: nové prostředí, agroevidence z DEV-3809, FE DEV-3785 → creates dev-<key> (~20 min), tags looked up in the MRs, destroyed when the ticket is Done'], ['env: clone', 'env: naklonuj dev-3657-pasture → same services in a new env, fresh data'], ['env: use', 'env: použij dev-3657-pasture → verify there, FE swapped to the ticket branch (same as label env-<name>)'], ['env: update', 'env: nasaď agroevidence z DEV-3830 → redeploy, verify runs again'], ['env: cancel', 'env: zruš to → destroy, only an env the factory created'], ['answers', 'factory replies in Jira: the exact command, pipeline, then the URL; unclear request = a question, nothing started'], ['env chip', 'header chip opens the preview; env gone → verify falls back to Amplify']]],
   ['Other', [['q', 'ask the factory a question (read-only)'], ['r', 'refresh Jira'], ['i', 'factory status (Jira, timer, units)'], ['?', 'this help'], ['esc', 'close dialog / clear search']]],
 ]
 let S = {Rows: [], Tabs: ['log'], Cols: [], Repos: []}, extras = [], cur = '', tab = 0, view = 'overview', showOther = false, pending = null, bodyKey = '', src = '', days = 30, pick = null, images = {}, newImages = {}, boot = true, ns = [], nsi = 0, uf = [], ufi = 0
@@ -323,7 +324,8 @@ const ball = r => `<span class="ball ${esc(r.Ball)}">${esc(r.Ball === '-' ? 'par
 const stage = r => `<span class="tag c${r.Running ? 32 : esc(r.Color)}">${esc(r.Running ? r.Phase || r.Label : r.Label)}</span>`
 const deps = r => (r.Labels || []).includes('deps') ? '<span class="tag c35">deps</span> ' : ''
 const icon = r => r.Running ? '<i class="dot"></i>' : esc(r.Icon)
-let seenLbl = {}
+const envOf = r => ((r.Labels || []).find(l => l.startsWith('env-')) || '').slice(4)
+let seenLbl = {}, shown = ''
 try { seenLbl = JSON.parse(localStorage.getItem('seenLbl') || '{}') } catch {}
 function markSeen() {
   const first = !Object.keys(seenLbl).length
@@ -381,7 +383,7 @@ function render() {
   }
   if (!showOther && other && !query()) h += `<div class="grp c2">OTHER LOGS<span>${other} · z shows</span></div>`
   $('side').innerHTML = h || '<div class="grp c2">NOTHING MATCHES</div>'
-  const c = $('side').querySelector('.cur'); if (c) c.scrollIntoView({block: 'nearest'})
+  const c = $('side').querySelector('.cur'); if (c && shown !== cur) { shown = cur; c.scrollIntoView({block: 'nearest'}) }
   const r = sel()
   $('title').innerHTML = r.Key ? `<code>${esc(r.Key)}</code>${esc(r.Summary || '(no jira ticket)')}` : ''
   $('meta').innerHTML = !r.Key ? '' : [
@@ -393,6 +395,7 @@ function render() {
     r.JiraURL && `<a class="chip" href="${esc(r.JiraURL)}" target="_blank">Jira ↗</a>`,
     r.MR && `<a class="chip" href="${esc(r.MR)}" target="_blank">MR !${esc(r.MRIID)} ↗</a>`,
     r.MRDetail && `<span class="chip">${esc(r.MRDetail)}</span>`,
+    envOf(r) && `<a class="chip" href="https://${esc(envOf(r))}.dev.cleverfarm.cz" target="_blank">env ${esc(envOf(r))} ↗</a>`,
   ].filter(Boolean).join('')
   $('next').className = r.Ball || ''
   $('next').innerHTML = r.Key && r.Next ? `${ball(r)}<span>${esc(r.Next)}</span>` : ''

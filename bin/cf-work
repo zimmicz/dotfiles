@@ -234,7 +234,7 @@ TICKET_MD=$(jq -r '
   def block: if length == 0 then "\n(none)\n" else map(cm) | join("") end;
   def pinged: [.body | scan("\\[~(?:accountid:)?([^\\]]+)\\]") | .[0]] | any(. != $my);
   (.fields.comment.comments) as $c
-  | ($c | map(select((.body | contains($m) | not) and .author.accountId == $my and (pinged | not)))) as $h
+  | ($c | map(select((.body | contains($m) | not) and .author.accountId == $my and (pinged | not) and (.body | test("^\\s*env:"; "i") | not)))) as $h
   | ($c | map(select((.body | contains($m) | not) and (.author.accountId != $my or pinged)))) as $o
   | ($c | map(select(.body | contains($m)))) as $a
   | "# \(.key): \(.fields.summary)\n" +

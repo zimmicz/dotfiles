@@ -22,3 +22,11 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - In-flight tickets: a follow-up on a `PLAN.md` written before the change must add `### Acceptance criteria` or it lands in `triage-failed`.
    - Open decision: FE change whose BE lives only on a feature / dyn env (DEV-3873: `dev-3657-pasture`). The preview runs against nightly, so every scenario is `DATA: missing` and the gate refuses `ai-fix`. Option: verifier redeploys that env with `FE_BRANCH=<branch>` (touches an env the BE dev uses).
    - Unverified: `--model opusplan` in `claude -p` for `impl` (no plan mode headless, so probably sonnet throughout). The sizing change only moves the analysis to opus.
+7. Dyn-env lane (2026-11-23, rollback tag `sw-factory-pre-dyn-env-2026-11-23`, README "Dyn-env lane"). Tested: `zsh -n`, `env_parse` accept / reject cases, `env:` marker filter, `env_state` on a live / stopped / unknown env, one dry tick, resolver run on `env: naklonuj dev-3657-pasture` (valid `RUN create …`, nothing started). Not run yet: a real `env:` comment end to end, verify with `env=… deploy=1`, destroy at Done.
+   - First real ticket: DEV-3873 with `env: použij dev-3657-pasture` (answers the open decision in item 6). Check the Jira comments, label `env-dev-3657-pasture`, the redeploy in the verify log, `**Preview**` URLs in the MR note.
+   - Analysis does not know the env: scenario Givens come from `tests/FIXTURES.md` (nightly data), so data that exists only in the env is still `DATA: missing` and the unrunnable gate refuses `ai-fix`. Needs a way to tell triage which env's data to use.
+   - FE pipeline job `use Nightly backend` failing (FE needs an API nightly lacks) keeps the MR pipeline red, verify never starts even with an env label. Unverified whether that job is `allow_failure`.
+   - Implementer's `/check-layout` does not use the env.
+   - No per-env lock: with `VERIFY_SLOTS` > 1 two tickets on one env overwrite each other's FE.
+   - `env: zruš to` while a create is running waits for that pipeline to end (same lock).
+   - Resolver may call `glab api` with any path; only `-X` / `--method` prefixes are denied (prefix patterns, see item 5).
