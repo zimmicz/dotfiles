@@ -1084,9 +1084,15 @@ stage_deps() {
   ${SELF:h}/deps-triage | tee $LOG_DIR/deps.status
 }
 
+mem_mb() { awk -v k="$1:" '$1 == k { print int($2 / 1024) }' /proc/meminfo }
+swap_mb() { echo $(( $(mem_mb SwapTotal) - $(mem_mb SwapFree) )) }
+
 run_stage() {
+  local A0=$(mem_mb MemAvailable) S0=$(swap_mb)
   flock -n -o -E 75 $LOCKS/$2 $SELF --stage "$@" </dev/null
   local RC=$?
+  local P=$(<"/sys/fs/cgroup$(cut -d: -f3- /proc/self/cgroup)/memory.peak" 2>/dev/null)
+  [[ -n $P ]] && printf '%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n' "$(date -Iseconds)" $1 $2 $(( P / 1048576 )) $A0 $(mem_mb MemAvailable) $S0 $(swap_mb) $RC >>$LOG_DIR/mem.tsv
   (( RC == 75 )) && echo "  $2 busy in another stage, skipped"
   if (( RC != 0 && RC != 2 && RC != 75 )); then
     echo "  stage $1 $2 crashed, exit $RC"
