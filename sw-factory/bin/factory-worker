@@ -52,7 +52,10 @@ search() {
 
 JME=$(jira GET /rest/api/3/myself | jq -r '.accountId // empty')
 [[ -n "$JME" ]] || { echo "lookup failed: jira myself (accountId), refusing to read comments"; exit 1 }
-HUMAN_JQ="def ai: (.body // \"\" | if type == \"string\" then . else [.. | .text? // empty] | join(\"\") end) | contains(\$m); def human: (ai | not) and .author.accountId == \"$JME\";"
+HUMAN_JQ='def ai: (.body // "" | if type == "string" then . else [.. | .text? // empty] | join("") end) | contains($m);
+def pinged: (.body // "") | (if type == "string" then [scan("\\[~(?:accountid:)?([^\\]]+)\\]") | .[0]] else [.. | objects | select(.type == "mention") | .attrs.id] end) | any(. != "'$JME'");
+def human: (ai | not) and .author.accountId == "'$JME'" and (pinged | not);'
+GL_PINGED='def pinged: [.body | scan("(?:^|[^\\w.@/`])@([\\w.-]*\\w)") | .[0]] | any(. != $me);'
 
 handled_json() {
   local F
@@ -420,7 +423,7 @@ gl_human_max() {
   for L in ${(f)T}; do
     P=(${(s.:.)L})
     N=$(glab api --paginate "projects/${P[2]}/merge_requests/${P[3]}/notes?per_page=100" </dev/null \
-      | jq -sr --arg me "$GLME" 'add | [.[] | select((.system | not) and .author.username == $me and (.body | contains("writing on Michal") | not)) | .id] | max // 0') || return 1
+      | jq -sr --arg me "$GLME" "$GL_PINGED"'add | [.[] | select((.system | not) and .author.username == $me and (.body | contains("writing on Michal") | not) and (pinged | not)) | .id] | max // 0') || return 1
     (( N > ID )) && ID=$N
   done
   echo $ID
@@ -434,9 +437,9 @@ gl_unanswered() {
   for L in ${(f)T}; do
     P=(${(s.:.)L})
     N=$(glab api --paginate "projects/${P[2]}/merge_requests/${P[3]}/discussions?per_page=100" </dev/null \
-      | jq -sr --arg me "$GLME" --argjson h "${H:-0}" 'add | [.[] | [.notes[] | select((.system | not) and .author.username == $me)] as $n
+      | jq -sr --arg me "$GLME" --argjson h "${H:-0}" "$GL_PINGED"'add | [.[] | [.notes[] | select((.system | not) and .author.username == $me)] as $n
           | ([$n[] | select(.body | startswith("🤖")) | .id] | max // 0) as $b
-          | $n[] | select((.body | startswith("🤖") or contains("writing on Michal") | not) and .id > ([$b, $h] | max)) | .id] | min // empty') || return 1
+          | $n[] | select((.body | startswith("🤖") or contains("writing on Michal") | not) and (pinged | not) and .id > ([$b, $h] | max)) | .id] | min // empty') || return 1
     [[ -n "$N" ]] && (( ! ID || N < ID )) && ID=$N
   done
   echo $ID
