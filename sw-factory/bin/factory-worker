@@ -878,6 +878,34 @@ wt_heads() {
   for W in $REPOS/*/.worktrees/$1-*(N/); do echo "${W:t} $(git -C $W rev-parse HEAD 2>/dev/null)"; done
 }
 
+running_mark() {
+  local M=$LOG_DIR/running/$2
+  mkdir -p $LOG_DIR/running
+  wt_heads $2 >$M.heads
+  echo "$(date +%s) $1 $(snap_human $2) $(gl_human_max $2 "$(ticket_repos $2)" </dev/null || echo 0) $(wc -l <$LOG_DIR/$2.log 2>/dev/null || echo 0)" >$M
+}
+
+POSTED_RE='glab mr note [^l]|-X (POST|PUT)|--method (POST|PUT)|jira (POST|PUT)|git (commit|push)'
+
+restart_young() {
+  local S=$1 KEY=$2 U=$3 M=$LOG_DIR/running/$2 T RS J G N W NOW=$(date +%s)
+  [[ $S == (mr|reply) && -f $M ]] || return 1
+  read -r T RS J G N <$M
+  [[ $RS == (mr|impl) && $U == sw-factory-$KEY-$RS.service ]] || return 1
+  (( NOW - T < ${RESTART_WINDOW:-5} * 60 )) || return 1
+  [[ "$(wt_heads $KEY)" == "$(<$M.heads)" ]] || return 1
+  tail -n +$(( ${N:-0} + 1 )) $LOG_DIR/$KEY.log | grep -qE "$POSTED_RE" && return 1
+  (( ${$(snap_human $KEY):-0} > ${J:-0} )) || (( ${$(gl_human_max $KEY "$(ticket_repos $KEY)" </dev/null):-0} > ${G:-0} )) || return 1
+  [[ -n "${TRIAGE_DRY:-}" ]] && { echo "would restart $U (new comment $(( NOW - T )) s in)"; return 0 }
+  systemctl --user stop $U
+  for W in $REPOS/*/.worktrees/$KEY-*(N/); do
+    [[ -n "$(git -C $W status --porcelain)" ]] && git -C $W stash push -u -q -m "sw-factory restart $(date -Iseconds)"
+  done
+  [[ "$(wt_heads $KEY)" == "$(<$M.heads)" ]] || unverify $KEY
+  rm -f $M $M.heads
+  echo "$(date '+%T') restart: new comment $(( NOW - T )) s into $RS, stopped (uncommitted work stashed), all comments next tick" | tee -a $LOG_DIR/$KEY.log
+}
+
 unverify() {
   limit_bail $1
   jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"},{"remove":"ai-quizzed"},{"remove":"ai-reviewed"}]}}' >/dev/null
@@ -899,6 +927,12 @@ stage_mr() {
   else relabel $1 ai-mr ai-fix-failed; note $1 "MR follow-up failed, see \`$LOG_DIR/$1.log\`"; fi
 }
 
+stale_verify() {
+  [[ "$(wt_heads $1)" == "$2" ]] && return 1
+  rm -f $UNVERIFIED/$1.md
+  echo "  stale: commits moved during verify (MR follow-up), result dropped, labels untouched" | tee -a $LOG_DIR/$1.log
+}
+
 failed_scenarios() { sed -nE 's/^(S[0-9]+) [^—]*: fail.*/\1/p' $1 2>/dev/null | paste -sd, - }
 
 blocked_retry() {
@@ -912,12 +946,13 @@ blocked_retry() {
 }
 
 stage_verify() {
-  local KEY=$1 REPO=$2 RC H0 FAILED="" REPORT=$LOG_DIR/$1.verify.md
+  local KEY=$1 REPO=$2 RC H0 FAILED="" REPORT=$LOG_DIR/$1.verify.md VH=$(wt_heads $1) LK
   has_label $KEY ai-verified ai-verify-failed ai-review-retry && { echo "  already verified or in rfix (stale search index), skipped"; return 0 }
   has_label $KEY ai-verify-retry && FAILED=$(failed_scenarios $REPORT)
   verify $KEY $REPO ui "$FAILED"
   RC=$?
   (( RC == 2 )) && return 2
+  stale_verify $KEY "$VH" && return 0
   if (( RC == 4 )) && blocked_retry $KEY $REPORT; then return 0; fi
   rm -f $LOG_DIR/$KEY.blocked-retry
   if (( RC == 0 )) && [[ -f $HOLDOUT/$KEY.api.md ]]; then
@@ -925,6 +960,7 @@ stage_verify() {
     verify $KEY $REPO api
     RC=$?
     (( RC == 2 )) && return 2
+    stale_verify $KEY "$VH" && return 0
   fi
   if (( RC == 0 )); then
     relabel $KEY ai-verify-retry ai-verified
@@ -940,6 +976,12 @@ stage_verify() {
   elif has_label $KEY ai-verify-retry; then
     relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios still fail after retry, see \`$REPORT\`"
   else
+    exec {LK}>$LOCKS/$KEY
+    if ! flock -n $LK; then
+      echo "  verify failed while another stage of $KEY runs (MR follow-up): no verify-fix now, its push re-verifies, else verify runs again" | tee -a $LOG_DIR/$KEY.log
+      return 0
+    fi
+    stale_verify $KEY "$VH" && return 0
     relabel $KEY "" ai-verify-retry
     H0=$(wt_heads $KEY)
     implement $KEY ${REPO%%,*} "--verify-fix $REPORT"
@@ -1112,8 +1154,9 @@ mem_mb() { awk -v k="$1:" '$1 == k { print int($2 / 1024) }' /proc/meminfo }
 swap_mb() { echo $(( $(mem_mb SwapTotal) - $(mem_mb SwapFree) )) }
 
 run_stage() {
-  local A0=$(mem_mb MemAvailable) S0=$(swap_mb)
-  flock -n -o -E 75 $LOCKS/$2 $SELF --stage "$@" </dev/null
+  local A0=$(mem_mb MemAvailable) S0=$(swap_mb) L=$LOCKS/$2
+  [[ $1 == verify ]] && L=$LOCKS/$2.verify
+  flock -n -o -E 75 $L $SELF --stage "$@" </dev/null
   local RC=$?
   local P=$(<"/sys/fs/cgroup$(cut -d: -f3- /proc/self/cgroup)/memory.peak" 2>/dev/null)
   [[ -n $P ]] && printf '%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n' "$(date -Iseconds)" $1 $2 $(( P / 1048576 )) $A0 $(mem_mb MemAvailable) $S0 $(swap_mb) $RC >>$LOG_DIR/mem.tsv
@@ -1126,8 +1169,10 @@ run_stage() {
 }
 
 if [[ "${1:-}" == --stage ]]; then
+  [[ $2 == (mr|impl) ]] && running_mark $2 $3
   stage_$2 "${@:3}"
   RC=$?
+  rm -f $LOG_DIR/running/$3 $LOG_DIR/running/$3.heads
   rm -f $LIMIT.$$
   exit $RC
 fi
@@ -1175,8 +1220,10 @@ pick_slot() {
 
 spawn_stage() {
   local S=$1 KEY=${2//[^A-Za-z0-9_.-]/-} CLS SLOT CAP=() F CMD=() N
-  local UNIT=sw-factory-$KEY-$S
-  [[ -n ${(M)RUNNING:#sw-factory-$KEY-*} ]] && return 1
+  local UNIT=sw-factory-$KEY-$S RK=(${(M)RUNNING:#sw-factory-$KEY-*})
+  if (( $#RK )); then
+    [[ $S == mr && -z ${RK:#sw-factory-$KEY-verify.service} ]] || { (( $#RK == 1 )) && restart_young $S $KEY $RK[1] </dev/null; return 1 }
+  fi
   pick_slot slot- $SLOTS || return 3
   SLOT=$PICKED
   CLS=$(stage_class $S)
