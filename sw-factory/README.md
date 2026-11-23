@@ -13,6 +13,7 @@ My job = intent in, decisions at gates, judge results. Agents do the rest.
 | Sentry bug | nothing — 1/day, only when no Sentry ticket is open | ticket → analysis → waits for me |
 | any ticket I'd rather not code myself | add labels `triage` + `repo-<dir>` (one per repo) | same as Sentry, from analysis on |
 | new work, no ticket yet (e.g. "can-frontend npm → pnpm") | `n` in `factory-dash`: title (Czech), repo, type (Technical / Task / Bug), optional epic, description (`Ctrl+V` pastes images), `Ctrl+Enter` → confirm | DEV ticket assigned to me, active sprint, Product from the repo (`product()` in `dash/main.go`), labels `repo-<dir>` + `triage` (added last, after images are attached) → analysis next tick |
+| dependabot MR (cf-farm-frontend, can-frontend) | nothing | `deps-triage` every 30 min: one ticket per bot MR, see Dependabot lane |
 | ticket I want to drive | `cf-work DEV-X` → `/cf-ticket` | interactive, 2 checkpoints |
 | epic / big feature | `/cf-epic DEV-X` (re-run per wayfinder decision) | 3 checkpoints, one acceptance MR, then stacked review MRs |
 
@@ -122,6 +123,15 @@ DEV Bug  [triage, sentry-<SHORTID>…, repo-<repo>]      assigned to me in Sentr
 
 **Grill phase (opt-in, `GRILL=1` in `~/.config/sw-factory.env`; unset = off, nothing above changes).** `/cf-work-headless --grill` first decides whether the ticket has blocking gaps (the answer would change the plan or the scenarios). Yes → ONE Czech Jira comment (`Zjištěno` + numbered `Otázky`, each with a recommended answer and tradeoff), label `triage` → `needs-answer`, Slack line, no PLAN.md. I reply `ok` (take every recommendation) or `ok, 3 jinak: …`; the reply (≤2 min, or `R` in `factory-dash`) re-runs the analysis. More questions → another round (no cap, rounds run until no blocking gap is left); none → PLAN.md + scenarios, `needs-answer` → `triaged`, plan gate as before. `ai-fix` is ignored while `needs-answer` is set. No answer for `GRILL_REMIND_HOURS` (24) → one Slack reminder per round. Sentry tickets are asked only when the root cause stays unconfirmed. Worker ↔ skill handshake: `<KEY>.grill` (`ASK` | `READY`) + `<KEY>.round` in the state dir. What the code revealed persists in `notes/<KEY>.md` `## Analysis`, so a round re-explores only what the answers changed.
 
+**Dependabot lane (epic DEV-3865).** Dispatcher spawns stage `deps` (`deps-triage`, no LLM) when `.deps-checked` is older than `DEPS_EVERY` min (30). Per repo (cf-farm-frontend, can-frontend): gate = an open `deps` ticket whose MR is not merged/closed (none yet = blocking) → skip the repo. Else the oldest open MR labelled `dependencies` by the project bot (`project_<id>_bot…`) without a ticket (`labels = dependabot-<repo>-<iid>`) and whose title doesn't match the repo's `SKIP` regex (can-frontend: `firebase`, never bumped); pipeline still running → wait. Major = a `package.json` dependency whose major (or `0.x` minor) changes in the diff. One Technical ticket per run and repo, Czech, assigned to me, active sprint, parent `DEPS_EPIC` (DEV-3865), labels `deps` + `repo-<repo>` + `dependabot-<repo>-<iid>`, description = MR link, CI state, majors, the bot's release notes. Worktree via `cf-work KEY <bot branch>`, so the ticket branch starts at the bot's commit.
+
+| bot MR | labels | next |
+|---|---|---|
+| minor/patch, pipeline green | `triaged` + `ai-fix` | no analysis, no plan gate: template `PLAN.md` (rebase onto develop, no source change) + `holdout-templates/deps-<repo>.md` copied to `holdout/<KEY>.md`, both attached, 🤖 Jira comment → `impl` next tick |
+| major or pipeline red | `triage` | analysis (`/cf-work-headless`, deps section: breaking changes vs our usage, smoke of the screens using the packages) → plan gate as usual |
+
+Then the usual flow. `impl` rebases the bot's commit onto develop and regenerates the lockfile (`cf-ticket-headless` deps section); once our draft MR exists the worker closes the bot MR with a 🤖 "superseded by" note. Shortcut fails (worktree) → labels back to `triage`.
+
 Any other ticket (feature, chore, manual bug): I add labels `triage` + `repo-<dir>` → same flow from `[triaged]` on; PLAN.md starts with Requirements instead of "Belongs in Sentry?". On Done it just gets `ai-done`.
 
 One Sentry issue at a time: `sentry-triage` skips the day (Slack note) while any ticket with a `sentry-*` label and labelled `triage|triaged|triage-failed|ai-fix|ai-mr|ai-fix-failed` is not Done AND its MR is not merged/closed (`glab mr list --all --search KEY` in the `repo-*` repo; no MR at all = blocking, so failed/unfixed tickets block until closed). Jira status doesn't matter — `On nightly` with a merged MR is fine. Sentry resolve waits for status `Done` (prod release), not Release candidate; a 404 (issue deleted/merged) counts as resolved, model answer logged to `<KEY>.log`. Stamp `~/.local/state/sw-factory/sentry-today` = already ran today (delete to re-run).
@@ -134,7 +144,9 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run where I became on t
 |---|---|---|
 | `triage` | new, waiting for analysis | sentry-triage, or me on any ticket |
 | `sentry-<SHORTID>` | linked Sentry issue(s), full short id (dedup key) | sentry-triage |
-| `repo-<dir>` | repo under `~/work/cleverfarm/repos` | sentry-triage |
+| `repo-<dir>` | repo under `~/work/cleverfarm/repos` | sentry-triage, deps-triage |
+| `deps` | ticket from a dependabot MR: analysis / impl use their deps sections, worker closes the bot MR after impl | deps-triage |
+| `dependabot-<repo>-<iid>` | the bot MR (dedup key, read by `close_bot_mr`) | deps-triage |
 | `needs-answer` | grill phase (`GRILL=1`): questions posted, no plan yet. Blocks `ai-fix`; my reply re-runs the analysis | factory-worker |
 | `triaged` | PLAN.md + comment done | factory-worker |
 | `triage-failed` | analysis or reply follow-up failed (no repo, worktree, crash); parked, no retry loop, re-add `triage` | factory-worker |
@@ -164,6 +176,8 @@ Shared with interactive work, stay outside: skills `cf-mr`, `check-layout`, `cf-
 | `~/dotfiles/sw-factory/bin/sentry-triage` | stage 1: open-ticket gate + daily stamp, then claude -p (sonnet) + Sentry MCP + `jira` → ticket. `--dry-run` (ignores gate + stamp), `MAX=` (default 1) |
 | `~/dotfiles/sw-factory/bin/sentry-triage-now` | force a Sentry run today: drop `sentry-today` stamp + start `sw-factory.service` (no block; dispatcher spawns the `sentry` stage) |
 | `~/dotfiles/sw-factory/bin/factory-worker` | stages 2–7: triage, reply follow-up, implement, holdout verify (+1 retry), resolve Sentry on Done, rebase my conflicting MRs (dispatcher runs only), `sentry` stage (runs `sentry-triage`); Slack summary (notes moved away atomically before posting, so stages can append meanwhile). No args = dispatcher, see Slots. `factory-worker DEV-X` = spawn one ticket's stage (implements if it has `ai-fix`; `factory-worker DEV-X --verify` = verify its MR now, `--review` = independent review now). `MAX=` (new tickets looked at per tick, default 10), `SLOTS=`, `IMPL_SLOTS=`, `MR_SLOTS=`, `REVIEW_SLOTS=`, `VERIFY_SLOTS=`, `CONFLICT_EVERY=`. Holdout verify of a BE ticket holds its verify slot ~30 min (dyn-env create). Analyze + implement open a detached window per worktree in tmux session `sw-factory` (`tail -f <KEY>.log`) via plain `tmux new-window -d`. No tmux server = skipped |
+| `~/dotfiles/sw-factory/bin/deps-triage` | dependabot MRs → tickets (Dependabot lane), no LLM; `--dry-run` prints the ticket it would create per repo, changes nothing. Run by stage `deps` |
+| `~/dotfiles/sw-factory/holdout-templates/deps-<repo>.md` | smoke scenarios for green minor/patch bumps (cf-farm-frontend: `FARM-QA` screens; can-frontend: `NONE:`, no reachable preview) |
 | `~/dotfiles/sw-factory/bin/factory-stats` | `factory-stats [days=7]`: yield per ticket touched in window — stages, bail rate, verify pass rate, reviewer notes per merged MR, days ticket→merge, $ total + per merged MR (from `cost=$` in `<KEY>.log`). Posted to Slack every Monday by `nightly-claude.sh` |
 | `~/dotfiles/sw-factory/bin/factory-compare` | `factory-compare [cutover]` (default 2026-11-05 13:35, the context-waste commit): per-run medians before vs after per stage from the logs: cost, tool calls, peak + first-turn context (old runs: from the transcript named on the 🆔 line, cached in `peaks.tsv`), verify calls before the first screenshot, verify / impl / analyze runs per ticket, same-pipeline re-verifies, `TICKET.md` bytes, notes files present, reviews with conventions injected, review runs per ticket, findings per review (must / should / convention, from the `findings:` log line), MR follow-ups per ticket (from the `variant: --mr-notes-after` log line; transcript baseline 3, p90 14). For the review-conventions change pass its merge time as cutover. Posted to Slack every Monday next to factory-stats; read nothing before ~15 tickets after the cutover |
 | `~/dotfiles/bin/cf-work` | worktree setup, one per repo (`--repos a,b` > `repo-*` labels > mapped labels `frontend`/`agroevidence`/… > cwd); same branch everywhere, claude in primary worktree + `--add-dir` siblings; `--no-launch`, `--no-claim` (skip assign + In Progress); `--comments-after <id>` (worker passes `handled/<KEY>`): `TICKET.md` puts the human comments above that id under `## New comments` right after the description, older human ones under `## Earlier comments`, 🤖 comments as one-line stubs except the last (full), so a stage reads only what is new |
@@ -217,6 +231,7 @@ Glossary (mattpocock `domain-modeling`, FE only for now): `GLOSSARY.md` at the r
 3. comment in Jira, `factory-worker` (no args) → reply answered
 4. add `ai-fix`, `factory-worker DEV-XXXX` → draft MR
 5. ticket Done → `factory-worker` (no args) → Sentry issues resolved, label `ai-done`
+6. `deps-triage --dry-run` → which bot MR would become which ticket; `rm ~/.local/state/sw-factory/.deps-checked` → next dispatcher tick runs it for real
 
 Pick up manually instead: `cd ~/work/cleverfarm/repos/<repo> && cf-work DEV-XXXX` → claims ticket, reuses worktree + PLAN.md, launches interactive `/cf-ticket`.
 
@@ -258,7 +273,10 @@ create ticket ~$0.45 · analysis ~$0.65 · reply ~$0.4 · implement ~$1.6 (opus)
 - merge gate runs only with the timer (Mon–Fri 07–18): a new head pipeline outside those hours has no `cf-factory` status until the next tick, so it is mergeable meanwhile
 - MCP login expiry → runs fail. sentry-triage without `TRIAGE_DONE` → one Slack note per day (`sentry-failed-noted` stamp) with the `TRIAGE_FAILED` reason; fix Sentry auth via `/mcp` → claude.ai Sentry. Worker failures → `*-failed` labels / logs
 - Persistent catch-up can fire once on Saturday if the laptop was off at Friday's last slot (daily stamp keeps it to one ticket)
-- a `triage-failed` / `ai-fix-failed` ticket blocks new issues until I close or relabel it
+- a `triage-failed` / `ai-fix-failed` ticket blocks new issues until I close or relabel it; same for `deps` tickets per repo
+- can-frontend `deps` tickets are not verified in a browser (holdout `NONE:`, verify passes on CI alone): check the preview by hand before merging
+- a `deps` ticket waiting at the plan gate for a week: the bot supersedes its MR with a newer version (new iid → new ticket once the gate frees); the old ticket still ships the older version, close it if the newer one is wanted instead
+- dependabot itself must run: cf-farm-frontend schedule needs `PACKAGE_MANAGER_SET=npm` (DEV-3866), can-frontend a valid `GITLAB_ACCESS_TOKEN` (DEV-3867)
 
 ## Rollback
 

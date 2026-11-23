@@ -662,9 +662,22 @@ stage_reply() {
   else relabel $1 $CUR triage-failed; note $1 "reply follow-up failed, parked as \`triage-failed\` (re-add \`triage\` to retry), see \`$LOG_DIR/$1.log\`"; fi
 }
 
+close_bot_mr() {
+  local L=$(jira GET "/rest/api/2/issue/$1?fields=labels" | jq -r '[.fields.labels[] | select(startswith("dependabot-"))] | first // empty')
+  [[ -n "$L" ]] || return 0
+  local IID=${L##*-} R=${${L#dependabot-}%-*}
+  if (cd $REPOS/$R && glab api -X POST "projects/:id/merge_requests/$IID/notes" -f body="🤖 _I'm writing on Michal's behalf. If you don't like it, please let me know._
+
+Superseded by $(cat $LOG_DIR/$1.mr) ($1)." >/dev/null && glab api -X PUT "projects/:id/merge_requests/$IID" -f state_event=close >/dev/null) </dev/null; then
+    info $1 "dependabot MR $R!$IID closed, superseded by $(cat $LOG_DIR/$1.mr)"
+  else
+    note $1 "closing dependabot MR $R!$IID failed, close it by hand"
+  fi
+}
+
 stage_impl() {
   local ID=$(snap_human $1) S=$(snap_all $1)
-  if implement $1 ${2-}; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; info $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; info $1 "already fixed, closed as duplicate, Sentry resolves next run"; else fallback_comment $1 $S; relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
+  if implement $1 ${2-}; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; info $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; has_label $1 deps && close_bot_mr $1; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; info $1 "already fixed, closed as duplicate, Sentry resolves next run"; else fallback_comment $1 $S; relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
 }
 
 wt_heads() {
@@ -788,6 +801,11 @@ stage_sentry() {
   return 0
 }
 
+stage_deps() {
+  touch $LOG_DIR/.deps-checked
+  ${SELF:h}/deps-triage
+}
+
 run_stage() {
   flock -n -o -E 75 $LOCKS/$2 $SELF --stage "$@" </dev/null
   local RC=$?
@@ -885,7 +903,7 @@ dispatch() {
   done
 }
 
-NEW="" IMPL="" REPLIES="" MR_REPLIES="" VERIFY="" DONE="" CONFLICT="" REVIEW="" RFIX=""
+NEW="" IMPL="" REPLIES="" MR_REPLIES="" VERIFY="" DONE="" CONFLICT="" REVIEW="" RFIX="" DEPS=""
 if [[ -n "${1:-}" ]]; then
   LABELS=$(search "key = ${1:u}" 1 | jq -r '.issues[0].fields.labels | join(" ")')
   if [[ -n "${GRILL:-}" && " $LABELS " == *" needs-answer "* ]]; then
@@ -937,6 +955,8 @@ else
       echo "${K:-${BR//\//-}} $PID $IID $R $BR $TGT $DRAFT $GO $URL"
     done)
   fi
+  DEPSCHECKED=($LOG_DIR/.deps-checked(Nmm-${DEPS_EVERY:-30}))
+  (( ${#DEPSCHECKED} )) || DEPS=deps
 fi
 
 LASTFAIL=($LOG_DIR/sentry-last.txt(Nmm-15))
@@ -950,6 +970,7 @@ WORK=$(
   emit new "$NEW"
   emit impl "$IMPL"
   emit done "$DONE"
+  emit deps "$DEPS"
   if [[ -z "${1:-}" ]] && [[ "$(cat $LOG_DIR/sentry-today 2>/dev/null)" != "$(date +%F)" ]] && (( ! ${#LASTFAIL} )); then
     echo "sentry sentry"
   fi

@@ -1,0 +1,150 @@
+#!/bin/zsh
+set -uo pipefail
+
+REPOS=~/work/cleverfarm/repos
+LOG_DIR=~/.local/state/sw-factory
+HOLDOUT=$LOG_DIR/holdout
+NOTES=$LOG_DIR/notes.txt
+TPL=${0:A:h:h}/holdout-templates
+ME=712020:d8b09ea3-beb7-4afc-af06-6d7119474a4f
+BOARD=198
+EPIC=${DEPS_EPIC:-DEV-3865}
+AI_LINE='🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._'
+typeset -A PRODUCT=(cf-farm-frontend 11710 can-frontend 11707)
+typeset -A SKIP=(cf-farm-frontend '^$' can-frontend '(^|[ /])firebase( |$)')
+mkdir -p $HOLDOUT
+
+DRY=0
+[[ "${1:-}" == --dry-run ]] && DRY=1
+
+jql() { jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=key&maxResults=50" | jq -r '.issues[].key' }
+
+blocking() {
+  local K ST
+  for K in $(jql "project = DEV AND labels = deps AND labels = repo-$1 AND statusCategory != Done"); do
+    ST=$(glab mr list --all --search $K -F json </dev/null | jq -r '[.[].state] | unique | join(",")')
+    [[ -z "$ST" || "$ST" == *opened* || "$ST" == *locked* ]] && { echo "$K (MR: ${ST:-none})"; return 0 }
+  done
+  return 1
+}
+
+majors() {
+  glab api "projects/:id/merge_requests/$1/diffs?per_page=100" </dev/null \
+    | jq -r '.[] | select(.new_path | test("(^|/)package\\.json$")) | .diff' \
+    | awk 'match($0, /^[-+][ \t]+"[^"]+": *"[~^>=v ]*[0-9]+\.[0-9]+/) {
+        s = substr($0, RSTART, RLENGTH); split(s, q, "\""); v = q[4]; gsub(/[^0-9.]/, "", v); split(v, p, ".")
+        k = (p[1] == "0") ? p[1] "." p[2] : p[1]
+        if (substr(s, 1, 1) == "-") o[q[2]] = k; else n[q[2]] = k
+      }
+      END { for (x in n) if ((x in o) && o[x] != n[x]) print x " " o[x] " → " n[x] }'
+}
+
+describe() {
+  local KIND=$1 MR=$2 PS=$3 MAJ=$4
+  print -r -- "Dependabot otevřel MR [!$(jq -r .iid <<<$MR)|$(jq -r .web_url <<<$MR)]: $(jq -r .title <<<$MR)
+
+h3. Stav
+* typ: *$KIND*
+* pipeline MR od bota: *$PS* ([pipeline|$(jq -r '.head_pipeline.web_url // ""' <<<$MR)])
+* větev bota: {{$(jq -r .source_branch <<<$MR)}}"
+  [[ -n "$MAJ" ]] && print -r -- "
+h3. Major změny
+{noformat}
+$MAJ
+{noformat}"
+  print -r -- "
+h3. Postup
+* větev ticketu vychází z větve bota, MR od bota se po vzniku našeho MR zavře
+* $([[ $KIND == minor/patch ]] && echo 'zelený minor/patch: rovnou implementace (bez plan gate), smoke scénáře v příloze holdout.md' || echo 'analýza changelogu a dopadu na náš kód → PLAN.md → plan gate (ai-fix)')
+
+h3. Release notes (popis MR od bota)
+{noformat}
+$(jq -r '.description // ""' <<<$MR | head -c 15000)
+{noformat}"
+}
+
+shortcut() {
+  local KEY=$1 R=$2 MR=$3 WT
+  cf-work $KEY $(jq -r .source_branch <<<$MR) --no-launch --no-claim </dev/null >>$LOG_DIR/$KEY.log 2>&1
+  WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
+  [[ -n "$WT" ]] || { echo "  $KEY: worktree setup failed, see $LOG_DIR/$KEY.log"; return 1 }
+  local FILES=$(glab api "projects/:id/merge_requests/$(jq -r .iid <<<$MR)/diffs?per_page=100" </dev/null | jq -r '.[] | "| `\(.new_path)` | modify | dependency versions |"')
+  print -r -- "## Requirements
+
+Dependabot MR $(jq -r .web_url <<<$MR) ($(jq -r .title <<<$MR)): minor/patch only, its pipeline is green. Ship the bot's change as is.
+
+## Plan
+
+1. The worktree branch starts at the bot's branch \`$(jq -r .source_branch <<<$MR)\`: \`git fetch origin develop && git rebase origin/develop\`. Lockfile conflict → take \`origin/develop\`'s lockfile, then the repo's lockfile-only install (\`pnpm install --lockfile-only\` / \`npm i --package-lock-only\`), never delete the lockfile.
+2. Install, tests, lint, typecheck (Verify step 5). A failure caused by the bump → bail out, the ticket goes the analysis way.
+3. \`/cf-mr --headless\`.
+
+## Implementation
+
+### Change map
+
+| File | add/modify/delete/move | Symbols |
+|---|---|---|
+$FILES
+
+No source change: the diff is the bot's commit.
+
+[!] Holdout = generic smoke scenarios of the repo (\`holdout.md\`), not derived from a changelog." >$WT/PLAN.md
+  cp $TPL/deps-$R.md $HOLDOUT/$KEY.md
+  jira attach $KEY $WT/PLAN.md PLAN.md >/dev/null || echo "  $KEY: attach PLAN.md failed"
+  jira attach $KEY $HOLDOUT/$KEY.md holdout.md >/dev/null || echo "  $KEY: attach holdout.md failed"
+  jira add-comment $KEY "$AI_LINE
+Zelený minor/patch MR od dependabota, beru ho bez analýzy: rovnou implementace (rebase na develop, testy, lint, typecheck, draft MR), pak smoke ověření na preview. Scénáře: příloha holdout.md." >/dev/null
+}
+
+for R in cf-farm-frontend can-frontend; do
+  [[ -d $REPOS/$R/.git ]] || { echo "$R: no local repo"; continue }
+  cd $REPOS/$R
+  if B=$(blocking $R); then echo "$R: blocked by $B"; continue; fi
+  BOT=$(glab api "projects/:id/merge_requests?state=opened&labels=dependencies&order_by=created_at&sort=asc&per_page=100" </dev/null \
+    | jq -c '.[] | select(.author.username | test("^project_[0-9]+_bot"))') || { echo "$R: MR lookup failed"; continue }
+  while read -r MR; do
+    [[ -z "$MR" ]] && continue
+    IID=$(jq -r .iid <<<$MR) DEDUP=dependabot-$R-$(jq -r .iid <<<$MR)
+    jq -e --arg re "${SKIP[$R]}" '.title | test($re)' <<<$MR >/dev/null && continue
+    [[ -n "$(jql "project = DEV AND labels = $DEDUP")" ]] && continue
+    MR=$(glab api "projects/:id/merge_requests/$IID" </dev/null)
+    PS=$(jq -r '.head_pipeline.status // "none"' <<<$MR)
+    case $PS in
+      success|manual) GREEN=1 ;;
+      failed|canceled|skipped) GREEN=0 ;;
+      *) echo "$R !$IID: pipeline $PS, waiting"; continue ;;
+    esac
+    MAJ=$(majors $IID)
+    KIND=minor/patch; [[ -n "$MAJ" ]] && KIND=major
+    LABELS=(deps repo-$R $DEDUP)
+    if (( GREEN )) && [[ $KIND == minor/patch ]]; then LABELS+=(triaged ai-fix); else LABELS+=(triage); fi
+    SUMMARY="Dependabot $R: $(jq -r .title <<<$MR)"
+    if (( DRY )); then
+      echo "$R !$IID: would create '$SUMMARY' [$KIND, pipeline $PS] labels: $LABELS"
+      [[ -n "$MAJ" ]] && echo "$MAJ" | sed 's/^/    /'
+      break
+    fi
+    SP=$(jira GET "/rest/agile/1.0/board/$BOARD/sprint?state=active" | jq '.values[0].id // null')
+    KEY=$(jira POST /rest/api/2/issue "$(jq -nc --arg s "${SUMMARY[1,250]}" --arg d "$(describe $KIND $MR $PS "$MAJ")" --arg p ${PRODUCT[$R]} \
+      --arg me $ME --arg epic $EPIC --argjson sp $SP --args '{fields: ({project: {key: "DEV"}, issuetype: {name: "Technical"}, summary: $s, description: $d,
+        assignee: {accountId: $me}, customfield_13543: [{id: $p}], parent: {key: $epic}, labels: $ARGS.positional}
+        + (if $sp == null then {} else {customfield_10007: $sp} end))}' $LABELS)" | jq -r '.key // empty')
+    [[ -n "$KEY" ]] || { echo "$R !$IID: Jira create failed"; echo "deps-triage: Jira create failed for $R !$IID" >>$NOTES; break }
+    echo "=== deps-triage $(date -Iseconds): $KEY from $R !$IID ($KIND, pipeline $PS)" >>$LOG_DIR/$KEY.log
+    echo "$R !$IID -> $KEY ($KIND, pipeline $PS)"
+    if (( GREEN )) && [[ $KIND == minor/patch ]]; then
+      if shortcut $KEY $R $MR; then
+        echo "new deps ticket [$KEY](https://cleverfarm.atlassian.net/browse/$KEY) from $R !$IID: green minor/patch, straight to implement" >>$NOTES
+      else
+        jira PUT /rest/api/2/issue/$KEY '{"update":{"labels":[{"remove":"ai-fix"},{"remove":"triaged"},{"add":"triage"}]}}' >/dev/null
+        echo "new deps ticket [$KEY](https://cleverfarm.atlassian.net/browse/$KEY) from $R !$IID: shortcut failed, sent to analysis" >>$NOTES
+      fi
+    else
+      cf-work $KEY $(jq -r .source_branch <<<$MR) --no-launch --no-claim </dev/null >>$LOG_DIR/$KEY.log 2>&1 || echo "  $KEY: worktree setup failed, analysis creates it from develop"
+      echo "new deps ticket [$KEY](https://cleverfarm.atlassian.net/browse/$KEY) from $R !$IID: $KIND, pipeline $PS, analysis next" >>$NOTES
+    fi
+    break
+  done <<<"$BOT"
+done
+exit 0

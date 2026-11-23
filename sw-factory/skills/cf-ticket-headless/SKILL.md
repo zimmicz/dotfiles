@@ -11,7 +11,8 @@ description: |
   holdout scenarios on the existing MR; a scenario that contradicts the ticket is
   only flagged (holdout-suspect), never edited. `--review-fix <report>`: fixes every
   finding of the independent reviewer (cf-review) once. Plan says already fixed
-  elsewhere: links Duplicate, moves ticket to Done, no MR.
+  elsewhere: links Duplicate, moves ticket to Done, no MR. Ticket labelled deps:
+  starts from the dependabot branch, rebases onto develop, regenerates the lockfile.
 ---
 
 # Implement a ticket, unattended
@@ -56,6 +57,10 @@ A `Conversation compacted` notice mid-run → before the next step re-read this 
 7. `/cf-mr --headless` — draft MR, no reviewers, FE preview on Nightly. No holdout verify here — factory-worker runs it once the preview is up.
 8. Post ONE Jira comment (`jira add-comment`, Czech, my voice per `~/.claude/my-voice.md`, Jira wiki markup, first line EXACTLY `🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._`): MR link, what changed, how to verify (preview/screen URL for FE), anything deviating from the plan. Ticket has `sentry-*` labels → those Sentry issues resolve automatically once the ticket is Done (list them by short id).
 9. Rewrite `~/.local/state/sw-factory/notes/<KEY>.md` (whole file, merged with what was there, max ~60 lines, English): `## Change map` (file → what + why, one line each), `## Decisions` (chosen or rejected, with the reason; an answer you gave in an MR thread goes here once), `## Deviations from PLAN.md`, `## Gotchas` (test quirks, flaky spots, the exact commands that worked), `## Rounds` (one line per run: date, variant, pushed or not). Keep `## Analysis` (the analyzer's section) and `## Holdout changes` (scenario changes Michal accepted) as they are. Facts only, no narrative.
+
+## Dependency bump (ticket labelled `deps`)
+
+The worktree branch starts at the dependabot MR's branch (link in `TICKET.md`), so the bot's commit is in it. Before step 4: `git fetch origin develop && git rebase origin/develop`. Lockfile conflict → take `origin/develop`'s lockfile (`git checkout origin/develop -- <lockfile>`), keep the bot's `package.json`, regenerate with `pnpm install --lockfile-only` (cf-farm-frontend) or `npm i --package-lock-only` (can-frontend), continue the rebase. Never delete a lockfile, never bump `firebase`. Then steps 4–9 as usual; a plan without source changes means step 4 is the rebase alone. Never push to or comment on the bot's branch; factory-worker closes the bot MR once yours exists.
 
 ## Variants (each still ends with steps 8–9)
 

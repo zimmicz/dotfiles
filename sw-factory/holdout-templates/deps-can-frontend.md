@@ -1,0 +1,1 @@
+NONE: can-frontend has no MR preview the verifier can reach and its E2E users live in Vault only (DEV-3642 verify blocked); CI (unit tests, build) is the only check, check the preview by hand before merging
