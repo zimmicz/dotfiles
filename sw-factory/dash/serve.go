@@ -1185,7 +1185,7 @@ func (s *server) handler() http.Handler {
 			"JiraAge": int(time.Since(s.jiraAt).Seconds()), "Status": s.status, "Repos": repos(), "Cols": boardCols, "Tabs": webTabs})
 	})
 	mux.HandleFunc("GET /api/nosprint", func(w http.ResponseWriter, r *http.Request) {
-		is, err := search("assignee = currentUser() AND statusCategory != Done AND (sprint is EMPTY OR sprint in futureSprints()) AND (sprint is EMPTY OR sprint not in openSprints()) ORDER BY updated DESC")
+		is, err := search("assignee = currentUser() AND statusCategory != Done AND status not in (\"On nightly\", \"Release candidate\") AND (sprint is EMPTY OR sprint in futureSprints()) AND (sprint is EMPTY OR sprint not in openSprints()) ORDER BY updated DESC")
 		if err != nil {
 			http.Error(w, "jira: "+err.Error(), http.StatusBadGateway)
 			return
