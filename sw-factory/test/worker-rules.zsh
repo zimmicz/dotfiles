@@ -53,4 +53,23 @@ ENVS='[{"name":"dynamic/dev-3657-pasture"},{"name":"dynamic/dev-36570-x"},{"name
 check "env pick: epic prefix" "$(jq -r --args "$ENV_PICK_JQ" dev-3657 <<<$ENVS | paste -sd, -)" "dev-3657-pasture"
 check "env pick: epic + dep" "$(jq -r --args "$ENV_PICK_JQ" dev-3657 dev-3809 <<<$ENVS | paste -sd, -)" "dev-3657-pasture,dev-3809"
 check "env pick: none" "$(jq -r --args "$ENV_PICK_JQ" dev-4000 <<<$ENVS)" ""
+
+source <(sed -n '/^env_push() {/,/^}/p' $W)
+REPOS=$T/repos LOG_DIR=$T/state STATE=up
+mkdir -p $LOG_DIR
+FW=$REPOS/cf-farm-frontend/.worktrees/DEV-1-fe
+git init -q $FW && git -C $FW -c user.name=t -c user.email=t@t commit -q --allow-empty -m a
+HD=$(git -C $FW rev-parse HEAD)
+ticket_env() { echo envx }
+env_state() { echo $STATE }
+info() { : }
+env_push DEV-1 "DEV-1-fe $HD"
+check "env push: FE head unchanged → nothing" "$(cat $LOG_DIR/DEV-1.env-redeploy 2>/dev/null)" ""
+STATE=gone env_push DEV-1 "DEV-1-fe old"
+check "env push: env not up → nothing" "$(cat $LOG_DIR/DEV-1.env-redeploy 2>/dev/null)" ""
+env_push DEV-1 "DEV-1-fe old"
+check "env push: FE moved → redeploy line" "$(cat $LOG_DIR/DEV-1.env-redeploy)" "RUN redeploy envx FRONTEND=true FE_BRANCH=DEV-1-fe"
+rm $LOG_DIR/DEV-1.env-redeploy
+env_push DEV-1 "DEV-1-fe old"
+check "env push: same head twice → once" "$(cat $LOG_DIR/DEV-1.env-redeploy 2>/dev/null)" ""
 exit $fails

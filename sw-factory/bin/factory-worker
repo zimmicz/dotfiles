@@ -355,6 +355,21 @@ env_reverify() {
       done
 }
 
+env_push() {
+  local KEY=$1 F=$LOG_DIR/$1.env-redeployed EN H S
+  local WT=($REPOS/cf-farm-frontend/.worktrees/${KEY}-*(N/[1]))
+  [[ -n "$WT" ]] || return 0
+  H=$(git -C $WT rev-parse HEAD 2>/dev/null) || return 0
+  [[ "$2" == *" $H"* || "$(cat $F 2>/dev/null)" == $H ]] && return 0
+  EN=$(ticket_env $KEY)
+  [[ -n "$EN" ]] || return 0
+  S=$(env_state $EN)
+  [[ $S == up ]] || { info $KEY "FE push ${H[1,10]}, dyn-env $EN $S, no redeploy"; return 0 }
+  print -r -- "RUN redeploy $EN FRONTEND=true FE_BRANCH=${WT:t}" >$LOG_DIR/$KEY.env-redeploy
+  echo $H >$F
+  info $KEY "FE push ${H[1,10]}, dyn-env $EN redeploy queued"
+}
+
 env_say() {
   jira add-comment $1 "🤖 _${AI_MARK}. Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._
 $2" >/dev/null </dev/null
@@ -493,6 +508,7 @@ verify_targets() {
   [[ -n "$2" ]] || { why "no repo-* label"; return 2 }
   if [[ ",$2," == *,cf-farm-frontend,* ]]; then env_auto $KEY || return 2; fi
   EN=$(verify_env $KEY) || return 2
+  [[ -n "$EN" && ( -f $LOG_DIR/$KEY.env-redeploy || -f $LOG_DIR/$KEY.env-pipe ) ]] && { why "dyn-env $EN redeploy running"; return 2 }
   for R in ${(s:,:)2}; do
     WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
     [[ -n "$WT" ]] || { why "no worktree in $R"; return 2 }
@@ -1014,6 +1030,7 @@ stage_mr() {
   local GLID=$(gl_human_max $1 $RS </dev/null) U=$(gl_unanswered $1 $RS </dev/null) AFTER=$(<$GLHANDLED/$1 2>/dev/null || echo 0)
   [[ -n "$U" ]] && AFTER=$(( U - 1 ))
   implement $1 ${2-} "--mr-notes-after $AFTER"
+  env_push $1 "$H0"
   after_amend $1
   if answered_since $1 $S; then
     mark_handled $1 $ID
@@ -1084,7 +1101,7 @@ stage_verify() {
     limited && jira PUT "/rest/api/2/issue/$KEY" '{"update":{"labels":[{"remove":"ai-verify-retry"}]}}' >/dev/null
     if after_amend $KEY; then relabel $KEY ai-verify-retry ai-verify-failed
     elif [[ "$(wt_heads $KEY)" == "$H0" ]]; then relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios failed, fix round pushed nothing, needs you: \`$REPORT\` + Jira comment"
-    else info $KEY "holdout scenarios failed, fix pushed, re-verify next run ($(failed_scenarios $REPORT) first)"; fi
+    else env_push $KEY "$H0"; info $KEY "holdout scenarios failed, fix pushed, re-verify next run ($(failed_scenarios $REPORT) first)"; fi
   fi
   return 0
 }
@@ -1127,6 +1144,7 @@ stage_rfix() {
     relabel $KEY ai-review-retry ai-review-findings; note $KEY "review findings not fixed (no commits pushed), see \`$LOG_DIR/$KEY.review.md\`"
     return 0
   fi
+  env_push $KEY "$H0"
   review $KEY $2 "$H0"
   RC=$?
   unverify $KEY
@@ -1148,15 +1166,19 @@ stage_env() {
 
 env_run() {
   local KEY=$2 CID=${3:-0} LOG=$LOG_DIR/$2.log PF=$LOG_DIR/$2.env-pipe OUT=$LOG_DIR/$2.env-cmd
-  local ACT EN PID URL="" RES ST W=() WHYNOT
+  local ACT EN PID URL="" RES ST W=() WHYNOT Q=""
   echo "=== env $KEY (comment $CID) $(date -Iseconds)" | tee -a $LOG
   if [[ -f $PF ]]; then
-    read -r PID ACT EN URL <$PF
+    read -r PID ACT EN URL Q <$PF
     echo "  resuming pipeline $PID ($ACT $EN)" | tee -a $LOG
   else
-    env_resolve $KEY $CID
+    if [[ $CID == redeploy ]]; then rm -f $OUT; mv $LOG_DIR/$KEY.env-redeploy $OUT || return 0; Q=quiet; else env_resolve $KEY $CID; fi
     limit_bail $KEY
-    if [[ $CID == auto ]]; then rm -f $LOG_DIR/$KEY.env-req; else echo $CID >$ENVHANDLED/$KEY; fi
+    case $CID in
+      auto) rm -f $LOG_DIR/$KEY.env-req ;;
+      redeploy) ;;
+      *) echo $CID >$ENVHANDLED/$KEY ;;
+    esac
     echo "  resolved: $(head -1 $OUT 2>/dev/null || echo nothing)" | tee -a $LOG
     if [[ "$(head -1 $OUT 2>/dev/null)" == ASK\ * ]]; then
       env_say $KEY "K prostředí potřebuju upřesnit: $(head -1 $OUT | cut -c5-)
@@ -1195,17 +1217,18 @@ Nic jsem nespustil. Odpověz novým komentářem, který začíná {{env:}}."
     fi
     RES=$(cf_env run $ACT $EN ${W[3,-1]} 2>&1)
     if [[ $RES != pipeline\ * ]]; then
-      env_say $KEY "Příkaz {{cf-env.sh run ${W[*]}}} se nespustil:
+      [[ -n $Q ]] || env_say $KEY "Příkaz {{cf-env.sh run ${W[*]}}} se nespustil:
 {noformat}
 $RES
 {noformat}"
-      note $KEY "env $ACT $EN did not start, see Jira"
+      print -r -- "  $RES" >>$LOG
+      note $KEY "env $ACT $EN did not start, see \`$LOG\`"
       return 0
     fi
     PID=${${=RES}[2]} URL=${${=RES}[3]}
-    echo "$PID $ACT $EN $URL" >$PF
+    echo "$PID $ACT $EN $URL $Q" >$PF
     [[ $ACT == create ]] && echo $KEY >$ENVOWN/$EN
-    env_say $KEY "Spouštím {{cf-env.sh run ${W[*]}}}
+    [[ -n $Q ]] || env_say $KEY "Spouštím {{cf-env.sh run ${W[*]}}}
 Pipeline: $URL$([[ $ACT == create ]] && echo "
 Vytvoření trvá asi 20 minut, prostředí stojí zhruba 0,75 USD denně a přes noc a víkend spí.")${WHYNOT:+
 $WHYNOT}
@@ -1214,7 +1237,7 @@ $WHYNOT}
   ST=$(cf_env wait $PID 2>&1 | tee -a $LOG | sed -n 1p)
   rm -f $PF
   if [[ $ST != *": success "* ]]; then
-    env_say $KEY "{{$ACT $EN}} nedoběhlo (${ST:-bez odpovědi}): $URL"
+    [[ -n $Q ]] || env_say $KEY "{{$ACT $EN}} nedoběhlo (${ST:-bez odpovědi}): $URL"
     note $KEY "env $ACT \`$EN\` failed: $URL"
     return 0
   fi
@@ -1233,7 +1256,7 @@ $WHYNOT}
       fi ;;
     redeploy)
       env_unverify $KEY
-      env_say $KEY "Nasazeno do {{$EN}}: https://$EN.dev.cleverfarm.cz. Ověření poběží znovu." ;;
+      [[ -n $Q ]] || env_say $KEY "Nasazeno do {{$EN}}: https://$EN.dev.cleverfarm.cz. Ověření poběží znovu." ;;
     destroy)
       rm -f $ENVOWN/$EN
       [[ "$(ticket_env $KEY)" == $EN ]] && unlabel $KEY env-$EN
@@ -1444,6 +1467,7 @@ else
       if W=$(verify_blocker $K $R </dev/null); then stall_note $K "$W"; else rm -f $STALLED/$K.*(N); echo "$K $R"; fi
     done)
   for F in $LOG_DIR/*.env-req(N); do K=${${F:t}%.env-req}; ENVQ+=$'\n'"env-$K $K auto"; done
+  for F in $LOG_DIR/*.env-redeploy(N); do K=${${F:t}%.env-redeploy}; ENVQ+=$'\n'"env-$K $K redeploy"; done
   ENVQ=$(awk 'NF && !s[$1]++' <<<$ENVQ)
   GCCHECKED=($LOG_DIR/.envgc-checked(Nmm-${ENV_GC_EVERY:-10}))
   if (( ! ${#GCCHECKED} )) && [[ -z "${TRIAGE_DRY:-}" ]]; then touch $LOG_DIR/.envgc-checked; env_gc </dev/null; fi
