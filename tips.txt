@@ -3,7 +3,6 @@ i3  $mod+Tab → předchozí workspace (stejně tak $mod+<číslo WS, na kterém
 i3  $mod+g → rofi seznam všech oken, napiš kus titulku, Enter → skočí tam
 i3  Print → flameshot výřez obrazovky, ctrl+c → obrázek ve schránce
 i3  $mod+m a → označ okno písmenem a; $mod+' a → kdykoli skoč zpět na něj
-i3  autotiling dělí podle delší strany okna → $mod+h / $mod+v skoro nepotřebuješ
 tmux  ` g → lazygit v plovoucím okně pro aktuální repo, q zavře
 tmux  ` S → fzf výběr session, i neběžící z tmuxloaderu (založí ji)
 tmux  copy-mode: ` [ → v → výběr → y nebo Enter → systémová schránka

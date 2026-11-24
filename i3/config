@@ -184,7 +184,6 @@ exec --no-startup-id copyq
 exec --no-startup-id nm-applet
 exec --no-startup-id redshift
 exec --no-startup-id xss-lock --transfer-sleep-lock -- ~/bin/lock.sh
-exec --no-startup-id autotiling
 
 bindsym $mod+Shift+o move scratchpad
 bindsym $mod+o scratchpad show
