@@ -54,7 +54,7 @@ check "env pick: epic prefix" "$(jq -r --args "$ENV_PICK_JQ" dev-3657 <<<$ENVS |
 check "env pick: epic + dep" "$(jq -r --args "$ENV_PICK_JQ" dev-3657 dev-3809 <<<$ENVS | paste -sd, -)" "dev-3657-pasture,dev-3809"
 check "env pick: none" "$(jq -r --args "$ENV_PICK_JQ" dev-4000 <<<$ENVS)" ""
 
-source <(sed -n '/^env_push() {/,/^}/p' $W)
+source <(sed -n '/^env_push() {/,/^}/p;/^env_fe_fresh() {/,/^}/p' $W)
 REPOS=$T/repos LOG_DIR=$T/state STATE=up
 mkdir -p $LOG_DIR
 FW=$REPOS/cf-farm-frontend/.worktrees/DEV-1-fe
@@ -68,8 +68,22 @@ check "env push: FE head unchanged → nothing" "$(cat $LOG_DIR/DEV-1.env-redepl
 STATE=gone env_push DEV-1 "DEV-1-fe old"
 check "env push: env not up → nothing" "$(cat $LOG_DIR/DEV-1.env-redeploy 2>/dev/null)" ""
 env_push DEV-1 "DEV-1-fe old"
-check "env push: FE moved → redeploy line" "$(cat $LOG_DIR/DEV-1.env-redeploy)" "RUN redeploy envx FRONTEND=true FE_BRANCH=DEV-1-fe"
+check "env push: FE moved → redeploy line + head" "$(cat $LOG_DIR/DEV-1.env-redeploy)" "RUN redeploy envx FRONTEND=true FE_BRANCH=DEV-1-fe"$'\n'$HD
 rm $LOG_DIR/DEV-1.env-redeploy
 env_push DEV-1 "DEV-1-fe old"
 check "env push: same head twice → once" "$(cat $LOG_DIR/DEV-1.env-redeploy 2>/dev/null)" ""
+
+env_last_pipe() { echo $LAST }
+LAST=77
+check "env fresh: no marker → deploy" "$(env_fe_fresh DEV-1 envx; echo $?)" "1"
+echo "77 $HD" >$LOG_DIR/DEV-1.env-fe
+check "env fresh: our pipeline, same head → skip deploy" "$(env_fe_fresh DEV-1 envx; echo $?)" "0"
+LAST=78
+check "env fresh: other deploy since → deploy" "$(env_fe_fresh DEV-1 envx; echo $?)" "1"
+LAST=77
+git -C $FW -c user.name=t -c user.email=t@t commit -q --allow-empty -m b
+check "env fresh: head moved → deploy" "$(env_fe_fresh DEV-1 envx; echo $?)" "1"
+LAST=""
+echo "77 $(git -C $FW rev-parse HEAD)" >$LOG_DIR/DEV-1.env-fe
+check "env fresh: lookup failed → deploy" "$(env_fe_fresh DEV-1 envx; echo $?)" "1"
 exit $fails
