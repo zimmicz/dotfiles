@@ -12,6 +12,7 @@ EPIC=${DEPS_EPIC:-DEV-3865}
 AI_LINE='🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._'
 typeset -A PRODUCT=(cf-farm-frontend 11710 can-frontend 11707)
 typeset -A SKIP=(cf-farm-frontend '^$' can-frontend '(^|[ /])firebase( |$)')
+MR_STATES_JQ='[.[] | select(.title | test("(^|[^A-Z0-9-])" + $k + "([^0-9]|$)")) | .state] | unique | join(",")'
 mkdir -p $HOLDOUT
 
 DRY=0
@@ -22,7 +23,7 @@ jql() { jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fi
 blocking() {
   local K ST
   for K in $(jql "project = DEV AND labels = deps AND labels = repo-$1 AND statusCategory != Done"); do
-    ST=$(glab mr list --all --search $K -F json </dev/null | jq -r '[.[].state] | unique | join(",")')
+    ST=$(glab mr list --all --search $K -F json </dev/null | jq -r --arg k $K "$MR_STATES_JQ")
     [[ -z "$ST" || "$ST" == *opened* || "$ST" == *locked* ]] && { echo "$K (MR: ${ST:-none})"; return 0 }
   done
   return 1

@@ -7,6 +7,7 @@ LOG_DIR=~/.local/state/sw-factory
 STAMP=$LOG_DIR/sentry-today
 NOTES=$LOG_DIR/notes.txt
 PIPELINE_LABELS='triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed'
+MR_STATES_JQ='[.[] | select(.title | test("(^|[^A-Z0-9-])" + $k + "([^0-9]|$)")) | .state] | unique | join(",")'
 mkdir -p $LOG_DIR
 
 DRY=0
@@ -35,7 +36,7 @@ OPEN=()
 while read -r KEY STATUS REPO; do
   [[ -z "$KEY" ]] && continue
   STATES="no repo"
-  [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] && STATES=$(cd $REPOS/$REPO && glab mr list --all --search $KEY -F json | jq -r '[.[].state] | unique | join(",") | if . == "" then "none" else . end' || echo "lookup failed")
+  [[ -n "$REPO" && -d $REPOS/$REPO/.git ]] && STATES=$(cd $REPOS/$REPO && glab mr list --all --search $KEY -F json | jq -r --arg k $KEY "$MR_STATES_JQ"' | if . == "" then "none" else . end' || echo "lookup failed")
   [[ "$STATES" != none && "$STATES" != no\ repo && "$STATES" != lookup\ failed && "$STATES" != *opened* && "$STATES" != *locked* ]] && continue
   OPEN+=("$KEY ($STATUS, MR: $STATES)")
 done <<<"$ISSUES"
