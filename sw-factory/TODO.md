@@ -59,3 +59,9 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - Label points to an env that is gone → verify falls back to Amplify, env-auto does not run (label present). Could drop the stale label and pick again.
    - MR search is by key in title / description; a BE MR without the key there is missed.
    - `failed` state never expires (`rm <KEY>.env-auto` to retry).
+14. Epic lane (2026-11-24, rollback tag `sw-factory-pre-epic-lane-2026-11-24`, README "Epic lane"). Tested: `zsh -n`, `test/worker-rules.zsh`, `blocked_by` on real Jira (DEV-3736/3901/3903/3909 blocked, DEV-3899/3734 free, unknown key → lookup failed), `go vet` + `go test` dash. Not run: dispatcher dry run (allowlist).
+   - First real epic: `/cf-epic` mode factory. Check children get `triage` only after links + holdout files, blocked ones show `waiting for <KEY> merge` in dash, analysis keeps the When/Then of the approved scenarios.
+   - First blocker merge: child leaves `waiting` once the blocker is On nightly, `<KEY>.blocked-by` removed, analysis starts from develop with the blocker's code.
+   - Gate is On nightly, not MR merge: merge → nightly lag delays children. Switch to MR state (glab, like env-auto) if the lag hurts.
+   - No epic row in dash grouping the children; add if the list gets messy.
+   - Epic with `triage`: label dropped + Slack note; check it fires once.

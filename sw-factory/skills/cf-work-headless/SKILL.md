@@ -54,7 +54,7 @@ No user present — never ask, never wait. cwd = the worktree `cf-work` created 
    - `[?]` / `[!]` checklist from step 2
 
    factory-worker fails the run unless `PLAN.md` has the headings exactly `## Requirements` (or `## Belongs in Sentry?`), `## Plan` and `## Implementation`, and under `## Requirements` exactly `### Acceptance criteria`.
-4a. Write holdout scenarios to `~/.local/state/sw-factory/holdout/<KEY>.md` (absolute path, outside the worktree). An independent verifier runs them in a browser against the MR's preview after the MR exists; the implementer can read but never edit them. Format, 3–8 scenarios:
+4a. Write holdout scenarios to `~/.local/state/sw-factory/holdout/<KEY>.md` (absolute path, outside the worktree). Ticket labelled `cf-epic` whose file already exists → Michal approved those scenarios when the epic was sliced: keep every scenario and its When/Then, only resolve its Given per the rules below; a scenario the plan cannot meet → `[?]` question, never drop or rewrite it. An independent verifier runs them in a browser against the MR's preview after the MR exists; the implementer can read but never edit them. Format, 3–8 scenarios:
    ```
    ## S1: <name>
    Given: <FIXTURE-ID>, <path with real ids, e.g. /farm/30837426142555137/parcels/30837426369047553>, <state to set up>

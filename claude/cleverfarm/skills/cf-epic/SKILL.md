@@ -3,8 +3,10 @@ name: cf-epic
 description: |
   Epic-sized work, too big for one ticket session: wayfind decisions (local map),
   spec, slice into Jira child tickets with blocking links + holdout scenarios,
-  build all slices into ONE draft acceptance MR via parallel worktree sub-agents,
-  verify on preview, then after acceptance cut stacked review MRs per ticket.
+  then either hand the children to the sw-factory (label triage, one MR per
+  ticket in blocker order) or build all slices into ONE draft acceptance MR via
+  parallel worktree sub-agents, verify on preview, then after acceptance cut
+  stacked review MRs per ticket.
   Use when user says "cf-epic", "epic", "big feature", or gives an epic key.
 ---
 
@@ -30,8 +32,9 @@ Three checkpoints: **spec**, **ticket breakdown**, **acceptance MR**. Between th
 ## Phase 3: Tickets → CHECKPOINT 2
 
 6. `/mattpocock-skills:to-tickets` on `SPEC.md`. Vertical slices, prefactors first, blocking edges. For each slice also draft its holdout scenarios.
-7. **CHECKPOINT 2** — to-tickets' quiz: titles, blocked-by, what it delivers, scenarios. Iterate until approved.
-8. Publish in dependency order via `~/bin/jira` (not MCP), Czech summary + description: DEV issues with `parent` = `<EPIC>`, Product + Component per the repo's `docs/agents/issue-tracker.md`, labels `repo-<dir>` for EVERY repo the slice touches (component BE/FE accordingly) + `cf-epic`, assignee me, current sprint. Second pass: `Blocks` links (`jira POST /rest/api/3/issueLink '{"type":{"name":"Blocks"},"inwardIssue":{"key":"<BLOCKER>"},"outwardIssue":{"key":"<BLOCKED>"}}'`). Write each ticket's scenarios to its holdout file. Record keys + edges in `<state dir>/tickets.md`.
+7. **CHECKPOINT 2** — to-tickets' quiz: titles, blocked-by, what it delivers, scenarios. Iterate until approved. Also ask the build mode: **factory** (recommended: one MR per ticket, the sw-factory builds them in blocker order, each through its own plan gate, verify, review, quiz) or **acceptance** (phases 4–5: one acceptance MR for stakeholders, then stacked review MRs).
+8. Publish in dependency order via `~/bin/jira` (not MCP), Czech summary + description: DEV issues with `parent` = `<EPIC>`, Product + Component per the repo's `docs/agents/issue-tracker.md`, labels `repo-<dir>` for EVERY repo the slice touches (component BE/FE accordingly) + `cf-epic`, assignee me, current sprint. Second pass: `Blocks` links (`jira POST /rest/api/3/issueLink '{"type":{"name":"Blocks"},"inwardIssue":{"key":"<BLOCKER>"},"outwardIssue":{"key":"<BLOCKED>"}}'`). Write each ticket's scenarios to its holdout file. Record keys + edges + mode in `<state dir>/tickets.md`.
+8b. Mode **factory**: third pass, only after every link and holdout file exists, add label `triage` to each ticket. Tell the user the factory picks up the unblocked ones on its next tick, the rest wait for their blockers to merge (factory-dash shows `waiting for <KEY> merge`). Stop here, phases 4–5 do not apply.
 
 ## Phase 4: Build the acceptance MR
 

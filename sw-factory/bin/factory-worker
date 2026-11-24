@@ -434,6 +434,11 @@ env_gc() {
 
 SHIPPED_ST='"On nightly", "To test", "Release candidate", Rejected'
 BLOCKERS_JQ='.fields.issuelinks[] | select(.type.inward == "is blocked by" and .inwardIssue != null) | .inwardIssue | select(.fields.status.statusCategory.key != "done" and ([.fields.status.name] | inside(["On nightly", "To test", "Release candidate", "Rejected"]) | not)) | .key'
+blocked_by() {
+  local J
+  J=$(jira GET "/rest/api/2/issue/$1?fields=issuelinks") && jq -e '.fields.issuelinks' <<<$J >/dev/null || { echo "lookup failed"; return 0 }
+  jq -r "$BLOCKERS_JQ" <<<$J | paste -sd, - | grep .
+}
 BE_MRS_JQ='.[] | select(.source_branch | ascii_downcase | . == $k or startswith($k + "-")) | select(.references.full | test("frontend!") | not) | "\(.state) \(.references.full | sub("!.*"; "") | split("/") | last)"'
 ENV_PICK_JQ='.[] | .name | ltrimstr("dynamic/") as $n | select(any($ARGS.positional[]; . as $p | $n == $p or ($n | startswith($p + "-")))) | $n'
 
@@ -1446,7 +1451,20 @@ else
   for F in $LOG_DIR/*.env-pipe(N); do K=${${F:t}%.env-pipe}; ENVQ+=$'\n'"env-$K $K 0"; done
   ENVQ=$(awk 'NF && !s[$1]++' <<<$ENVQ)
   env_reverify
-  NEW=$(search 'project = DEV AND labels = triage AND statusCategory = "To Do" ORDER BY created ASC' $MAX | jq -r "$ROWS_JQ")
+  search 'project = DEV AND labels = triage AND issuetype = Epic AND statusCategory != Done' 10 | jq -r '.issues[].key' | while read -r K; do
+    [[ -n "${TRIAGE_DRY:-}" ]] && { echo "  epic $K: would drop triage" >&2; continue }
+    unlabel $K triage </dev/null
+    note $K "epic: factory takes child tickets only, \`triage\` removed, run \`/cf-epic $K\` (mode factory labels the children)"
+  done
+  NEW=$(search 'project = DEV AND labels = triage AND issuetype != Epic AND statusCategory = "To Do" ORDER BY created ASC' 50 | jq -r "$ROWS_JQ" \
+    | while read -r K R; do
+      if B=$(blocked_by $K </dev/null); then
+        if [[ -n "${TRIAGE_DRY:-}" ]]; then echo "  $K waits for $B" >&2; else print -r -- $B >$LOG_DIR/$K.blocked-by; fi
+      else
+        rm -f $LOG_DIR/$K.blocked-by
+        echo "$K $R"
+      fi
+    done | head -$MAX)
   REPLY_LABELS=triaged GRILL_HOLD=""
   [[ -n "${GRILL:-}" ]] && REPLY_LABELS="triaged, needs-answer" GRILL_HOLD=" AND labels not in (needs-answer)"
   REPLIES=$(search "project = DEV AND labels in ($REPLY_LABELS) AND labels not in (ai-mr) AND statusCategory != Done AND (statusCategory = \"To Do\" OR labels = ai-fix)" 20 | awaiting_reply)

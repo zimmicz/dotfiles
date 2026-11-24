@@ -191,6 +191,9 @@ func (s *server) out(r row) rowOut {
 	}
 	n := nextSteps[label]
 	o.Ball, o.Next = or(n[0], "-"), n[1]
+	if b, err := os.ReadFile(filepath.Join(stateDir, r.key+".blocked-by")); err == nil && r.stage == "new" {
+		o.Ball, o.Next = "-", "waiting for "+strings.TrimSpace(string(b))+" merge"
+	}
 	if ids := unverifiedIDs(r.key); ids != "" && o.Ball == "you" {
 		o.Next += " · hand-check " + ids
 	}
