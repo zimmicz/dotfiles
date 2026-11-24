@@ -221,7 +221,7 @@
 
   <!-- dispatcher -->
   <rect class="band" x="20" y="12" width="1430" height="98" rx="10"/>
-  <text class="mono b" x="38" y="34">DISPATCHER  every minute, Mon–Fri 07–18</text>
+  <text class="mono b" x="38" y="34">DISPATCHER  every minute, Mon–Fri 06–18</text>
   <text class="tm" x="430" y="34">reads Jira labels + comments (only tickets assigned to me or unassigned), starts each stage as its own systemd unit, exits in seconds</text>
   <rect class="chip-n" x="38" y="46" width="112" height="24" rx="6"/><text class="cn" x="94" y="62" text-anchor="middle">3 slots total</text>
   <rect class="chip-n" x="160" y="46" width="104" height="24" rx="6"/><text class="cn" x="212" y="62" text-anchor="middle">impl: max 1</text>
@@ -573,7 +573,7 @@
     <h2>Still not covered</h2>
     <div class="cards">
       <div class="card failc"><h3>Availability</h3><ul>
-        <li>The timer runs Mon–Fri 07–18 and only while I am logged in. A comment outside that window, or while the laptop sleeps, waits. A new MR pipeline in that time has no merge gate status until the next tick, so it can be merged.</li>
+        <li>The timer runs Mon–Fri 06–18 and only while I am logged in. A comment outside that window, or while the laptop sleeps, waits. A new MR pipeline in that time has no merge gate status until the next tick, so it can be merged.</li>
         <li>Nothing alerts when the dispatcher itself is dead; a missing “alive” heartbeat is the only sign.</li>
       </ul></div>
       <div class="card failc"><h3>Slots</h3><ul>
