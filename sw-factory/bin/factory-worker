@@ -76,10 +76,9 @@ stream() {
   done
 }
 
-search() {
-  local Q=${1/#project = DEV AND /project = DEV AND (assignee = currentUser() OR assignee is EMPTY) AND }
-  jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$Q" '$q|@uri')&fields=labels,comment&maxResults=$2"
-}
+jql() { jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=$2&maxResults=$3" }
+
+search() { jql "${1/#project = DEV AND /project = DEV AND (assignee = currentUser() OR assignee is EMPTY) AND }" labels,comment $2 }
 
 JME=$(jira GET /rest/api/3/myself | jq -r '.accountId // empty')
 [[ -n "$JME" ]] || { echo "lookup failed: jira myself (accountId), refusing to read comments"; exit 1 }
@@ -364,7 +363,8 @@ $2" >/dev/null </dev/null
 env_resolve() {
   local KEY=$1 LOG=$LOG_DIR/$1.log OUT=$LOG_DIR/$1.env-cmd ASK=$LOG_DIR/$1.env-ask
   local WT=($REPOS/*/.worktrees/${KEY}-*(N/[1]))
-  jira GET "/rest/api/2/issue/$KEY/comment/$2" | jq -r '.body // empty' >$ASK
+  if [[ $2 == auto ]]; then cp $LOG_DIR/$KEY.env-req $ASK 2>/dev/null || : >$ASK
+  else jira GET "/rest/api/2/issue/$KEY/comment/$2" | jq -r '.body // empty' >$ASK; fi
   rm -f $OUT
   [[ -s $ASK ]] || return 1
   (cd ${WT:-$LOG_DIR} && claude -p "/cf-env-resolve $KEY request=$ASK out=$OUT env=$(ticket_env $KEY) repos=$(ticket_repos $KEY) branch=${WT:t}" \
@@ -384,18 +384,114 @@ env_parse() {
 }
 
 env_done() {
-  local F EN R
+  local F EN R O
   for F in $ENVOWN/*(N); do
     [[ "$(<$F)" == $1 ]] || continue
     EN=${F:t}
+    O=$(jql "labels = \"env-$EN\" AND statusCategory != Done AND key != $1" key 5 | jq -r '.issues | if type == "array" then (first.key // "") else error end') \
+      || { note $1 "dyn-env \`$EN\`: lookup of other tickets on it failed, not destroyed, next Done check retries"; continue }
+    if [[ -n $O ]]; then echo $O >$F; info $1 "ticket Done, dyn-env $EN kept: $O still uses it, now its owner"; continue; fi
     if R=$(cf_env run destroy $EN 2>&1) && [[ $R == pipeline\ * ]]; then rm -f $F; info $1 "ticket Done, dyn-env $EN destroy started: ${${=R}[3]}"
     else note $1 "dyn-env \`$EN\` destroy did not start, destroy it by hand: ${R[1,200]}"; fi
   done
 }
 
+env_gc() {
+  local F K
+  for F in $ENVOWN/*(N); do
+    grep -qs " ${F:t} " $LOG_DIR/*.env-pipe(N) /dev/null && continue
+    K=$(<$F)
+    [[ "$(jira GET "/rest/api/2/issue/$K?fields=status" | jq -r '.fields.status.statusCategory.key // empty')" == done ]] && env_done $K
+  done
+}
+
+SHIPPED_ST='"On nightly", "To test", "Release candidate", Rejected'
+BLOCKERS_JQ='.fields.issuelinks[] | select(.type.inward == "is blocked by" and .inwardIssue != null) | .inwardIssue | select(.fields.status.statusCategory.key != "done" and ([.fields.status.name] | inside(["On nightly", "To test", "Release candidate", "Rejected"]) | not)) | .key'
+BE_MRS_JQ='.[] | select(.source_branch | ascii_downcase | . == $k or startswith($k + "-")) | select(.references.full | test("frontend!") | not) | "\(.state) \(.references.full | sub("!.*"; "") | split("/") | last)"'
+ENV_PICK_JQ='.[] | .name | ltrimstr("dynamic/") as $n | select(any($ARGS.positional[]; . as $p | $n == $p or ($n | startswith($p + "-")))) | $n'
+
+env_auto() {
+  local KEY=$1 F=$LOG_DIR/$1.env-auto J EP D N L EN S="" T="" BR WT DEPS=() OPEN=() WAIT=() REQ=() ENVS=() FRESH
+  local -A LBL
+  J=$(jira GET "/rest/api/2/issue/$KEY?fields=labels,parent,issuelinks") && jq -e '.fields.labels' <<<$J >/dev/null || { why "lookup failed: deps of $KEY"; return 2 }
+  jq -e '.fields.labels | any(startswith("env-"))' <<<$J >/dev/null && return 0
+  FRESH=($F(Nmm-${ENV_AUTO_EVERY:-10}))
+  [[ -f $F ]] && read -r S T <$F
+  case $S in
+    failed) return 0 ;;
+    req) why "waiting for dyn-env ${T%% *} (create requested)"; return 2 ;;
+    none) (( $#FRESH )) && return 0 ;;
+    wait) (( $#FRESH )) && { why "$T"; return 2 } ;;
+  esac
+  WT=($REPOS/cf-farm-frontend/.worktrees/${KEY}-*(N/[1]))
+  [[ -n "$WT" ]] || { why "no worktree in cf-farm-frontend"; return 2 }
+  BR=${WT:t}
+  EP=$(jq -r '.fields.parent.key // empty' <<<$J)
+  DEPS=($(jq -r "$BLOCKERS_JQ" <<<$J))
+  if [[ -n $EP ]]; then
+    L=$(jql "parent = $EP AND key != $KEY AND statusCategory != Done AND status not in ($SHIPPED_ST)" key 100) && jq -e '.issues' <<<$L >/dev/null || { why "lookup failed: epic $EP children"; return 2 }
+    DEPS+=($(jq -r '.issues[].key' <<<$L))
+  fi
+  for D in ${(u)DEPS}; do
+    N=$(glab api "groups/cleverfarm%2Fcleverfarm/merge_requests?state=all&search=$D&per_page=100" </dev/null | jq -r --arg k ${D:l} "$BE_MRS_JQ") || { why "lookup failed: MRs of $D"; return 2 }
+    if [[ $N == *opened\ * ]]; then
+      OPEN+=($D)
+      for S in ${(f)N}; do [[ $S == opened\ * ]] && REQ+=("${S#opened } z $D"); done
+      REQ=(${(u)REQ})
+    elif [[ $N == *merged\ * ]]; then
+      WAIT+=($D)
+    fi
+  done
+  if (( ! $#OPEN )); then
+    [[ -n "${TRIAGE_DRY:-}" ]] && { echo "  env-auto $KEY: ${WAIT:+wait for }${WAIT:-no BE dependency}" >&2; (( $#WAIT )) && return 2 || return 0 }
+    if (( $#WAIT )); then print -r -- "wait BE of ${(j:, :)WAIT} merged, not on nightly yet" >$F; why "BE of ${(j:, :)WAIT} merged, not on nightly yet"; return 2; fi
+    echo none >$F
+    return 0
+  fi
+  N=$(glab api "projects/$ENVPROJ/environments?search=dynamic/&states=available&per_page=100" </dev/null) && jq -e 'type == "array"' <<<$N >/dev/null || { why "lookup failed: dyn-envs"; return 2 }
+  L=$(jql "key in (${(j:,:)OPEN})" labels 50) && jq -e '.issues' <<<$L >/dev/null || { why "lookup failed: labels of ${(j:,:)OPEN}"; return 2 }
+  while read -r D S; do LBL[$D]=$S; done < <(jq -r '.issues[] | "\(.key) \([.fields.labels[] | select(startswith("env-"))] | join(" "))"' <<<$L)
+  for D in ${(f)"$(jq -r '[.issues[].fields.labels[] | select(startswith("env-")) | ltrimstr("env-")] | unique | .[]' <<<$L)"}; do
+    jq -e --arg n "dynamic/$D" 'any(.[]; .name == $n)' <<<$N >/dev/null && ENVS+=($D)
+  done
+  (( $#ENVS )) || ENVS=($(jq -r --args "$ENV_PICK_JQ" ${EP:l} ${OPEN:l} <<<$N | sort -u))
+  if [[ -n "${TRIAGE_DRY:-}" ]]; then
+    echo "  env-auto $KEY: BE ${(j:, :)OPEN} not on nightly → $(case $#ENVS in 1) echo "use $ENVS" ;; 0) echo "create ${${EP:-$OPEN[1]}:l}: ${(j:, :)REQ}" ;; *) echo "several fit: $ENVS" ;; esac)" >&2
+    why "dry run: env-auto would act"
+    return 2
+  fi
+  case $#ENVS in
+    1)
+      EN=$ENVS
+      relabel $KEY "" env-$EN
+      env_say $KEY "Frontend tohoto ticketu potřebuje backend z ${(j:, :)OPEN}, který ještě není na nightly, preview proti nightly by nestačilo. Ověření poběží na existujícím prostředí {{$EN}} (https://$EN.dev.cleverfarm.cz), štítek {{env-$EN}}. Při ověření do něj nasadím frontend z větve {{$BR}}, backend v něm nechám, jak je."
+      for D in $OPEN $EP; do
+        [[ $EN == ${D:l} || $EN == ${D:l}-* || " ${LBL[$D]:-} " == *" env-$EN "* ]] || continue
+        env_say $D "Do prostředí {{$EN}} budu při ověření $KEY nasazovat frontend z větve {{$BR}}. Preview https://$EN.dev.cleverfarm.cz pak ukazuje tuhle větev místo dosavadního frontendu, backend nechávám beze změny."
+      done
+      rm -f $F
+      info $KEY "env: auto use $EN (BE ${(j:,:)OPEN} not on nightly)"
+      note $KEY "dyn-env \`$EN\` picked automatically: BE ${(j:, :)OPEN} not on nightly"
+      return 0 ;;
+    0)
+      EN=${${EP:-$OPEN[1]}:l}
+      print -r -- "env: nové prostředí $EN, ${(j:, :)REQ}, frontend z větve $BR" >$LOG_DIR/$KEY.env-req
+      print -r -- "req $EN ${OPEN[*]}" >$F
+      info $KEY "env: auto create $EN requested (BE ${(j:,:)OPEN} not on nightly, no env of theirs up)"
+      why "waiting for dyn-env $EN (create requested)"
+      return 2 ;;
+    *)
+      print -r -- "wait several dyn-envs fit (${(j:, :)ENVS}), pick one: env: použij <name>" >$F
+      note $KEY "BE ${(j:, :)OPEN} not on nightly and several dyn-envs fit (${(j:, :)ENVS}): pick one with \`env: použij <name>\` in Jira"
+      why "several dyn-envs fit (${(j:, :)ENVS}), pick one: env: použij <name>"
+      return 2 ;;
+  esac
+}
+
 verify_targets() {
   local KEY=$1 R WT MR PID IID PIPE SHA PS EN
   [[ -n "$2" ]] || { why "no repo-* label"; return 2 }
+  if [[ ",$2," == *,cf-farm-frontend,* ]]; then env_auto $KEY || return 2; fi
   EN=$(verify_env $KEY) || return 2
   for R in ${(s:,:)2}; do
     WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
@@ -1043,6 +1139,14 @@ stage_rfix() {
 }
 
 stage_env() {
+  local AF=$LOG_DIR/$2.env-auto AUTO=""
+  [[ ${3:-} == auto ]] || { [[ -f $LOG_DIR/$2.env-pipe ]] && grep -q '^req ' $AF 2>/dev/null } && AUTO=1
+  env_run "$@"
+  [[ -n $AUTO && ! -f $LOG_DIR/$2.env-pipe ]] && grep -q '^req ' $AF 2>/dev/null && sed -i '1s/^req /failed /' $AF
+  return 0
+}
+
+env_run() {
   local KEY=$2 CID=${3:-0} LOG=$LOG_DIR/$2.log PF=$LOG_DIR/$2.env-pipe OUT=$LOG_DIR/$2.env-cmd
   local ACT EN PID URL="" RES ST W=() WHYNOT
   echo "=== env $KEY (comment $CID) $(date -Iseconds)" | tee -a $LOG
@@ -1052,7 +1156,7 @@ stage_env() {
   else
     env_resolve $KEY $CID
     limit_bail $KEY
-    echo $CID >$ENVHANDLED/$KEY
+    if [[ $CID == auto ]]; then rm -f $LOG_DIR/$KEY.env-req; else echo $CID >$ENVHANDLED/$KEY; fi
     echo "  resolved: $(head -1 $OUT 2>/dev/null || echo nothing)" | tee -a $LOG
     if [[ "$(head -1 $OUT 2>/dev/null)" == ASK\ * ]]; then
       env_say $KEY "K prostředí potřebuju upřesnit: $(head -1 $OUT | cut -c5-)
@@ -1066,6 +1170,10 @@ Nic jsem nespustil. Odpověz novým komentářem, který začíná {{env:}}."
       return 0
     fi
     ACT=${W[1]} EN=${W[2]} WHYNOT=$(sed -n '2,6p' $OUT)
+    if [[ -n $AUTO && $ACT != create ]]; then
+      note $KEY "automatic dyn-env request resolved to \`$ACT $EN\`, not create: nothing started, see \`$LOG\`"
+      return 0
+    fi
     if [[ $ACT == use ]]; then
       if [[ "$(env_state $EN)" != up ]]; then
         env_say $KEY "Prostředí {{$EN}} neexistuje (nebo se nepodařilo ověřit jeho stav), štítek jsem nenastavil."
@@ -1115,7 +1223,14 @@ $WHYNOT}
       relabel $KEY "$(ticket_env $KEY | sed 's/^./env-&/')" env-$EN
       env_unverify $KEY
       env_say $KEY "Prostředí {{$EN}} běží: https://$EN.dev.cleverfarm.cz
-Štítek {{env-$EN}}: ověření poběží tam, s frontendem z větve ticketu. Až bude ticket Done, prostředí samo zruším." ;;
+Štítek {{env-$EN}}: ověření poběží tam, s frontendem z větve ticketu. Až bude ticket Done, prostředí samo zruším."
+      if [[ -n $AUTO ]]; then
+        for D in ${${=$(<$AF)}[3,-1]}; do
+          [[ -z "$(ticket_env $D)" ]] && relabel $D "" env-$EN
+          env_say $D "Pro ověření frontendu z $KEY, který potřebuje backend z tohoto ticketu, jsem vytvořil prostředí {{$EN}}: https://$EN.dev.cleverfarm.cz, s backendem z vašeho MR. Můžete ho používat taky, štítek {{env-$EN}}. Zruším ho, až budou hotové všechny tickety s tímhle štítkem."
+        done
+        rm -f $AF
+      fi ;;
     redeploy)
       env_unverify $KEY
       env_say $KEY "Nasazeno do {{$EN}}: https://$EN.dev.cleverfarm.cz. Ověření poběží znovu." ;;
@@ -1328,6 +1443,10 @@ else
     | while read -r K R; do
       if W=$(verify_blocker $K $R </dev/null); then stall_note $K "$W"; else rm -f $STALLED/$K.*(N); echo "$K $R"; fi
     done)
+  for F in $LOG_DIR/*.env-req(N); do K=${${F:t}%.env-req}; ENVQ+=$'\n'"env-$K $K auto"; done
+  ENVQ=$(awk 'NF && !s[$1]++' <<<$ENVQ)
+  GCCHECKED=($LOG_DIR/.envgc-checked(Nmm-${ENV_GC_EVERY:-10}))
+  if (( ! ${#GCCHECKED} )) && [[ -z "${TRIAGE_DRY:-}" ]]; then touch $LOG_DIR/.envgc-checked; env_gc </dev/null; fi
   DONE=$(search 'project = DEV AND labels in (triaged, ai-mr, triage-failed, ai-fix-failed) AND labels not in (ai-done) AND status = Done' 5 \
     | jq -r '.issues[] | "\(.key) \(.fields.labels | map(select(startswith("sentry-")) | ltrimstr("sentry-")) | join(" "))"')
   CHECKED=($LOG_DIR/.conflicts-checked(Nmm-${CONFLICT_EVERY:-5}))

@@ -21,11 +21,13 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - 2026-11-30: on the next 3 feature tickets check `notes/<KEY>.md` has `## Sources` + `## Acceptance criteria` with verbatim rows, `PLAN.md` carries the table with `Where`, and count MR follow-ups vs DEV-3873 v1 (2 rework rounds, 3 blocked verifies, reset).
    - In-flight tickets: a follow-up on a `PLAN.md` written before the change must add `### Acceptance criteria` or it lands in `triage-failed`.
    - Open decision: FE change whose BE lives only on a feature / dyn env (DEV-3873: `dev-3657-pasture`). The preview runs against nightly, so every scenario is `DATA: missing` and the gate refuses `ai-fix`. Option: verifier redeploys that env with `FE_BRANCH=<branch>` (touches an env the BE dev uses).
+     2026-11-24: decided, reuse the dependency's existing env, done by env-auto (item 13). The `ai-fix` gate part stays open (item 7, analysis does not know the env).
    - Unverified: `--model opusplan` in `claude -p` for `impl` (no plan mode headless, so probably sonnet throughout). The sizing change only moves the analysis to opus.
 7. Dyn-env lane (2026-11-23, rollback tag `sw-factory-pre-dyn-env-2026-11-23`, README "Dyn-env lane"). Tested: `zsh -n`, `env_parse` accept / reject cases, `env:` marker filter, `env_state` on a live / stopped / unknown env, one dry tick, resolver run on `env: naklonuj dev-3657-pasture` (valid `RUN create …`, nothing started). Not run yet: a real `env:` comment end to end, verify with `env=… deploy=1`, destroy at Done.
    - First real ticket: DEV-3873 with `env: použij dev-3657-pasture` (answers the open decision in item 6). Check the Jira comments, label `env-dev-3657-pasture`, the redeploy in the verify log, `**Preview**` URLs in the MR note.
    - Analysis does not know the env: scenario Givens come from `tests/FIXTURES.md` (nightly data), so data that exists only in the env is still `DATA: missing` and the unrunnable gate refuses `ai-fix`. Needs a way to tell triage which env's data to use.
    - FE pipeline job `use Nightly backend` failing (FE needs an API nightly lacks) keeps the MR pipeline red, verify never starts even with an env label. Unverified whether that job is `allow_failure`.
+     2026-11-24: checked, it is (`.aws_amplify_deploy`, `allow_failure: true`, cf-farm-frontend `.gitlab-ci.yml`), and `verify_targets` counts allowed failures as green. Not a blocker.
    - Implementer's `/check-layout` does not use the env.
    - No per-env lock: with `VERIFY_SLOTS` > 1 two tickets on one env overwrite each other's FE.
    - `env: zruš to` while a create is running waits for that pipeline to end (same lock).
@@ -50,3 +52,10 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - First MR follow-up during verify: both units run, verify logs `stale: commits moved` when the follow-up pushed, labels end as before the change.
    - 2026-11-30: count `restart:` and `stale:` lines; redo the comment-while-running measurement (scratchpad method: my comments vs `=== ` headers).
    - Restart window race: a push between the last check and `systemctl stop` → the worker drops the verify labels (`unverify`), the next run sees the commits.
+13. Env-auto (2026-11-24, rollback tag `sw-factory-pre-env-auto-2026-11-24`, README "Dyn-env lane" → Env-auto). Tested: `zsh -n`, `test/worker-rules.zsh` (blocker links, BE MR branch match, env name pick), `env_auto` dry against live Jira / GitLab with the `env-` label hidden: DEV-3873 and DEV-3785 → `use dev-3657-pasture` (deps DEV-3821, DEV-3809 via epic DEV-3657). Not run for real: label + Jira comments, the `auto` create through the resolver, `env_gc`, ownership hand-over.
+   - First real ticket: next FE story in an epic with an open BE sibling. Check `<KEY>.env-auto`, the label, the comment on the ticket and on the env's dependency / epic, verify log `env <name>`.
+   - First auto create: `<KEY>.env-req` text, resolver line in `<KEY>.env-cmd` (tags from the BE MRs), labels on the dependencies, `env-owned/<env>`; at Done of the FE ticket the owner moves to a dependency still carrying the label.
+   - Epic siblings are a broad net: any open BE sibling counts, even an unrelated one. Watch for FE tickets moved off Amplify for nothing; narrow to blocker links only if it happens.
+   - Label points to an env that is gone → verify falls back to Amplify, env-auto does not run (label present). Could drop the stale label and pick again.
+   - MR search is by key in title / description; a BE MR without the key there is missed.
+   - `failed` state never expires (`rm <KEY>.env-auto` to retry).
