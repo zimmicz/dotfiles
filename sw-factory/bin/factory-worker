@@ -995,7 +995,7 @@ stage_impl() {
     note $1 "not implementing: no holdout scenario can run, nobody would see the UI before you ($U). Fix the fixture / env and reply in Jira, or accept blind: \`touch $LOG_DIR/$1.blind\` + re-add \`ai-fix\`"
     return 0
   fi
-  if implement $1 ${2-}; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; info $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; has_label $1 deps && close_bot_mr $1; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; info $1 "already fixed, closed as duplicate, Sentry resolves next run"; else fallback_comment $1 $S; relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
+  if implement $1 ${2-}; then mark_handled $1 $ID; relabel $1 ai-fix ai-mr; info $1 "draft MR: $(cat $LOG_DIR/$1.mr)"; if has_label $1 deps; then close_bot_mr $1; fi; elif search "key = $1 AND status = Done" 1 | jq -e '.issues | length > 0' >/dev/null; then relabel $1 ai-fix triaged; info $1 "already fixed, closed as duplicate, Sentry resolves next run"; else fallback_comment $1 $S; relabel $1 ai-fix ai-fix-failed; note $1 "ai-fix failed / bailed out, see Jira comment + \`$LOG_DIR/$1.log\`"; fi
 }
 
 wt_heads() {
