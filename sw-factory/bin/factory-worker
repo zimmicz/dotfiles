@@ -1311,12 +1311,15 @@ mem_mb() { awk -v k="$1:" '$1 == k { print int($2 / 1024) }' /proc/meminfo }
 swap_mb() { echo $(( $(mem_mb SwapTotal) - $(mem_mb SwapFree) )) }
 
 run_stage() {
-  local A0=$(mem_mb MemAvailable) S0=$(swap_mb) L=$LOCKS/$2
+  local A0=$(mem_mb MemAvailable) S0=$(swap_mb) L=$LOCKS/$2 W0=$(date +%s)
   [[ $1 == verify ]] && L=$LOCKS/$2.verify
   flock -n -o -E 75 $L $SELF --stage "$@" </dev/null
   local RC=$?
-  local P=$(<"/sys/fs/cgroup$(cut -d: -f3- /proc/self/cgroup)/memory.peak" 2>/dev/null)
+  local CG=/sys/fs/cgroup$(cut -d: -f3- /proc/self/cgroup)
+  local P=$(<$CG/memory.peak 2>/dev/null)
   [[ -n $P ]] && printf '%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n' "$(date -Iseconds)" $1 $2 $(( P / 1048576 )) $A0 $(mem_mb MemAvailable) $S0 $(swap_mb) $RC >>$LOG_DIR/mem.tsv
+  local CPU=$(awk '$1 == "usage_usec" { print int($2 / 1e6) }' $CG/cpu.stat 2>/dev/null) STALL=$(awk -F'total=' '/^some/ { print int($2 / 1e6) }' $CG/cpu.pressure 2>/dev/null)
+  [[ -n $CPU && -n $STALL ]] && (( RC != 75 )) && printf '%s\t%s\t%s\t%d\t%d\t%d\t%s\n' "$(date -Iseconds)" $1 $2 $CPU $(( $(date +%s) - W0 )) $STALL $RC >>$LOG_DIR/cpu.tsv
   (( RC == 75 )) && echo "  $2 busy in another stage, skipped"
   if (( RC != 0 && RC != 2 && RC != 75 )); then
     echo "  stage $1 $2 crashed, exit $RC"
@@ -1399,7 +1402,7 @@ spawn_stage() {
   else
     systemd-run --user --collect --quiet --unit=$UNIT "--setenv=PATH=$PATH" ${GRILL:+--setenv=GRILL=$GRILL} \
       -p EnvironmentFile=$HOME/.config/jira.env -p EnvironmentFile=$HOME/.config/sw-factory.env -p RuntimeMaxSec=$(stage_timeout $S) \
-      -p SuccessExitStatus="2 75" $CMD || return 1
+      -p CPUWeight=${STAGE_CPU_WEIGHT:-20} -p Nice=10 -p SuccessExitStatus="2 75" $CMD || return 1
     echo "spawned $UNIT (slots ${SLOT:t} ${CAP:t})"
   fi
   TAKEN+=($SLOT $CAP)
@@ -1538,7 +1541,7 @@ WORK=$(
 TD=$EPOCHREALTIME
 dispatch <<<"$WORK"
 [[ -z "${1:-}" ]] && gate_all 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected)'
-[[ -z "${1:-}" && -z "${TRIAGE_DRY:-}" ]] && LC_NUMERIC=C printf '%s\t%.1f\t%.1f\t%s\t%d\n' "$(date -Iseconds -d @${T0%.*})" $(( TD - T0 )) $(( EPOCHREALTIME - T0 )) $GLMODE $SPAWNED >>$LOG_DIR/ticks.tsv
+[[ -z "${1:-}" && -z "${TRIAGE_DRY:-}" ]] && LC_NUMERIC=C printf '%s\t%.1f\t%.1f\t%s\t%d\t%s\n' "$(date -Iseconds -d @${T0%.*})" $(( TD - T0 )) $(( EPOCHREALTIME - T0 )) $GLMODE $SPAWNED "$(awk -F'avg60=' '/^some/ { split($2, a, " "); print a[1] }' /proc/pressure/cpu)" >>$LOG_DIR/ticks.tsv
 
 if [[ -n "${1:-}" ]]; then
   (( SPAWNED )) || { echo "nothing spawned: ticket already running, no free slot, or no work for its labels" >&2; exit 75 }

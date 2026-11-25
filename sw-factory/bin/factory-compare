@@ -73,8 +73,24 @@ memc() { gawk -F'\t' -v p=$1 -v s=$2 -v c=$3 '$1 == p && $2 == s { print $c }' <
 memlow() { gawk -F'\t' -v p=$1 '$1 == p && (m == "" || $4 < m) { m = $4 } END { print (m == "" ? "-" : m) }' <<<"$MEMR" }
 memswap() { gawk -F'\t' -v p=$1 '$1 == p { t++; if ($5 > 0) s++ } END { if (t) printf "%d of %d", s, t; else print "-" }' <<<"$MEMR" }
 
-TICKR=$([[ -f $LOG_DIR/ticks.tsv ]] && while IFS=$'\t' read -r TS TD TT GM SP; do printf '%s\t%s\t%s\t%s\n' $(period_of $TS) $TD $TT $GM; done <$LOG_DIR/ticks.tsv)
+TICKR=$([[ -f $LOG_DIR/ticks.tsv ]] && while IFS=$'\t' read -r TS TD TT GM SP PSI; do printf '%s\t%s\t%s\t%s\t%s\n' $(period_of $TS) $TD $TT $GM "${PSI:--}"; done <$LOG_DIR/ticks.tsv)
 tickc() { gawk -F'\t' -v p=$1 -v c=$2 -v g=${3:-} '$1 == p && (g == "" || $4 == g) { print $c }' <<<"$TICKR" | med }
+psihi() { gawk -F'\t' -v p=$1 '$1 == p && $5 != "-" { t++; if ($5 >= 25) h++ } END { if (t) printf "%d%% (%d of %d)", 100 * h / t, h, t; else print "-" }' <<<"$TICKR" }
+
+CPUR=$([[ -f $LOG_DIR/cpu.tsv ]] && while IFS=$'\t' read -r TS ST K CPU W STALL RC; do printf '%s\t%s\t%s\t%s\n' $(period_of $TS) $ST $CPU $(( W ? 100 * STALL / W : 0 )); done <$LOG_DIR/cpu.tsv)
+cpuc() { gawk -F'\t' -v p=$1 -v s=$2 -v c=$3 '$1 == p && $2 == s { print $c }' <<<"$CPUR" | med }
+
+CHK=$(gawk '
+function sec(l) { return substr(l, 1, 2) * 3600 + substr(l, 4, 2) * 60 + substr(l, 7, 2) }
+function gate() { if (run && g) print "gate\t" rts "\t" g; run = 0 }
+/^=== / { gate(); ts = $NF; pend = ""; if (/^=== implement/) { run = 1; rts = ts; g = 0 } next }
+/^[0-9][0-9]:[0-9][0-9]:[0-9][0-9] / {
+  if (pend != "") { d = sec($0) - pend; if (d >= 0 && d < 3600) print "commit\t" ts "\t" d; pend = "" }
+  if (!/🔧 Bash/) next
+  if (/git commit/ && !/--no-verify/) pend = sec($0)
+  if (run && /check:typescript[^:]|nr typecheck|pnpm (run )?test[^:]|nr test[^:]|check:eslint|nr lint/) g++ }
+ENDFILE { gate() }' $LOG_DIR/DEV-*.log | while IFS=$'\t' read -r K TS V; do printf '%s\t%s\t%s\n' $K $(period_of $TS) $V; done)
+chk() { gawk -F'\t' -v k=$1 -v p=$2 '$1 == k && $2 == p { print $3 }' <<<"$CHK" | med }
 
 blk() { gawk -F'\t' -v p=$1 '$1 == p { if ($2 == "retry") r++; else { t++; if ($2 == "blocked") b++ } } END { if (t) printf "%d%% (%d of %d), %d auto-retried, %d parked", 100 * b / t, b, t, r, b - r; else print "-" }' <<<"$BLK" }
 
@@ -114,6 +130,14 @@ row "dispatcher tick: s until stages spawn (dry profile 2026-11-23: ~30, GitLab 
 row "dispatcher tick: total s" "$(tickc before 3)" "$(tickc after 3)"
 row "tick until spawn, GitLab events vs full scan" "-" "$(tickc after 2 events) / $(tickc after 2 full)"
 row "stages ending with swap in use" "$(memswap before)" "$(memswap after)"
+row "system CPU stalled % (PSI some avg60, per tick)" "$(tickc before 5)" "$(tickc after 5)"
+row "ticks with CPU stalled ≥ 25 %" "$(psihi before)" "$(psihi after)"
+for S in impl mr rfix verify review; do
+  row "$S CPU s per run" "$(cpuc before $S 3)" "$(cpuc after $S 3)"
+  row "$S % of wall time stalled on CPU" "$(cpuc before $S 4)" "$(cpuc after $S 4)"
+done
+row "git commit wall s (pre-commit hook)" "$(chk commit before)" "$(chk commit after)"
+row "full test / lint / typecheck calls per implement run that ran any" "$(chk gate before)" "$(chk gate after)"
 row "implement rounds per ticket" "$(per_ticket before implement)" "$(per_ticket after implement)"
 row "analyze runs per ticket" "$(per_ticket before analyze)" "$(per_ticket after analyze)"
 row "TICKET.md bytes at stage start" "$(col before '*' 12 | med)" "$(col after '*' 12 | med)"

@@ -6,5 +6,7 @@ Type=oneshot
 Environment=PATH=%h/.local/bin:%h/.local/share/mise/shims:%h/bin:/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=%h/.config/jira.env
 EnvironmentFile=%h/.config/sw-factory.env
+CPUWeight=20
+Nice=10
 ExecStart=%h/bin/factory-worker
 TimeoutStartSec=10min
