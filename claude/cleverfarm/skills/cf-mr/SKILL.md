@@ -5,6 +5,8 @@ description: |
   "merge request", "push", "cf-mr", or "ready for review". MR body =
   mattpocock `pr` (Summary visual, Evidence before/after with check-layout
   screenshots uploaded, Merge Danger) wrapped in our prefix / screens / footer.
+  New feature flag in the diff → Jira label release-bot-info + comment
+  telling the release operator to switch it on in production.
   With `--headless`: draft MR via glab, no reviewers, no prompts.
 ---
 
@@ -31,6 +33,9 @@ description: |
    - `description`: per `## MR body` below
    - `assignee_ids`: [18554466] (michal.zimmermann1)
    - `reviewer_ids`: per step 6 (empty for non-cf-farm-frontend repos)
+7a. **Feature flag delivery** — added lines of `git diff origin/<base>...HEAD` contain `useFlag("<name>")` with a flag name not in `origin/<base>` → per new flag: `jira PUT /rest/api/2/issue/<KEY> '{"update":{"labels":[{"add":"release-bot-info"}]}}'`, then ONE `jira add-comment <KEY>` (Jira wiki markup, 🤖 prefix line from `~/.claude/my-voice.md`, then Czech), skip if a comment naming the flag already exists:
+    `Feature flag {{<name>}}: na nightly a stagingu už je zapnutý, nic nedělat. Při releasu na produkci (po akceptaci) ho zapnout: GitLab cf-farm-frontend → Deploy → Feature flags (https://gitlab.com/cleverfarm/cleverfarm/cf-farm-frontend/-/feature_flags) → {{<name>}} → Edit → strategie {{default}} → přidat scope {{production}}.`
+    The release bot (`cf-release`) shows flagged tickets' comments in both RC and production phase and blocks until acknowledged. Mention the flag in `## Merge Danger` too.
 8. Transition ticket to review via `atlassian.getTransitionsForJiraIssue` then `atlassian.transitionJiraIssue` — pick the transition whose target status is "Review" (or "In Review" if that's what exists)
 9. Return MR URL (all of them for multi-repo)
 10. **Amplify deploy preview** — only if repo is `cleverfarm/cleverfarm/cf-farm-frontend`: read `references/amplify-preview.md` (in this skill's directory) and follow it. Other repos: skip.
@@ -58,6 +63,7 @@ No user present. Steps 1–5 as above, then:
 
 - Step 6: no reviewers, any repo.
 - Step 7: `glab mr create --draft --yes --source-branch <branch> --target-branch <base> --assignee michal.zimmermann1 --title "<title>" --description-file <file>` (GitLab MCP not available headless; write the body to a file in the scratchpad first, the body has code fences and newlines). Title rule as in step 7, body per `## MR body`.
+- Step 7a: as above.
 - Step 8: skip — ticket stays In Progress while the MR is draft.
 - Step 10: cf-farm-frontend only — play `use Nightly backend` without asking, report preview URL.
 - Steps 11–12: skip.
