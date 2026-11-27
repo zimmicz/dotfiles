@@ -272,7 +272,8 @@ Pick up manually instead: `cd ~/work/cleverfarm/repos/<repo> && cf-work DEV-XXXX
 ## Guardrails
 
 - Everything runs as me (Jira, GitLab, Sentry, Slack tokens are mine). Posts start with the 🤖 prefix from `~/.claude/my-voice.md`.
-- Analysis: read-only tools (ctx_*, codegraph, `git log/show/blame/grep`, Sentry `get_sentry_resource` + `search_errors`) + write only `PLAN.md`, `notes/<KEY>.md`, `holdout/<KEY>.md` + `<KEY>.api.md`, `<KEY>.grill` + `jira add-comment`.
+- Permission model: every stage runs in auto mode (`defaultMode: auto` + the global allows of `claude/user/settings.json` apply to `claude -p` too). `--allowedTools` only pre-approves, it restricts nothing: anything else goes to the auto-mode classifier (11-05 → 11-27: analysis ran 3015 Bash calls, mostly `cat` / `grep` / `sed`, 14 denied). The only mechanical guard is `--disallowedTools`, prefix patterns. `NO_SHIP` (`git push`, `git commit`, `git reset --hard`, `glab mr merge/approve`) is denied to analysis, review, verify and the env resolver; `NO_REPO_WRITE` (`Edit` / `Write` under `~/work/cleverfarm/repos`) to review, verify and the env resolver. Next: review in an enforced mode without user settings, checked on the review eval first (TODO item 15).
+- Analysis: meant to use read-only tools (ctx_*, codegraph, `git log/show/blame/grep`, Sentry `get_sentry_resource` + `search_errors`) and write only `PLAN.md`, `notes/<KEY>.md`, `holdout/<KEY>.md` + `<KEY>.api.md`, `<KEY>.grill` + `jira add-comment`; not enforced beyond `NO_SHIP` + `jira POST/PUT/DELETE` denied (21 such calls before, e.g. a spin-off ticket in DEV-1104; `jira add-comment` stays) (its `PLAN.md` lives in the worktree, so repo writes can't be denied by path: 6 writes into a worktree other than `PLAN.md` so far).
 - Implement: denied `git push --force/-f`, push to develop/staging/production, `reset --hard`, `glab mr merge/approve`, writes to `holdout/` + `holdout-proposed/`. Protected branches enforce it server-side too.
 - Holdout amend (separation of duties: the implementer judged by the scenarios can only flag them): cwd = sandbox `amend/<KEY>/` with copies, no MCP, denied `Bash`, `Agent`, web, `Edit`, `Read` of `~/work/cleverfarm/repos/**` + `notes/`, write only `holdout-proposed/<KEY>.*`. Nothing lands in `holdout/` without my `A`.
 - Implementation only after I add `ai-fix`. MR always draft, no reviewers.
@@ -330,6 +331,8 @@ Ownership: `env-owned/<env>` (content = ticket key) is written only for an env t
 By hand: `factory-worker DEV-X --env` re-runs the latest `env:` comment. Not covered: the implementer's `/check-layout` does not use the env.
 
 ## Rollback
+
+Stage deny lists (`NO_SHIP`, `NO_REPO_WRITE`): `git -C ~/dotfiles checkout sw-factory-pre-stage-denies-2026-11-27 -- sw-factory/bin/factory-worker`
 
 Usage-limit handling: `git -C ~/dotfiles checkout sw-factory-pre-limit-2026-11-23 -- sw-factory/bin/factory-worker && rm -f ~/.local/state/sw-factory/.limit*`
 

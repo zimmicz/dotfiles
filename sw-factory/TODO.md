@@ -65,3 +65,7 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - Gate is On nightly, not MR merge: merge → nightly lag delays children. Switch to MR state (glab, like env-auto) if the lag hurts.
    - No epic row in dash grouping the children; add if the list gets messy.
    - Epic with `triage`: label dropped + Slack note; check it fires once.
+15. Stage permissions (2026-11-27 audit, rollback tag `sw-factory-pre-stage-denies-2026-11-27`, README Guardrails "Permission model"). Done: `NO_SHIP` / `NO_REPO_WRITE` deny lists on analysis, review, verify, env resolver; analysis also denied `jira POST/PUT/DELETE`. Tested: `zsh -n`, `test/worker-rules.zsh`. Not run for real: a stage with the new denies.
+   - First review + verify after the change: no `permission` denial lines in `<KEY>.log` for a command the stage needs (report write, MR note, video upload).
+   - Next: review stage enforced, `--setting-sources` without `user` + a `--permission-mode` that denies what is not allowed (choices per `claude --help`: acceptEdits, auto, bypassPermissions, manual, …; read the full list first), allowlist extended by what review really uses (`cat`, `sed -n`, `grep`, `ls`, `glab mr view`). Replay on `~/.local/state/sw-factory/eval/review/` baseline vs variant ×3 before it goes live. Then verify, analysis last (3015 off-list Bash calls to re-home, `/tmp` comment drafts, 21 Jira POST/PUT).
+   - Analysis still may write into its worktree (6 times so far, one `Edit` of app code in DEV-3625): no path deny possible while `PLAN.md` lives there.

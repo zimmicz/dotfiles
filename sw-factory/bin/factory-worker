@@ -26,6 +26,8 @@ CF_ENV=$(find ~/.claude/plugins/cache -type f -name cf-env.sh -path '*/cf-dyn-en
 mkdir -p $LOG_DIR $HOLDOUT $TNOTES $LOCKS $SLOTDIR $HANDLED $STALLED $GLHANDLED $SUSPECT $PROPOSED $SENT $ENVOWN $ENVHANDLED $UNVERIFIED ~/cf-env-tmp
 
 HEADLESS_SETTINGS='{"enabledPlugins":{"caveman@caveman":false,"ponytail@ponytail":false,"slack@claude-plugins-official":false,"cf-planning@cleverfarm":false,"cf-release@cleverfarm":false,"cf-kb@cleverfarm":false,"cf-eod@cleverfarm":false,"cf-bug-report@cleverfarm":false,"cf-cli-skill@cleverfarm":false,"cf-investigator@cleverfarm":false,"cf-cc@cleverfarm":false,"typescript-lsp@claude-plugins-official":false}}'
+NO_SHIP="Bash(git push:*) Bash(git commit:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*)"
+NO_REPO_WRITE="Edit(/$REPOS/**) Write(/$REPOS/**)"
 export MCP_TIMEOUT=${MCP_TIMEOUT:-120000}
 PW_ARGS='["--prefer-offline","-y","@playwright/mcp@0.0.83","--headless","--executable-path","/usr/bin/chromium","--caps","devtools","--secrets","'"$HOME"'/.config/cleverfarm/e2e.env"]'
 
@@ -245,6 +247,7 @@ analyze() {
   (cd $WT && claude -p "/cf-work-headless $KEY$GARGS" \
     --model $TIER $DIRS --settings "$HEADLESS_SETTINGS" \
     --allowedTools "Read Write(./PLAN.md) Edit(./PLAN.md) Write(/$LOG_DIR/$KEY.grill) Write(/$TNOTES/$KEY.md) Edit(/$TNOTES/$KEY.md) Write(/$HOLDOUT/$KEY.md) Edit(/$HOLDOUT/$KEY.md) Write(/$HOLDOUT/$KEY.api.md) Edit(/$HOLDOUT/$KEY.api.md) mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__claude_ai_Sentry__get_sentry_resource mcp__claude_ai_Sentry__search_errors Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git grep:*) Bash(jira add-comment:*)" \
+    --disallowedTools "$NO_SHIP Bash(jira POST:*) Bash(jira PUT:*) Bash(jira DELETE:*)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG) \
     && { [[ "$(grill_outcome $KEY)" == ASK ]] || plan_ok $WT/PLAN.md $LOG; } \
     && echo "  ok -> $WT/PLAN.md${$(grill_outcome $KEY):+ (grill: $(grill_outcome $KEY))}" | tee -a $LOG
@@ -397,7 +400,7 @@ env_resolve() {
   (cd ${WT:-$LOG_DIR} && claude -p "/cf-env-resolve $KEY request=$ASK out=$OUT env=$(ticket_env $KEY) repos=$(ticket_repos $KEY) branch=${WT:t}" \
     --model sonnet --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '')" \
     --allowedTools "Read Skill Write(/$OUT) Bash(glab api:*) Bash(glab mr list:*) Bash($CF_ENV list) Bash($CF_ENV status:*) Bash($CF_ENV log:*) Bash(jq:*)" \
-    --disallowedTools "Edit Bash(git:*) Bash($CF_ENV run:*) Bash(glab api -X:*) Bash(glab api --method:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
+    --disallowedTools "$NO_SHIP $NO_REPO_WRITE Edit Bash(git:*) Bash($CF_ENV run:*) Bash(glab api -X:*) Bash(glab api --method:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   [[ -s $OUT ]]
 }
@@ -627,7 +630,7 @@ verify() {
     --model sonnet --settings "$HEADLESS_SETTINGS" \
     --strict-mcp-config --mcp-config "$MCP" \
     --allowedTools "Read Skill Write(/$OUT) Write(/$MEDIA/narration.tsv) mcp__playwright Bash(glab mr note:*) Bash(glab api:*) Bash($CF_ENV:*) Bash(jq:*) Bash(curl:*) Bash(bash $HOME/.claude/skills/cf-holdout-ui/narrate.sh $MEDIA $KEY) Bash(bash $HOME/.claude/skills/cf-holdout-api/run-scenarios.sh:*)" \
-    --disallowedTools "Edit Bash(git:*) Edit(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
+    --disallowedTools "$NO_SHIP $NO_REPO_WRITE Edit Bash(git:*) Edit(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null) U
   echo "  ${VERDICT:-no report}" | tee -a $LOG
@@ -822,7 +825,7 @@ review() {
   (cd $WT0 && claude -p "/cf-review $KEY repos=${(j:,:)${(f)T}} branch=${WT0:t} report=$OUT$PRIOR" $CARGS \
     --model opus --settings "$HEADLESS_SETTINGS" --strict-mcp-config --mcp-config "$(mcp_config '' lean-ctx codegraph)" \
     --allowedTools "Read Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore Write(/$OUT) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git blame:*) Bash(git merge-base:*) Bash(git fetch:*) Bash(glab mr note:*) Bash(glab api:*) Bash(jq:*)" \
-    --disallowedTools "Edit Bash(git push:*) Bash(git commit:*) Bash(git checkout:*) Bash(git reset:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
+    --disallowedTools "$NO_SHIP $NO_REPO_WRITE Edit Bash(git push:*) Bash(git commit:*) Bash(git checkout:*) Bash(git reset:*) Bash(pnpm:*) Bash(nr:*) Bash(npx:*) Read(/$HOLDOUT/**) Read(/$TNOTES/**) Read(/$SUSPECT/**) Read(/$PROPOSED/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | stream >>$LOG)
   local VERDICT=$(head -1 $OUT 2>/dev/null)
   echo "  ${VERDICT:-no report}" | tee -a $LOG
