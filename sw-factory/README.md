@@ -336,6 +336,8 @@ Unreview (verify-fix + agent-resolved conflict drop `ai-reviewed` / `ai-quizzed`
 
 Sentry gate (`needs-answer` blocks a new Sentry ticket): `git -C ~/dotfiles checkout sw-factory-pre-sentry-gate-2026-11-27 -- sw-factory/bin/sentry-triage sw-factory/test/triage-rules.zsh`
 
+Dash fixes (resume command, stats run keys, action keys off in hidden views): `git -C ~/dotfiles checkout sw-factory-pre-dash-fixes-2026-11-27 -- sw-factory/dash && (cd ~/dotfiles/sw-factory/dash && go build -o ~/bin/factory-dash .) && systemctl --user restart factory-dash.service`
+
 Stage deny lists (`NO_SHIP`, `NO_REPO_WRITE`): `git -C ~/dotfiles checkout sw-factory-pre-stage-denies-2026-11-27 -- sw-factory/bin/factory-worker`
 
 Usage-limit handling: `git -C ~/dotfiles checkout sw-factory-pre-limit-2026-11-23 -- sw-factory/bin/factory-worker && rm -f ~/.local/state/sw-factory/.limit*`

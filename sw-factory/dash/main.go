@@ -664,7 +664,7 @@ func parseLog(r *row, path string) {
 			r.last = t
 		}
 		if _, cmd, ok := strings.Cut(t, "reopen: "); ok && strings.HasPrefix(t, "🆔") {
-			r.resume = cmd
+			r.resume, _, _ = strings.Cut(cmd, " — transcript ")
 		}
 	}
 }

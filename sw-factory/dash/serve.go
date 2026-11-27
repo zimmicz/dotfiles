@@ -887,14 +887,17 @@ func parseRuns(path string) []runRec {
 			if len(f) < 3 {
 				continue
 			}
-			r := runRec{tools: map[string]int{}}
+			r := runRec{tools: map[string]int{}, stage: f[1], key: strings.TrimSuffix(filepath.Base(path), ".log")}
+			i := slices.IndexFunc(f[1:], jiraKey.MatchString) + 1
 			switch {
-			case jiraKey.MatchString(f[1]):
-				r.stage, r.key = "analyze", f[1]
 			case strings.HasPrefix(f[1], "http"):
-				r.stage, r.key = "conflict", strings.TrimSuffix(filepath.Base(path), ".log")
-			default:
-				r.stage, r.key = f[1], f[2]
+				r.stage = "conflict"
+			case i == 1:
+				r.stage, r.key = "analyze", f[1]
+			case i == 3 && !strings.ContainsAny(f[2], "0123456789"):
+				r.stage, r.key = f[1]+" "+f[2], f[3]
+			case i > 1:
+				r.key = f[i]
 			}
 			r.start, _ = time.Parse(time.RFC3339, f[len(f)-1])
 			out = append(out, r)

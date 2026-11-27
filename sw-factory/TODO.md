@@ -74,3 +74,4 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - Known gap: quiz record SHAs are pre-rebase, the re-quiz delta shows develop noise.
    - Known gap: a fix I push by hand still leaves the labels standing.
 17. Sentry gate counts `needs-answer` (2026-11-27, rollback tag `sw-factory-pre-sentry-gate-2026-11-27`). Tested: `test/triage-rules.zsh`, `sentry-triage --dry-run` gate verdict. Not run for real: a grilled Sentry ticket (`needs-answer`) blocking the day's new ticket.
+18. Dash fixes (2026-11-27, rollback tag `sw-factory-pre-dash-fixes-2026-11-27`): `c` resume cuts the ` — transcript …` suffix, stats key `review (incremental)` / `holdout amend` / `conflict` runs right, ticket action keys do nothing in UI fix / No sprint / Stats views. Tested: `go test`. Not run for real: `c` on a live ticket, the key guard by hand in the browser.

@@ -688,6 +688,7 @@ document.onkeydown = e => {
     if (d) { ufi = Math.min(Math.max(ufi + d, 0), uf.length - 1); renderUIFix(); e.preventDefault(); return }
     if (nk) { nk(); e.preventDefault(); return }
   }
+  if (['uifix', 'nosprint', 'stats'].includes(view) && !(k.length === 1 && '?i/123BSZr'.includes(k))) return
   const openMain = () => r.MR ? openURL(r.MR, 'MR') : openURL(r.JiraURL, 'jira ticket')
   const keys = {
     '?': showHelp, i: showSys, '/':() => { $('q').focus(); $('q').select() }, '1': () => go('overview'), '2': () => go(view === 'uifix' ? 'overview' : 'uifix'), '3': () => go(view === 'nosprint' ? 'overview' : 'nosprint'), B: () => go(view === 'board' ? 'overview' : 'board'), S: () => go(view === 'stats' ? 'overview' : 'stats'),
