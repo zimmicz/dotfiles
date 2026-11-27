@@ -1316,6 +1316,17 @@ func (s *server) handler() http.Handler {
 		}
 		writeJSON(w, map[string]string{"HTML": mdHTML(askKeyRe.ReplaceAllString(ans, "[$0](#k=$0)"))})
 	})
+	mux.HandleFunc("POST /api/open", func(w http.ResponseWriter, r *http.Request) {
+		var a struct{ URL string }
+		json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&a)
+		if u, err := url.Parse(a.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			http.Error(w, "not an http(s) url", http.StatusBadRequest)
+			return
+		}
+		if out, err := exec.Command("systemd-run", "--user", "--collect", "--quiet", "sh", "-c", `i3-msg -q '[class="Vivaldi" instance="^vivaldi"] focus'; sleep 0.2; exec xdg-open "$1"`, "sh", a.URL).CombinedOutput(); err != nil {
+			http.Error(w, strings.TrimSpace(string(out))+" "+err.Error(), http.StatusInternalServerError)
+		}
+	})
 	mux.HandleFunc("POST /api/action", func(w http.ResponseWriter, r *http.Request) {
 		var a actionReq
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 40<<20)).Decode(&a); err != nil {

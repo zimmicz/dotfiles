@@ -211,6 +211,7 @@ func TestGuard(t *testing.T) {
 		{"media traversal", "GET", "/media/DEV-1.verify-media/..%2f..%2fdash.token", "127.0.0.1:7777", "", true, 404},
 		{"media wrong dir", "GET", "/media/holdout/DEV-1.jpg", "127.0.0.1:7777", "", true, 404},
 		{"token login", "GET", "/?t=secret-token", "127.0.0.1:7777", "", false, 302},
+		{"open without http url", "POST", "/api/open", "127.0.0.1:7777", "http://127.0.0.1:7777", true, 400},
 	}
 	for _, c := range cases {
 		if got := call(c.method, c.path, c.host, c.origin, c.cookie); got != c.want {

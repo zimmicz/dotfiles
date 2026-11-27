@@ -504,7 +504,15 @@ async function renderUIFix(fetchIt) {
 function go(v) { view = v; render(); if (v === 'stats') renderStats(); if (v === 'nosprint') renderNoSprint(true); if (v === 'uifix') renderUIFix(true); if (v === 'overview') loadBody() }
 function select(k) { if (k === cur) return; cur = k; render(); if (view === 'overview') loadBody() }
 function move(d) { const rs = visible(), i = rs.findIndex(r => r.Key === cur); const n = rs[Math.min(Math.max(i + d, 0), rs.length - 1)]; if (n) select(n.Key) }
-function openURL(u, what) { u ? (window.open(u, '_blank'), say('opened ' + u)) : say('no ' + what, true) }
+async function openTab(u) {
+  const r = await fetch('/api/open', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({URL: u})}).catch(() => null)
+  if (!r || !r.ok) window.open(u, '_blank')
+}
+function openURL(u, what) { u ? (openTab(u), say('opened ' + u)) : say('no ' + what, true) }
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a[target="_blank"]')
+  if (a && /^https?:/.test(a.href)) { e.preventDefault(); openTab(a.href) }
+})
 
 async function act(action, extra = {}, dry = true) {
   const body = {Key: cur, Action: action, Dry: dry, ...extra}
