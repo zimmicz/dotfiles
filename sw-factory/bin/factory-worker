@@ -939,9 +939,11 @@ $HOW${${GATED:#false}:+
 
 No code changed: git applied every commit as is, only \`pnpm-lock.yaml\` was regenerated if it conflicted. Existing approvals stay valid.}" >/dev/null
   echo "  rebased + pushed" | tee -a $LOG
-  if [[ $HOW != (clean\ rebase|lockfile\ regenerated) && -n "$KEY" ]] && search "key = $KEY AND labels = ai-verified" 1 | jq -e '.issues | length > 0' >/dev/null; then
+  if [[ $HOW != (clean\ rebase|lockfile\ regenerated) && -n "$KEY" ]] && search "key = $KEY AND labels in (ai-verified, ai-reviewed, ai-quizzed)" 1 | jq -e '.issues | length > 0' >/dev/null; then
     jira PUT "/rest/api/2/issue/$KEY" '{"update":{"labels":[{"remove":"ai-verified"}]}}' >/dev/null
-    echo "  info: $WHO rebased, conflicts resolved by agent, holdout re-verify queued" >>$LOG
+    unreview $KEY
+    rm -f $UNVERIFIED/$KEY.md $LOG_DIR/$KEY.reviewed
+    echo "  info: $WHO rebased, conflicts resolved by agent, ai-verified / ai-reviewed / ai-quizzed dropped, holdout re-verify + full review queued" >>$LOG
   else
     echo "  info: $WHO rebased onto $TGT (${${HOW%%$'\n'*}#- })" >>$LOG
   fi
@@ -1035,9 +1037,15 @@ restart_young() {
   echo "$(date '+%T') restart: new comment $(( NOW - T )) s into $RS, stopped (uncommitted work stashed), all comments next tick" | tee -a $LOG_DIR/$KEY.log
 }
 
+unreview() {
+  limit_bail $1
+  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-reviewed"},{"remove":"ai-quizzed"}]}}' >/dev/null
+}
+
 unverify() {
   limit_bail $1
-  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"},{"remove":"ai-quizzed"},{"remove":"ai-reviewed"}]}}' >/dev/null
+  jira PUT "/rest/api/2/issue/$1" '{"update":{"labels":[{"remove":"ai-verified"},{"remove":"ai-verify-failed"},{"remove":"ai-verify-retry"}]}}' >/dev/null
+  unreview $1
   rm -f $UNVERIFIED/$1.md
 }
 
@@ -1116,9 +1124,9 @@ stage_verify() {
     H0=$(wt_heads $KEY)
     implement $KEY ${REPO%%,*} "--verify-fix $REPORT"
     limited && jira PUT "/rest/api/2/issue/$KEY" '{"update":{"labels":[{"remove":"ai-verify-retry"}]}}' >/dev/null
-    if after_amend $KEY; then relabel $KEY ai-verify-retry ai-verify-failed
+    if after_amend $KEY; then [[ "$(wt_heads $KEY)" == "$H0" ]] || unreview $KEY; relabel $KEY ai-verify-retry ai-verify-failed
     elif [[ "$(wt_heads $KEY)" == "$H0" ]]; then relabel $KEY ai-verify-retry ai-verify-failed; note $KEY "holdout scenarios failed, fix round pushed nothing, needs you: \`$REPORT\` + Jira comment"
-    else env_push $KEY "$H0"; info $KEY "holdout scenarios failed, fix pushed, re-verify next run ($(failed_scenarios $REPORT) first)"; fi
+    else env_push $KEY "$H0"; unreview $KEY; info $KEY "holdout scenarios failed, fix pushed, re-verify next run ($(failed_scenarios $REPORT) first)"; fi
   fi
   return 0
 }

@@ -69,3 +69,7 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - First review + verify after the change: no `permission` denial lines in `<KEY>.log` for a command the stage needs (report write, MR note, video upload).
    - Next: review stage enforced, `--setting-sources` without `user` + a `--permission-mode` that denies what is not allowed (choices per `claude --help`: acceptEdits, auto, bypassPermissions, manual, …; read the full list first), allowlist extended by what review really uses (`cat`, `sed -n`, `grep`, `ls`, `glab mr view`). Replay on `~/.local/state/sw-factory/eval/review/` baseline vs variant ×3 before it goes live. Then verify, analysis last (3015 off-list Bash calls to re-home, `/tmp` comment drafts, 21 Jira POST/PUT).
    - Analysis still may write into its worktree (6 times so far, one `Edit` of app code in DEV-3625): no path deny possible while `PLAN.md` lives there.
+16. Unreview (2026-11-27, rollback tag `sw-factory-pre-unreview-2026-11-27`). Tested: `zsh -n`, `test/worker-rules.zsh` (label payloads). Not run for real: a verify-fix push on a ticket already `ai-reviewed`, an agent-resolved conflict.
+   - First agent-resolved conflict: check `ai-verified` / `ai-reviewed` / `ai-quizzed` are gone, `<KEY>.reviewed` deleted, next review header is `=== review KEY` without `(incremental)`.
+   - Known gap: quiz record SHAs are pre-rebase, the re-quiz delta shows develop noise.
+   - Known gap: a fix I push by hand still leaves the labels standing.

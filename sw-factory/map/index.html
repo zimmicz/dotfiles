@@ -259,7 +259,7 @@
   <rect class="chip-h" x="752" y="190" width="98" height="20" rx="5"/><text class="ch" x="801" y="204" text-anchor="middle">ME comment</text>
   <rect class="chip-a" x="856" y="190" width="40" height="20" rx="5"/><text class="ca" x="876" y="204" text-anchor="middle">mr</text>
   <text class="tm" x="906" y="204">answers, pushes a fix if asked (own mr slot).</text>
-  <text class="tm" x="906" y="218">New commits drop ai-verified / -failed / -retry, review labels stay.</text>
+  <text class="tm" x="906" y="218">New commits drop ai-verified / -failed / -retry, ai-reviewed, ai-quizzed.</text>
   <text class="tm" x="906" y="232">Stuck w/o comment → worker posts its conclusion, stays ai-mr</text>
 
   <!-- states -->
@@ -423,7 +423,7 @@
   <rect class="chip-n" x="612" y="622" width="824" height="70" rx="8"/>
   <text x="628" y="642"><tspan class="b">lockfile only:</tspan> git checkout --ours + pnpm install --lockfile-only, no LLM</text>
   <text x="628" y="659"><tspan class="b">code conflict:</tspan> opus agent resolves, runs lint / typecheck / tests, push --force-with-lease, MR note</text>
-  <text class="tm" x="628" y="676">agent-resolved + ai-verified → label dropped, holdout re-verify</text>
+  <text class="tm" x="628" y="676">agent-resolved → ai-verified / ai-reviewed / ai-quizzed dropped: re-verify, full review, re-quiz</text>
 
   <rect class="st" x="270" y="704" width="300" height="70" rx="8"/>
   <text class="b" x="286" y="728">ready or approved</text>
@@ -586,7 +586,7 @@
       </ul></div>
       <div class="card failc"><h3>Visibility</h3><ul>
         <li>Only my own MR notes trigger <code>mr</code>; reviewers’ MR notes wait until I comment.</li>
-        <li>A fix I push by hand leaves <code>ai-verified</code> and <code>ai-reviewed</code> standing (no re-review); pushes answering my comments and verify-fix pushes re-verify, then get a delta review.</li>
+        <li>A fix I push by hand leaves <code>ai-verified</code> and <code>ai-reviewed</code> standing (no re-review); pushes answering my comments, review-fix, verify-fix pushes and agent-resolved conflicts drop the labels (re-verify, then delta review; full review after a conflict).</li>
         <li>Verify blocked with no scenario run (browser down, no login, preview dead) retries by itself, 2 times, 10 min apart (<code>BLOCKED_MAX</code>, <code>BLOCKED_WAIT</code>). Verify blocked only by missing data with the rest passing counts as verified (scenarios left for the quiz hand-check). Blocked after some scenarios ran for any other reason (<code>ENV:</code> missing flag, login, preview), or still blocked after the retries, parks the ticket as <code>ai-verify-failed</code> before any review happened; <code>factory-worker KEY --review</code> runs it by hand.</li>
         <li>Claude usage limit hit mid-stage: the stage stops without touching labels, Slack or Jira, the dispatcher skips every tick until the reset time from the limit message (<code>.limit</code>), then the same labels start the same stages again. Limit lifted earlier: <code>rm ~/.local/state/sw-factory/.limit</code>. Sentry and deps triage do not detect the limit themselves; merge gate and <code>done</code> wait too.</li>
         <li><code>factory-dash</code> still judges “needs you” by the last comment, not the handled id.</li>

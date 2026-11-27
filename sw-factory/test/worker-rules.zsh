@@ -86,4 +86,14 @@ check "env fresh: head moved → deploy" "$(env_fe_fresh DEV-1 envx; echo $?)" "
 LAST=""
 echo "77 $(git -C $FW rev-parse HEAD)" >$LOG_DIR/DEV-1.env-fe
 check "env fresh: lookup failed → deploy" "$(env_fe_fresh DEV-1 envx; echo $?)" "1"
+source <(sed -n '/^unreview() {/,/^}/p;/^unverify() {/,/^}/p' $W)
+limit_bail() { : }
+jira() { print -r -- "$3" >>$T/jira }
+UNVERIFIED=$T/unv; mkdir -p $UNVERIFIED; touch $UNVERIFIED/DEV-1.md
+unreview DEV-1
+check "unreview: only review + quiz labels" "$(jq -r '.update.labels[].remove' $T/jira | sort | paste -sd, -)" "ai-quizzed,ai-reviewed"
+rm $T/jira
+unverify DEV-1
+check "unverify: all five labels" "$(jq -r '.update.labels[].remove' $T/jira | sort | paste -sd, -)" "ai-quizzed,ai-reviewed,ai-verified,ai-verify-failed,ai-verify-retry"
+check "unverify: file removed" "$(test -e $UNVERIFIED/DEV-1.md; echo $?)" "1"
 exit $fails

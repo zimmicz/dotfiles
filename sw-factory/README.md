@@ -41,7 +41,7 @@ Conventions injection: `impl` (all variants) and `review` get the repo's convent
 
 | MR | what happens |
 |---|---|
-| draft, not approved, only my commits | `pnpm-lock.yaml`-only → `--ours` + `pnpm install --lockfile-only` (no LLM); code → headless opus `/mattpocock-skills:resolving-merge-conflicts` (intent from PLAN.md + the develop commits' MRs), lint/typecheck/tests, `push --force-with-lease`, 🤖 MR note. Agent-resolved + `ai-verified` → label dropped → holdout re-verify |
+| draft, not approved, only my commits | `pnpm-lock.yaml`-only → `--ours` + `pnpm install --lockfile-only` (no LLM); code → headless opus `/mattpocock-skills:resolving-merge-conflicts` (intent from PLAN.md + the develop commits' MRs), lint/typecheck/tests, `push --force-with-lease`, 🤖 MR note. Agent-resolved → `ai-verified` / `ai-reviewed` / `ai-quizzed` dropped, `<KEY>.reviewed` deleted → holdout re-verify, then a full review (not a delta: after a rebase the delta would contain all of develop) and re-quiz |
 | ready or approved, only my commits | clean rebase or `pnpm-lock.yaml`-only → resolved + pushed like a draft, MR note says no code changed (approval stays valid). Code conflict → rebase aborted, Slack only. Add MR label `ai-rebase` (or `b` in `factory-dash`) = my OK → agent resolves next run, label removed. Why the gate: approvals don't reset on push here, so an agent-written resolution would keep an approval nobody gave it |
 | others' commits / dirty or diverged worktree / >10 files changed on both sides (`CONFLICT_MAX_FILES`) | Slack only → resolve by hand |
 
@@ -173,14 +173,14 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run where I became on t
 | `triage-failed` | analysis or reply follow-up failed (no repo, worktree, crash); parked, no retry loop, re-add `triage` | factory-worker |
 | `ai-fix` | **my approval** to implement PLAN.md; unanswered `[?]` → its `Default:` binds impl | me |
 | `ai-mr` | draft MR exists | factory-worker |
-| `ai-reviewed` | independent review done (after `ai-verified`): clean, should-fix only, or its findings were fixed and the delta re-check passed. Dropped with `ai-verified` when an `mr` follow-up or `rfix` pushes new commits; the next review covers only the delta | factory-worker |
+| `ai-reviewed` | independent review done (after `ai-verified`): clean, should-fix only, or its findings were fixed and the delta re-check passed. Dropped with `ai-verified` when an `mr` follow-up or `rfix` pushes new commits; a verify-fix push and an agent-resolved conflict drop it too. The next review covers only the delta (full after a conflict) | factory-worker |
 | `ai-review-retry` | reviewer found must-fix issues, `rfix` will fix every finding once, then re-check the delta | factory-worker |
 | `ai-review-findings` | findings still open after the one fix round (nothing pushed, or re-check still blocking) or the reviewer crashed: read the MR note / `<KEY>.review.md`. Remove the label to re-run the review | factory-worker |
 | `ai-fix-failed` | agent bailed out (see its Jira comment) or no MR. A run that ended without a Jira comment of its own (bot comments older than the run don't count) gets one posted by the worker (its final answer). Implementer runs with `BASH_MAX_TIMEOUT_MS=2700000` so tests run in the foreground; a background job dies with `claude -p`. `mr` follow-up stuck like that stays `ai-mr`, my next reply re-runs it | factory-worker |
 | `ai-verify-retry` | holdout failed once, fix pushed, waiting for re-verify | factory-worker |
 | `ai-verified` | holdout scenarios pass on the preview, or pass except `DATA:`-blocked ones / can-frontend (listed in `unverified/<KEY>.md`, hand-checked in the quiz); gates `review`. Dropped (with `ai-verify-failed` / `ai-verify-retry`) when an `mr` follow-up or `rfix` pushes new commits, so `verify` runs again, and `ai-reviewed` goes too (delta re-review after verify); other review labels stay | factory-worker |
 | `ai-verify-failed` | holdout failed after retry, blocked by anything but data only (after 2 auto-retries when no scenario ran), or verifier crashed | factory-worker |
-| `ai-quizzed` | I passed `/cf-quiz` on the current MR code; gates `cf-factory` green. Dropped with the verify labels when new commits land | /cf-quiz (me) |
+| `ai-quizzed` | I passed `/cf-quiz` on the current MR code; gates `cf-factory` green. Dropped with the verify labels when new commits land (mr follow-up, rfix, verify fix, agent-resolved conflict; not a clean rebase) | /cf-quiz (me) |
 | `ai-done` | ticket Done, Sentry issues resolved, dyn-env the factory created for it destroyed | factory-worker |
 | `env-<name>` | verify runs on the existing dyn-env `<name>` with the MR's code redeployed into it; env gone → as if the label weren't there. Changed after a verify → verify labels dropped, verify runs again | factory-worker (`env:` comment, env-auto: FE ticket whose BE dependency is not on nightly) or me |
 | `ai-gate-skip` (GitLab MR label) | override: `cf-factory` merge gate goes green whatever the Jira labels | me (`s` in factory-dash) |
@@ -331,6 +331,8 @@ Ownership: `env-owned/<env>` (content = ticket key) is written only for an env t
 By hand: `factory-worker DEV-X --env` re-runs the latest `env:` comment. Not covered: the implementer's `/check-layout` does not use the env.
 
 ## Rollback
+
+Unreview (verify-fix + agent-resolved conflict drop `ai-reviewed` / `ai-quizzed`): `git -C ~/dotfiles checkout sw-factory-pre-unreview-2026-11-27 -- sw-factory/bin/factory-worker sw-factory/test/worker-rules.zsh`
 
 Stage deny lists (`NO_SHIP`, `NO_REPO_WRITE`): `git -C ~/dotfiles checkout sw-factory-pre-stage-denies-2026-11-27 -- sw-factory/bin/factory-worker`
 
