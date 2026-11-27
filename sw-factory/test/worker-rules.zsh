@@ -96,4 +96,11 @@ rm $T/jira
 unverify DEV-1
 check "unverify: all five labels" "$(jq -r '.update.labels[].remove' $T/jira | sort | paste -sd, -)" "ai-quizzed,ai-reviewed,ai-verified,ai-verify-failed,ai-verify-retry"
 check "unverify: file removed" "$(test -e $UNVERIFIED/DEV-1.md; echo $?)" "1"
+source <(sed -n '/^released() {/,/^}/p;/^relabel() {/,/^}/p' $W)
+rm -f $T/jira
+mkdir -p $LOG_DIR/DEV-1.verify-media $LOG_DIR/DEV-1.layout-media $LOG_DIR/DEV-2.verify-media; touch $LOG_DIR/DEV-1.log $LOG_DIR/DEV-1.verify.md
+released DEV-1
+check "released: ai-done added" "$(jq -r '.update.labels[].add' $T/jira)" "ai-done"
+check "released: media gone" "$(setopt nonomatch; ls -d $LOG_DIR/DEV-1.*-media 2>/dev/null | wc -l)" "0"
+check "released: log + report + other ticket kept" "$(ls -d $LOG_DIR/DEV-1.log $LOG_DIR/DEV-1.verify.md $LOG_DIR/DEV-2.verify-media 2>/dev/null | wc -l)" "3"
 exit $fails

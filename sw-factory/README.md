@@ -181,7 +181,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run where I became on t
 | `ai-verified` | holdout scenarios pass on the preview, or pass except `DATA:`-blocked ones / can-frontend (listed in `unverified/<KEY>.md`, hand-checked in the quiz); gates `review`. Dropped (with `ai-verify-failed` / `ai-verify-retry`) when an `mr` follow-up or `rfix` pushes new commits, so `verify` runs again, and `ai-reviewed` goes too (delta re-review after verify); other review labels stay | factory-worker |
 | `ai-verify-failed` | holdout failed after retry, blocked by anything but data only (after 2 auto-retries when no scenario ran), or verifier crashed | factory-worker |
 | `ai-quizzed` | I passed `/cf-quiz` on the current MR code; gates `cf-factory` green. Dropped with the verify labels when new commits land (mr follow-up, rfix, verify fix, agent-resolved conflict; not a clean rebase) | /cf-quiz (me) |
-| `ai-done` | ticket Done, Sentry issues resolved, dyn-env the factory created for it destroyed | factory-worker |
+| `ai-done` | ticket Done, Sentry issues resolved, dyn-env the factory created for it destroyed, `<KEY>.verify-media` + `<KEY>.layout-media` deleted (videos / screenshots; logs + reports stay) | factory-worker |
 | `env-<name>` | verify runs on the existing dyn-env `<name>` with the MR's code redeployed into it; env gone → as if the label weren't there. Changed after a verify → verify labels dropped, verify runs again | factory-worker (`env:` comment, env-auto: FE ticket whose BE dependency is not on nightly) or me |
 | `ai-gate-skip` (GitLab MR label) | override: `cf-factory` merge gate goes green whatever the Jira labels | me (`s` in factory-dash) |
 
@@ -337,6 +337,8 @@ Unreview (verify-fix + agent-resolved conflict drop `ai-reviewed` / `ai-quizzed`
 Sentry gate (`needs-answer` blocks a new Sentry ticket): `git -C ~/dotfiles checkout sw-factory-pre-sentry-gate-2026-11-27 -- sw-factory/bin/sentry-triage sw-factory/test/triage-rules.zsh`
 
 Dash fixes (resume command, stats run keys, action keys off in hidden views): `git -C ~/dotfiles checkout sw-factory-pre-dash-fixes-2026-11-27 -- sw-factory/dash && (cd ~/dotfiles/sw-factory/dash && go build -o ~/bin/factory-dash .) && systemctl --user restart factory-dash.service`
+
+Media prune on `ai-done`: `git -C ~/dotfiles checkout sw-factory-pre-prune-media-2026-11-27 -- sw-factory/bin/factory-worker sw-factory/test/worker-rules.zsh` (deleted media don't come back)
 
 Stage deny lists (`NO_SHIP`, `NO_REPO_WRITE`): `git -C ~/dotfiles checkout sw-factory-pre-stage-denies-2026-11-27 -- sw-factory/bin/factory-worker`
 

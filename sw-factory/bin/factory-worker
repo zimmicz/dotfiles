@@ -1293,11 +1293,16 @@ $WHYNOT}
   return 0
 }
 
+released() {
+  relabel $1 "" ai-done
+  rm -rf $LOG_DIR/$1.verify-media $LOG_DIR/$1.layout-media
+}
+
 stage_done() {
   local KEY=$1 IDS="${*:2}"
   env_done $KEY
-  if [[ -z "$IDS" ]]; then relabel $KEY "" ai-done; info $KEY "released"; return; fi
-  if resolve_sentry $KEY ${=IDS}; then relabel $KEY "" ai-done; info $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
+  if [[ -z "$IDS" ]]; then released $KEY; info $KEY "released"; return; fi
+  if resolve_sentry $KEY ${=IDS}; then released $KEY; info $KEY "released, Sentry resolved: $IDS"; else note $KEY "Sentry resolve failed, see \`$LOG_DIR/$KEY.log\`"; fi
 }
 
 stage_conflict() {
