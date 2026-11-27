@@ -73,3 +73,4 @@ Open follow-ups. Items 1–3 come from the review-conventions change (live since
    - First agent-resolved conflict: check `ai-verified` / `ai-reviewed` / `ai-quizzed` are gone, `<KEY>.reviewed` deleted, next review header is `=== review KEY` without `(incremental)`.
    - Known gap: quiz record SHAs are pre-rebase, the re-quiz delta shows develop noise.
    - Known gap: a fix I push by hand still leaves the labels standing.
+17. Sentry gate counts `needs-answer` (2026-11-27, rollback tag `sw-factory-pre-sentry-gate-2026-11-27`). Tested: `test/triage-rules.zsh`, `sentry-triage --dry-run` gate verdict. Not run for real: a grilled Sentry ticket (`needs-answer`) blocking the day's new ticket.

@@ -6,7 +6,7 @@ REPOS=~/work/cleverfarm/repos
 LOG_DIR=~/.local/state/sw-factory
 STAMP=$LOG_DIR/sentry-today
 NOTES=$LOG_DIR/notes.txt
-PIPELINE_LABELS='triage, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed'
+PIPELINE_LABELS='triage, needs-answer, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed'
 MR_STATES_JQ='[.[] | select(.title | test("(^|[^A-Z0-9-])" + $k + "([^0-9]|$)")) | .state] | unique | join(",")'
 mkdir -p $LOG_DIR
 

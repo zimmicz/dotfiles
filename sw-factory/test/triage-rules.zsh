@@ -17,4 +17,7 @@ for F in deps-triage sentry-triage; do
   check "$F: no MR" "$(jq -r --arg k DEV-1 "$MR_STATES_JQ" <<<$MRS)" ""
   unset MR_STATES_JQ
 done
+source <(grep '^PIPELINE_LABELS=' $D/sentry-triage)
+[[ ", $PIPELINE_LABELS," == *", needs-answer,"* ]] && R=yes || R=no
+check "sentry-triage: gate counts needs-answer" $R yes
 exit $fails
