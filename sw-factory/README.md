@@ -34,7 +34,7 @@ My job = intent in, decisions at gates, judge results. Agents do the rest.
 
    Only changes post (one log line `gate <old> → <new>` in `<KEY>.log`). A finished status can't go back to pending, GitLab adds a new status record on the same pipeline instead. `factory-worker DEV-X --gate` syncs one ticket and prints the state.
 
-Conventions injection: `impl` (all variants) and `review` get the repo's conventions in the system prompt (`--append-system-prompt`, `<conventions file=…>` blocks), because nested `CLAUDE.md` only load on native `Read` and the checklist is a skill nobody invokes. Sources, in order: `.claude/skills/review-checklist/SKILL.md`, every non-root `CLAUDE.md` in an ancestor dir of a changed path (MR diff + PLAN.md `### Change map`), dotfiles `standards/common.md`. Repo files are read from the MR target branch (`origin/<base>`), not the worktree, so an MR cannot weaken its own rules. Over 100 KB → nested `CLAUDE.md` dropped deepest first. One log line `conventions: <n> files, <bytes> B: <paths>` in `<KEY>.log`. `factory-worker DEV-X --conventions` prints the block and exits.
+Conventions injection: `impl` (all variants) and `review` get the repo's conventions in the system prompt (`--append-system-prompt`, `<conventions file=…>` blocks), because nested `CLAUDE.md` only load on native `Read` and the checklist is a skill nobody invokes. Sources, in order: `.claude/skills/review-checklist/SKILL.md`, every non-root `CLAUDE.md` in an ancestor dir of a changed path (MR diff + PLAN.md `### Change map`). Nothing from dotfiles: the rules live in the repos, where colleagues read them too (DEV-3995). Repo files are read from the MR target branch (`origin/<base>`), not the worktree, so an MR cannot weaken its own rules. Over 100 KB → nested `CLAUDE.md` dropped deepest first. One log line `conventions: <n> files, <bytes> B: <paths>` in `<KEY>.log`. `factory-worker DEV-X --conventions` prints the block and exits.
 3. **Failures** — `triage-failed` / `ai-fix-failed` / `ai-verify-failed`: read the 🤖 Jira comment or `<KEY>.verify.md`; a wrong scenario usually arrives as ✏️ `holdout proposal` (dash `A` / `X`); otherwise fix the plan/scenario and re-label (`triage` or `ai-fix`), take it over with `cf-work DEV-X`, or close the ticket.
 
 **Merge conflicts** — every run rechecks ALL my open MRs (any repo, factory or not). Conflicting → rebase onto target in its worktree:
@@ -53,7 +53,7 @@ Failed resolve → rebase aborted, Slack line. One Slack line per MR head (also 
 
 **Weekly (Monday Slack "Factory yield" + "Factory before/after")** — bail rate up → plans too vague, push harder at plan gate. Verify failures → scenarios or implementer weak. Reviewer notes per MR up → run `/cf-feedback` after merges so the reviewer learns. `$`/merged MR spikes → check `<KEY>.log`.
 
-**After every merge with reviewer comments**: `/cf-feedback` → rule lands in the repo's `review-checklist` (commit on the ticket's MR, or a chore ticket once merged), cross-repo ones in `standards/common.md`; the reviewer agent enforces it next time. Lint-able → offer ticket.
+**After every merge with reviewer comments**: `/cf-feedback` → rule lands in the repo's `review-checklist` (commit on the ticket's MR, or a chore ticket once merged), a cross-repo one in each repo it applies to; the reviewer agent enforces it next time. Lint-able → offer ticket.
 
 **Debugging a run**
 
@@ -189,7 +189,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run where I became on t
 
 `sw-factory/` = everything only the factory uses: `bin/` (→ `~/bin`), `skills/` (→ `~/.claude/skills`), `dash/` (`go build` → `~/bin/factory-dash`), `systemd/` (→ `~/.config/systemd/user`), `map/` (factory-map artifact source). `install.sh` does the symlinks + build. Skills resolve by name (`/cf-review`), so repo layout never reaches runtime.
 
-Shared with interactive work, stay outside: skills `cf-mr`, `check-layout`, `cf-work`, `cf-ticket`, `cf-worktree`, `cf-epic`, `cf-feedback` + `standards/`, `my-voice.md` (`claude/cleverfarm/`); `bin/jira`, `bin/cf-work`; `claude/user/scripts/slack-post.sh`. Plugins: `cf-dyn-env`, `mattpocock-skills` (`code-review`, `resolving-merge-conflicts`).
+Shared with interactive work, stay outside: skills `cf-mr`, `check-layout`, `cf-work`, `cf-ticket`, `cf-worktree`, `cf-epic`, `cf-feedback`, `my-voice.md` (`claude/cleverfarm/`); `bin/jira`, `bin/cf-work`; `claude/user/scripts/slack-post.sh`. Plugins: `cf-dyn-env`, `mattpocock-skills` (`code-review`, `resolving-merge-conflicts`).
 
 ## Files
 
@@ -338,6 +338,8 @@ Dyn-env lane: `git -C ~/dotfiles checkout sw-factory-pre-dyn-env-2026-11-23 -- s
 Env-auto: `git -C ~/dotfiles checkout sw-factory-pre-env-auto-2026-11-24 -- sw-factory/bin/factory-worker sw-factory/test/worker-rules.zsh && rm -f ~/.local/state/sw-factory/*.env-auto ~/.local/state/sw-factory/*.env-req`. Labels and Jira comments it made stay.
 
 Redeploy after push: `git -C ~/dotfiles checkout sw-factory-pre-env-redeploy-2026-11-24 -- sw-factory/bin/factory-worker sw-factory/test/worker-rules.zsh sw-factory/skills/cf-holdout-ui/SKILL.md && rm -f ~/.local/state/sw-factory/*.env-redeploy* ~/.local/state/sw-factory/*.env-fe`.
+
+Standards file dropped, rules in the repos (DEV-3995): `git -C ~/dotfiles checkout sw-factory-pre-standards-to-repo-2026-11-27 -- sw-factory claude/cleverfarm`
 
 Review-conventions work (branch `review-conventions`): `git -C ~/dotfiles checkout sw-factory-pre-review-conventions-2026-11-17 -- sw-factory claude/cleverfarm`
 

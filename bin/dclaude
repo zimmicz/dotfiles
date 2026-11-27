@@ -27,7 +27,7 @@ done
 
 m+=(-v dclaude-state:"$C" -v "$C/projects:$C/projects")
 for p in settings.json CLAUDE.md LEARNED.md my-voice.md RTK.md simple-statusline.sh .credentials.json \
-  hooks plugins skills commands scripts standards; do
+  hooks plugins skills commands scripts; do
   [ -e "$C/$p" ] && m+=(-v "$(readlink -f "$C/$p"):$C/$p:ro")
 done
 

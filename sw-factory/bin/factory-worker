@@ -764,7 +764,7 @@ gl_event_keys() {
 conv_add() { CONV_L+=("$1"); CONV_B+=("$2"); CONV_N+=("$3"); CONV_S+=($(print -rn -- "$2" | wc -c)); }
 
 conv_collect() {
-  local KEY=$1 R=$2 WT=$3 LOG=$LOG_DIR/$1.log BASE C F P d STD=~/dotfiles/claude/cleverfarm/standards
+  local KEY=$1 R=$2 WT=$3 LOG=$LOG_DIR/$1.log BASE C F P d
   BASE=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null </dev/null | jq -r '.[0].target_branch // empty')
   [[ -n "$BASE" ]] || BASE=$(git -C $WT symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)
   BASE=${BASE#origin/}
@@ -777,10 +777,6 @@ conv_collect() {
   local DIRS=(${(f)"$(for F in $P; do d=${F:h}; while [[ $d != . && $d != / && -n $d ]]; do echo $d; d=${d:h}; done; done | sort -u | awk '{print gsub("/","/") " " $0}' | sort -n | cut -d' ' -f2-)"})
   for d in $DIRS; do
     C=$(git -C $WT show origin/$BASE:$d/CLAUDE.md 2>/dev/null) && conv_add "$R/$d/CLAUDE.md" "$C" 1
-  done
-  for F in common; do
-    (( ${CONV_L[(Ie)standards/$F.md]} )) && continue
-    [[ -f $STD/$F.md ]] && conv_add "standards/$F.md" "$(<$STD/$F.md)" 0
   done
 }
 

@@ -47,7 +47,7 @@ Orchestrates the entire workflow for a ticket. Two checkpoints only: **plan appr
 ## Phase 5: Independent review
 
 12. Run `/code-review` on the diff — correctness bugs
-13. Run `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = repo `CLAUDE.md` Coding Rules + Active Migrations + the repo's `.claude/skills/review-checklist/SKILL.md` if it exists + `~/dotfiles/claude/cleverfarm/standards/common.md` + the repo's `GLOSSARY.md` if it exists. Its Standards + Spec sub-agents see only the diff and those files, not your reasoning — don't pass them your own justification.
+13. Run `/mattpocock-skills:code-review` with fixed point `origin/<base>`, spec = `PLAN.md`, standards = repo `CLAUDE.md` Coding Rules + Active Migrations + the repo's `.claude/skills/review-checklist/SKILL.md` if it exists + the repo's `GLOSSARY.md` if it exists. Its Standards + Spec sub-agents see only the diff and those files, not your reasoning — don't pass them your own justification.
 14. Fix issues found from both passes, re-run phase 4.
 
 ## Phase 6: MR → CHECKPOINT 2
