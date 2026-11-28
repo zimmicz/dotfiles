@@ -187,7 +187,7 @@ Failures: `triage-failed` / `ai-fix-failed` label. Every run where I became on t
 
 ## Layout & dependencies
 
-`sw-factory/` = everything only the factory uses: `bin/` (→ `~/bin`), `skills/` (→ `~/.claude/skills`), `dash/` (`go build` → `~/bin/factory-dash`), `systemd/` (→ `~/.config/systemd/user`), `map/` (factory-map artifact source). `install.sh` does the symlinks + build. Skills resolve by name (`/cf-review`), so repo layout never reaches runtime.
+`sw-factory/` = everything only the factory uses: `bin/` (→ `~/bin`), `skills/` (→ `~/.claude/skills`), `dash/` (`go build` → `~/bin/factory-dash`), `systemd/` (→ `~/.config/systemd/user`), `map/` (factory-map artifact source), `test/` (rule tests: `zsh test/worker-rules.zsh`, `zsh test/triage-rules.zsh`), `applications/` (launcher entry). `install.sh` does the symlinks + build. Skills resolve by name (`/cf-review`), so repo layout never reaches runtime.
 
 Shared with interactive work, stay outside: skills `cf-mr`, `check-layout`, `cf-work`, `cf-ticket`, `cf-worktree`, `cf-epic`, `cf-feedback`, `my-voice.md` (`claude/cleverfarm/`); `bin/jira`, `bin/cf-work`; `claude/user/scripts/slack-post.sh`. Plugins: `cf-dyn-env`, `mattpocock-skills` (`code-review`, `resolving-merge-conflicts`).
 
@@ -197,6 +197,7 @@ Shared with interactive work, stay outside: skills `cf-mr`, `check-layout`, `cf-
 |---|---|
 | `~/dotfiles/sw-factory/bin/sentry-triage` | stage 1: open-ticket gate + daily stamp, then claude -p (sonnet) + Sentry MCP + `jira` → ticket. `--dry-run` (ignores gate + stamp), `MAX=` (default 1) |
 | `~/dotfiles/sw-factory/bin/sentry-triage-now` | force a Sentry run today: drop `sentry-today` stamp + start `sw-factory.service` (no block; dispatcher spawns the `sentry` stage) |
+| `~/dotfiles/sw-factory/lib/common.zsh` | sourced by `factory-worker`, `sentry-triage`, `deps-triage`: shipped statuses, pipeline labels, MR-state jq, product ids |
 | `~/dotfiles/sw-factory/bin/factory-worker` | stages 2–7: triage, reply follow-up, implement, holdout verify (+1 retry), resolve Sentry on Done, rebase my conflicting MRs (dispatcher runs only), `sentry` stage (runs `sentry-triage`); Slack summary (notes moved away atomically before posting, so stages can append meanwhile). No args = dispatcher, see Slots. `factory-worker DEV-X` = spawn one ticket's stage (implements if it has `ai-fix`; `factory-worker DEV-X --verify` = verify its MR now, `--review` = independent review now). `MAX=` (new tickets looked at per tick, default 10), `SLOTS=`, `IMPL_SLOTS=`, `MR_SLOTS=`, `REVIEW_SLOTS=`, `VERIFY_SLOTS=`, `CONFLICT_EVERY=`, `GL_FULL_EVERY=` (my GitLab MR notes: every tick one Events API call `events?action=commented` picks the tickets with a note of mine newer than `handled-mr/<KEY>`, 🤖 and notes pinging others dropped, MR → ticket from the source branch cached in `.gl-mr-keys`; only those get the thread check. Full scan of every `ai-mr` MR every 10 min and when the events call fails, log `lookup failed: gitlab events`. Before 2026-11-23 a full scan every 2 min, 13 s of a ~30 s tick). Holdout verify of a BE ticket holds its verify slot ~30 min (dyn-env create). Analyze + implement open a detached window per worktree in tmux session `sw-factory` (`tail -f <KEY>.log`) via plain `tmux new-window -d`. No tmux server = skipped |
 | `~/dotfiles/sw-factory/bin/deps-triage` | dependabot MRs → tickets (Dependabot lane), no LLM; `--dry-run` prints the ticket it would create per repo, changes nothing. Run by stage `deps` |
 | `~/dotfiles/sw-factory/holdout-templates/deps-<repo>.md` | smoke scenarios for green minor/patch bumps (cf-farm-frontend: `FARM-QA` screens; can-frontend: `NONE:`, no reachable preview) |
@@ -229,6 +230,7 @@ systemctl --user enable --now sw-factory.timer
 ```
 
 Prereqs (already done):
+- `~/.config/jira.env` (`JIRA_EMAIL`, `JIRA_TOKEN`) and `~/.config/sw-factory.env` (may be empty; `GRILL=1` etc.), both 0600: every stage unit loads them as `EnvironmentFile`, a missing file = stage exits at once
 - claude.ai connectors authenticated: Sentry (`/mcp`), Atlassian, Slack — headless `claude -p` uses them with my login
 - `glab auth status` ok, SSH to gitlab works without agent (systemd has no `SSH_AUTH_SOCK`)
 - no linger: runs only while I'm logged in
@@ -339,6 +341,8 @@ Sentry gate (`needs-answer` blocks a new Sentry ticket): `git -C ~/dotfiles chec
 Dash fixes (resume command, stats run keys, action keys off in hidden views): `git -C ~/dotfiles checkout sw-factory-pre-dash-fixes-2026-11-27 -- sw-factory/dash && (cd ~/dotfiles/sw-factory/dash && go build -o ~/bin/factory-dash .) && systemctl --user restart factory-dash.service`
 
 Media prune on `ai-done`: `git -C ~/dotfiles checkout sw-factory-pre-prune-media-2026-11-27 -- sw-factory/bin/factory-worker sw-factory/test/worker-rules.zsh` (deleted media don't come back)
+
+Audit rest (dash `To test` / `Rejected` + hardening, `factory-worker` dedup): `git -C ~/dotfiles checkout sw-factory-pre-audit-rest-2026-11-28 -- sw-factory install.sh && (cd ~/dotfiles/sw-factory/dash && go build -o ~/bin/factory-dash .) && systemctl --user restart factory-dash.service`
 
 Stage deny lists (`NO_SHIP`, `NO_REPO_WRITE`): `git -C ~/dotfiles checkout sw-factory-pre-stage-denies-2026-11-27 -- sw-factory/bin/factory-worker`
 
