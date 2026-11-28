@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -98,6 +99,7 @@ func look(r row, mrs map[string]mrInfo) (icon, color, label string) {
 var nextSteps = map[string][2]string{
 	"questions":        {"you", "answer the questions in Jira (R)"},
 	"plan gate":        {"you", "approve plan (a) or reply (R)"},
+	"to test":          {"you", "test it, then move the ticket in Jira (J)"},
 	"quiz":             {"you", "take the quiz (Q)"},
 	"reviewed":         {"you", "gate green: mark ready, get it merged (m)"},
 	"verify failed":    {"you", "read verify tab, then retry (t) or reply (R)"},
@@ -138,6 +140,8 @@ func column(stage string) string {
 	switch stage {
 	case "todo", "nightly", "RC", "done", "quiz", "plan gate":
 		return stage
+	case "to test":
+		return "nightly"
 	case "new", "questions", "analysis failed":
 		return "analysis"
 	case "implementing", "bailed":
@@ -191,6 +195,9 @@ func (s *server) out(r row) rowOut {
 	}
 	n := nextSteps[label]
 	o.Ball, o.Next = or(n[0], "-"), n[1]
+	if r.parked && r.stage == "to test" {
+		o.Ball, o.Next = "-", "to test, unassigned"
+	}
 	if b, err := os.ReadFile(filepath.Join(stateDir, r.key+".blocked-by")); err == nil && r.stage == "new" {
 		o.Ball, o.Next = "-", "waiting for "+strings.TrimSpace(string(b))+" merge"
 	}
@@ -493,13 +500,23 @@ func attImages(key, src string) string {
 	})
 }
 
-var myAccount = sync.OnceValue(func() string {
-	var u struct {
-		AccountID string `json:"accountId"`
+var (
+	acctMu sync.Mutex
+	acct   string
+)
+
+func myAccount() string {
+	acctMu.Lock()
+	defer acctMu.Unlock()
+	if acct == "" {
+		var u struct {
+			AccountID string `json:"accountId"`
+		}
+		jiraReq("GET", "/rest/api/2/myself", nil, &u)
+		acct = u.AccountID
 	}
-	jiraReq("GET", "/rest/api/2/myself", nil, &u)
-	return u.AccountID
-})
+	return acct
+}
 
 func comments(key string) (htm, src string, err error) {
 	var out struct {
@@ -572,6 +589,7 @@ func (s *server) attachment(w http.ResponseWriter, key, name string) {
 	defer resp.Body.Close()
 	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 }
@@ -734,18 +752,16 @@ func (s *server) acceptHoldout(key string) error {
 	if err != nil {
 		return err
 	}
+	var errs []error
 	for _, p := range paths {
-		if err := jiraAttach(key, p, strings.Replace(filepath.Base(p), key, "holdout", 1)); err != nil {
-			return err
-		}
+		errs = append(errs, jiraAttach(key, p, strings.Replace(filepath.Base(p), key, "holdout", 1)))
 	}
 	body := "🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._\n\n" +
 		"Upravil jsem holdout scénáře, návrh analyzéru jsem schválil. Ověření poběží znovu proti nové verzi (příloha holdout.md).\n\n{noformat}\n" + why + "\n{noformat}\n\n{code:diff}\n" + diff + "{code}"
-	if err := jiraReq("POST", "/rest/api/2/issue/"+key+"/comment", map[string]string{"body": body}, nil); err != nil {
-		return err
-	}
+	errs = append(errs, jiraReq("POST", "/rest/api/2/issue/"+key+"/comment", map[string]string{"body": body}, nil))
 	ops := []map[string]string{{"remove": "ai-verified"}, {"remove": "ai-verify-failed"}, {"remove": "ai-verify-retry"}, {"remove": "ai-quizzed"}}
-	return jiraReq("PUT", "/rest/api/2/issue/"+key, map[string]any{"update": map[string]any{"labels": ops}}, nil)
+	errs = append(errs, jiraReq("PUT", "/rest/api/2/issue/"+key, map[string]any{"update": map[string]any{"labels": ops}}, nil))
+	return errors.Join(errs...)
 }
 
 func (s *server) action(a actionReq) (ask string, run func() (string, error), kick bool, err error) {
@@ -1222,7 +1238,7 @@ func (s *server) handler() http.Handler {
 			"JiraAge": int(time.Since(s.jiraAt).Seconds()), "Status": s.status, "Repos": repos(), "Cols": boardCols, "Tabs": webTabs})
 	})
 	mux.HandleFunc("GET /api/nosprint", func(w http.ResponseWriter, r *http.Request) {
-		is, err := search("assignee = currentUser() AND statusCategory != Done AND status not in (\"On nightly\", \"Release candidate\") AND (sprint is EMPTY OR sprint in futureSprints()) AND (sprint is EMPTY OR sprint not in openSprints()) ORDER BY updated DESC")
+		is, err := search("assignee = currentUser() AND statusCategory != Done AND status not in (\"On nightly\", \"Release candidate\", Rejected) AND (sprint is EMPTY OR sprint in futureSprints()) AND (sprint is EMPTY OR sprint not in openSprints()) ORDER BY updated DESC")
 		if err != nil {
 			http.Error(w, "jira: "+err.Error(), http.StatusBadGateway)
 			return

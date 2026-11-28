@@ -64,6 +64,8 @@ func TestGroup(t *testing.T) {
 		{row{stage: "questions", jira: true}, gNeeds},
 		{row{stage: "bailed", jira: true}, gNeeds},
 		{row{stage: "mr", jira: true}, gFlight},
+		{row{stage: "to test", jira: true}, gNeeds},
+		{row{stage: "to test", parked: true, jira: true}, gParked},
 		{row{stage: "nightly", parked: true, jira: true}, gParked},
 		{row{stage: "todo", jira: true, todo: true}, gTodo},
 		{row{stage: "-"}, gOther},
@@ -72,6 +74,44 @@ func TestGroup(t *testing.T) {
 		if got := group(c.r); got != c.want {
 			t.Errorf("group(%+v) = %d, want %d", c.r, got, c.want)
 		}
+	}
+}
+
+func TestParkedStage(t *testing.T) {
+	cases := []struct {
+		status, cat, want string
+		parked            bool
+	}{
+		{"On nightly", "indeterminate", "nightly", true},
+		{"Release candidate", "indeterminate", "RC", true},
+		{"Rejected", "indeterminate", "done", true},
+		{"X", "done", "done", true},
+		{"To test", "indeterminate", "", false},
+	}
+	for _, c := range cases {
+		if got, ok := parkedStage(c.status, c.cat); got != c.want || ok != c.parked {
+			t.Errorf("parkedStage(%q,%q) = %q,%v", c.status, c.cat, got, ok)
+		}
+	}
+}
+
+func TestCachedLog(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "DEV-1.log")
+	os.WriteFile(p, []byte("✅ exit error=false cost=$0.5\n"), 0o644)
+	run := func() float64 {
+		st, _ := os.Stat(p)
+		var r row
+		cachedLog(&r, p, st)
+		return r.cost
+	}
+	if a, b := run(), run(); a != 0.5 || b != 0.5 {
+		t.Fatalf("got %v %v", a, b)
+	}
+	f, _ := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0o644)
+	f.WriteString("✅ exit error=false cost=$0.25\n")
+	f.Close()
+	if c := run(); c != 0.75 {
+		t.Errorf("after append got %v", c)
 	}
 }
 

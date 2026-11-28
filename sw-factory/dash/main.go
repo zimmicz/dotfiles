@@ -38,11 +38,14 @@ var (
 type issue struct {
 	Key    string
 	Fields struct {
-		Summary string
-		Labels  []string
-		Updated string
-		Sprint  []struct{ Name, State string } `json:"customfield_10007"`
-		Status  struct {
+		Summary  string
+		Labels   []string
+		Updated  string
+		Sprint   []struct{ Name, State string } `json:"customfield_10007"`
+		Assignee *struct {
+			AccountID string `json:"accountId"`
+		}
+		Status struct {
 			Name           string
 			StatusCategory struct{ Key string }
 		}
@@ -65,6 +68,8 @@ func parkedStage(status, category string) (string, bool) {
 		return "nightly", true
 	case status == "Release candidate":
 		return "RC", true
+	case status == "Rejected":
+		return "done", true
 	case category == "done":
 		return "done", true
 	}
@@ -111,6 +116,7 @@ func stage(ls []string) string {
 
 var stageStyle = map[string]struct{ icon, color string }{
 	"plan gate":        {"📋", "33"},
+	"to test":          {"👀", "33"},
 	"questions":        {"❓", "33"},
 	"verified":         {"🧪", "34"},
 	"verify failed":    {"❗", "31"},
@@ -153,7 +159,7 @@ func group(r row) int {
 		return gTodo
 	case r.parked:
 		return gParked
-	case slices.Contains([]string{"plan gate", "questions", "quiz", "reviewed", "verify failed", "holdout proposal", "review findings", "analysis failed", "bailed"}, r.stage):
+	case slices.Contains([]string{"plan gate", "questions", "quiz", "reviewed", "verify failed", "holdout proposal", "review findings", "analysis failed", "bailed", "to test"}, r.stage):
 		return gNeeds
 	}
 	return gFlight
@@ -161,7 +167,7 @@ func group(r row) int {
 
 func search(jql string) ([]issue, error) {
 	var out struct{ Issues []issue }
-	return out.Issues, jiraReq("GET", "/rest/api/3/search/jql?fields=labels,summary,updated,status,customfield_10007&maxResults=100&jql="+url.QueryEscape(jql), nil, &out)
+	return out.Issues, jiraReq("GET", "/rest/api/3/search/jql?fields=labels,summary,updated,status,assignee,customfield_10007&maxResults=100&jql="+url.QueryEscape(jql), nil, &out)
 }
 
 func fetchJira() ([]issue, []issue, error) {
@@ -669,6 +675,33 @@ func parseLog(r *row, path string) {
 	}
 }
 
+type logFacts struct {
+	mod                             time.Time
+	size                            int64
+	cost                            float64
+	verdict, conflict, last, resume string
+}
+
+var (
+	logMu    sync.Mutex
+	logCache = map[string]logFacts{}
+)
+
+func cachedLog(r *row, p string, st os.FileInfo) {
+	logMu.Lock()
+	c, ok := logCache[p]
+	logMu.Unlock()
+	if !ok || !c.mod.Equal(st.ModTime()) || c.size != st.Size() {
+		var t row
+		parseLog(&t, p)
+		c = logFacts{st.ModTime(), st.Size(), t.cost, t.verdict, t.conflict, t.last, t.resume}
+		logMu.Lock()
+		logCache[p] = c
+		logMu.Unlock()
+	}
+	r.cost, r.verdict, r.conflict, r.last, r.resume = c.cost, c.verdict, c.conflict, c.last, c.resume
+}
+
 func workerBusy() bool {
 	procs, _ := filepath.Glob("/proc/[0-9]*/cmdline")
 	for _, p := range procs {
@@ -692,6 +725,8 @@ func collect(issues, todos []issue, busy bool, units map[string]string) []row {
 		r.seen, _ = time.Parse("2006-01-02T15:04:05.000-0700", i.Fields.Updated)
 		if s, ok := parkedStage(i.Fields.Status.Name, i.Fields.Status.StatusCategory.Key); ok {
 			r.stage, r.parked = s, true
+		} else if i.Fields.Status.Name == "To test" {
+			r.stage, r.parked = "to test", i.Fields.Assignee == nil
 		} else if len(proposedFiles(i.Key)) > 0 {
 			r.stage = "holdout proposal"
 		}
@@ -715,7 +750,7 @@ func collect(issues, todos []issue, busy bool, units map[string]string) []row {
 		r.seen = st.ModTime()
 		r.phase = units[key]
 		r.running = r.phase != "" || busy && time.Since(st.ModTime()) < 90*time.Second
-		parseLog(r, p)
+		cachedLog(r, p, st)
 		if b, err := os.ReadFile(filepath.Join(stateDir, key+".mr")); err == nil {
 			r.mr = strings.TrimSpace(string(b))
 		}

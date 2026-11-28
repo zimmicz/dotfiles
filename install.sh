@@ -38,8 +38,8 @@ for f in ${DOTFILES_DIR}/bin/* ${DOTFILES_DIR}/sw-factory/bin/*; do
   ln -sf ${f} ~/bin/$(basename ${f})
 done
 rm -f ~/bin/triage-dash
-(cd ${DOTFILES_DIR}/sw-factory/dash && go build -o ~/bin/factory-dash .)
-systemctl --user enable factory-dash.service && systemctl --user restart factory-dash.service
+(cd ${DOTFILES_DIR}/sw-factory/dash && go build -o ~/bin/factory-dash .) \
+  && systemctl --user enable factory-dash.service && systemctl --user restart factory-dash.service
 mkdir -p ~/.local/share/applications
 ln -sf ${DOTFILES_DIR}/sw-factory/applications/factory-dash.desktop ~/.local/share/applications/factory-dash.desktop
 
