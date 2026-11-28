@@ -9,6 +9,7 @@ AI_MARK="AI triage (Claude, headless)"
 NOTES=$LOG_DIR/notes.txt
 HOLDOUT=$LOG_DIR/holdout
 SELF=${0:A}
+source ${0:A:h:h}/lib/common.zsh
 LOCKS=$LOG_DIR/locks
 SLOTDIR=$LOG_DIR/slots
 HANDLED=$LOG_DIR/handled
@@ -81,6 +82,7 @@ stream() {
 jql() { jira GET "/rest/api/3/search/jql?jql=$(jq -rn --arg q "$1" '$q|@uri')&fields=$2&maxResults=$3" }
 
 search() { jql "${1/#project = DEV AND /project = DEV AND (assignee = currentUser() OR assignee is EMPTY) AND }" labels,comment $2 }
+AIMR_JQL="project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ($SHIPPED_ST)"
 
 JME=$(jira GET /rest/api/3/myself | jq -r '.accountId // empty')
 [[ -n "$JME" ]] || { echo "lookup failed: jira myself (accountId), refusing to read comments"; exit 1 }
@@ -209,6 +211,8 @@ relabel() {
   jira PUT "/rest/api/2/issue/$1" "{\"update\":{\"labels\":[$OPS]}}" >/dev/null
 }
 
+wt_mr() { (cd $1 && glab mr list --source-branch "${1:t}" -F json 2>/dev/null </dev/null | jq -c '.[0] // empty') }
+
 unlabel() {
   limit_bail $1
   jira PUT "/rest/api/2/issue/$1" "{\"update\":{\"labels\":[{\"remove\":\"$2\"}]}}" >/dev/null
@@ -316,7 +320,7 @@ implement() {
     --allowedTools "Read Edit Write Skill Agent mcp__lean-ctx__ctx_read mcp__lean-ctx__ctx_search mcp__lean-ctx__ctx_glob mcp__lean-ctx__ctx_tree mcp__lean-ctx__ctx_compose mcp__codegraph__codegraph_explore mcp__playwright Bash(nr:*) Bash(pnpm:*) Bash(npx:*) Bash(git:*) Bash(glab mr create:*) Bash(glab mr list:*) Bash(glab mr view:*) Bash(glab api:*) Bash(jira:*) Bash(jq:*)" \
     --disallowedTools "Bash(git push --force:*) Bash(git push -f:*) Bash(git push origin develop:*) Bash(git push origin staging:*) Bash(git push origin production:*) Bash(git reset --hard:*) Bash(glab mr merge:*) Bash(glab mr approve:*) Edit(/$HOLDOUT/**) Write(/$HOLDOUT/**) Edit(/$PROPOSED/**) Write(/$PROPOSED/**)" \
     --output-format stream-json --verbose </dev/null 2>>$LOG | tee $LOG_DIR/$KEY.stream.jsonl | stream >>$LOG)
-  local MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null | jq -r '.[0].web_url // empty')
+  local MR=$(wt_mr $WT | jq -r '.web_url // empty')
   [[ -n "$MR" ]] && echo "  mr -> $MR" | tee -a $LOG && echo "$MR" >$LOG_DIR/$KEY.mr
 }
 
@@ -348,7 +352,7 @@ env_unverify() {
 }
 
 env_reverify() {
-  search 'project = DEV AND labels = ai-mr AND labels in (ai-verified, ai-verify-failed) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected)' 50 \
+  search "$AIMR_JQL AND labels in (ai-verified, ai-verify-failed)" 50 \
     | jq -r '.issues[] | "\(.key) \([.fields.labels[] | select(startswith("env-")) | ltrimstr("env-")] | first // "")"' \
     | while read -r K E; do
         [[ "$E" == "$(cat $LOG_DIR/$K.verify-env 2>/dev/null)" ]] && continue
@@ -435,8 +439,7 @@ env_gc() {
   done
 }
 
-SHIPPED_ST='"On nightly", "To test", "Release candidate", Rejected'
-BLOCKERS_JQ='.fields.issuelinks[] | select(.type.inward == "is blocked by" and .inwardIssue != null) | .inwardIssue | select(.fields.status.statusCategory.key != "done" and ([.fields.status.name] | inside(["On nightly", "To test", "Release candidate", "Rejected"]) | not)) | .key'
+BLOCKERS_JQ='.fields.issuelinks[] | select(.type.inward == "is blocked by" and .inwardIssue != null) | .inwardIssue | select(.fields.status.statusCategory.key != "done" and ([.fields.status.name] | inside(['"$SHIPPED_ST"']) | not)) | .key'
 blocked_by() {
   local J
   J=$(jira GET "/rest/api/2/issue/$1?fields=issuelinks") && jq -e '.fields.issuelinks' <<<$J >/dev/null || { echo "lookup failed"; return 0 }
@@ -532,7 +535,7 @@ verify_targets() {
   for R in ${(s:,:)2}; do
     WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
     [[ -n "$WT" ]] || { why "no worktree in $R"; return 2 }
-    MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null </dev/null | jq -c '.[0] // empty')
+    MR=$(wt_mr $WT)
     [[ -n "$MR" ]] || { why "no open MR in $R"; return 2 }
     PID=$(jq -r .project_id <<<$MR) IID=$(jq -r .iid <<<$MR)
     PIPE=$(glab api "projects/$PID/merge_requests/$IID/pipelines" </dev/null | jq -c '.[0] // empty')
@@ -653,7 +656,7 @@ mr_targets() {
   for R in ${(s:,:)2}; do
     WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
     [[ -n "$WT" ]] || return 2
-    MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null </dev/null | jq -c '.[0] // empty')
+    MR=$(wt_mr $WT)
     [[ -n "$MR" ]] || return 2
     echo "$R:$(jq -r .project_id <<<$MR):$(jq -r .iid <<<$MR)"
   done
@@ -674,7 +677,7 @@ gate_sync() {
   for R in ${(s:,:)2}; do
     WT=($REPOS/$R/.worktrees/${KEY}-*(N/[1]))
     [[ -n "$WT" ]] || continue
-    MR=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null </dev/null | jq -c '.[0] // empty')
+    MR=$(wt_mr $WT)
     [[ -n "$MR" ]] || continue
     PID=$(jq -r .project_id <<<$MR) IID=$(jq -r .iid <<<$MR)
     HP=($(glab api "projects/$PID/merge_requests/$IID" </dev/null | jq -r '.head_pipeline // empty | "\(.id) \(.sha)"'))
@@ -768,7 +771,7 @@ conv_add() { CONV_L+=("$1"); CONV_B+=("$2"); CONV_N+=("$3"); CONV_S+=($(print -r
 
 conv_collect() {
   local KEY=$1 R=$2 WT=$3 LOG=$LOG_DIR/$1.log BASE C F P d
-  BASE=$(cd $WT && glab mr list --source-branch "${WT:t}" -F json 2>/dev/null </dev/null | jq -r '.[0].target_branch // empty')
+  BASE=$(wt_mr $WT | jq -r '.target_branch // empty')
   [[ -n "$BASE" ]] || BASE=$(git -C $WT symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)
   BASE=${BASE#origin/}
   [[ -n "$BASE" ]] || { echo "  conventions: no base branch in $R" >>$LOG; return }
@@ -951,6 +954,10 @@ No code changed: git applied every commit as is, only \`pnpm-lock.yaml\` was reg
 
 ROWS_JQ='.issues[] | "\(.key) \((.fields.labels | map(select(startswith("repo-"))) | sort_by(. != "repo-cf-farm-frontend") | first // "repo-") | ltrimstr("repo-"))"'
 REPOS_JQ='.issues[] | "\(.key) \(.fields.labels | map(select(startswith("repo-")) | ltrimstr("repo-")) | sort_by(. != "cf-farm-frontend") | join(","))"'
+RFIX_JQ='any(. == "ai-review-retry")'
+REVIEW_JQ='any(. == "ai-verified") and (any(IN("ai-reviewed", "ai-review-retry", "ai-review-findings")) | not)'
+VERIFY_JQ='any(IN("ai-verified", "ai-verify-failed", "ai-review-retry")) | not'
+aimr() { jq -c "{issues: [.issues[]? | select(.fields.labels | ${1:-true})][:20]}" <<<$AIMR }
 
 stage_new() {
   local ID=$(snap_human $1)
@@ -1459,7 +1466,7 @@ elif [[ -n "${1:-}" ]]; then
     NEW=$(search "key = ${1:u}" 1 | jq -r "$ROWS_JQ")
   fi
 else
-  ENVQ=$(search 'project = DEV AND labels in (triage, triaged, needs-answer, triage-failed, ai-fix, ai-fix-failed, ai-mr) AND statusCategory != Done ORDER BY updated DESC' 50 \
+  ENVQ=$(search "project = DEV AND labels in ($PIPELINE_LABELS) AND statusCategory != Done ORDER BY updated DESC" 50 \
     | jq -r --arg m "$AI_MARK" --argjson H "$(handled_json $ENVHANDLED)" "$HUMAN_JQ"' .issues[]
       | ((.fields.comment.comments // []) | map(select(envcmd)) | last) as $c
       | select($c != null and (($c.id | tonumber) > ($H[.key] // 0))) | "env-\(.key) \(.key) \($c.id)"')
@@ -1488,7 +1495,8 @@ else
     search 'project = DEV AND labels = needs-answer AND statusCategory != Done' 20 | not_awaiting \
       | while read -r K R; do grill_remind $K; done
   fi
-  MR_REPLIES=$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | awaiting_reply)
+  AIMR=$(search "$AIMR_JQL ORDER BY updated ASC" 100)
+  MR_REPLIES=$(aimr | awaiting_reply)
   GLCHECKED=($LOG_DIR/.glnotes-checked(Nmm-${GL_FULL_EVERY:-10}))
   if (( ! ${#GLCHECKED} )); then
     GLK=all
@@ -1502,14 +1510,14 @@ else
   [[ -n "${TRIAGE_DRY:-}" ]] && echo "gl notes: $GLMODE${GLK:+, keys: ${GLK//$'\n'/ }}"
   if [[ -n $GLK ]]; then
     GLK=" ${GLK//$'\n'/ } "
-    MR_REPLIES+=$'\n'$(search 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
+    MR_REPLIES+=$'\n'$(aimr | jq -r "$REPOS_JQ" \
       | while read -r K R; do [[ $GLK == " all " || $GLK == *" $K "* ]] && gl_pending $K $R </dev/null && echo "$K ${R%%,*}"; done)
     MR_REPLIES=$(awk 'NF && !s[$1]++' <<<$MR_REPLIES)
   fi
-  RFIX=$(search 'project = DEV AND labels = ai-mr AND labels = ai-review-retry AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$ROWS_JQ")
-  REVIEW=$(search 'project = DEV AND labels = ai-mr AND labels = ai-verified AND labels not in (ai-reviewed, ai-review-retry, ai-review-findings) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
+  RFIX=$(aimr "$RFIX_JQ" | jq -r "$ROWS_JQ")
+  REVIEW=$(aimr "$REVIEW_JQ" | jq -r "$REPOS_JQ" \
     | while read -r K R; do mr_targets $K $R >/dev/null </dev/null && echo "$K $R"; done)
-  VERIFY=$(search 'project = DEV AND labels = ai-mr AND labels not in (ai-verified, ai-verify-failed, ai-review-retry) AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected) ORDER BY updated ASC' 20 | jq -r "$REPOS_JQ" \
+  VERIFY=$(aimr "$VERIFY_JQ" | jq -r "$REPOS_JQ" \
     | while read -r K R; do
       if W=$(verify_blocker $K $R </dev/null); then stall_note $K "$W"; else rm -f $STALLED/$K.*(N); echo "$K $R"; fi
     done)
@@ -1552,7 +1560,7 @@ WORK=$(
 )
 TD=$EPOCHREALTIME
 dispatch <<<"$WORK"
-[[ -z "${1:-}" ]] && gate_all 'project = DEV AND labels = ai-mr AND statusCategory != Done AND status not in ("On nightly", "To test", "Release candidate", Rejected)'
+[[ -z "${1:-}" ]] && gate_all "$AIMR_JQL"
 [[ -z "${1:-}" && -z "${TRIAGE_DRY:-}" ]] && LC_NUMERIC=C printf '%s\t%.1f\t%.1f\t%s\t%d\t%s\n' "$(date -Iseconds -d @${T0%.*})" $(( TD - T0 )) $(( EPOCHREALTIME - T0 )) $GLMODE $SPAWNED "$(awk -F'avg60=' '/^some/ { split($2, a, " "); print a[1] }' /proc/pressure/cpu)" >>$LOG_DIR/ticks.tsv
 
 if [[ -n "${1:-}" ]]; then

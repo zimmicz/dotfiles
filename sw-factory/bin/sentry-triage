@@ -1,13 +1,12 @@
 #!/bin/zsh
 set -euo pipefail
+source ${0:A:h:h}/lib/common.zsh
 
 MAX=${MAX:-1}
 REPOS=~/work/cleverfarm/repos
 LOG_DIR=~/.local/state/sw-factory
 STAMP=$LOG_DIR/sentry-today
 NOTES=$LOG_DIR/notes.txt
-PIPELINE_LABELS='triage, needs-answer, triaged, triage-failed, ai-fix, ai-mr, ai-fix-failed'
-MR_STATES_JQ='[.[] | select(.title | test("(^|[^A-Z0-9-])" + $k + "([^0-9]|$)")) | .state] | unique | join(",")'
 mkdir -p $LOG_DIR
 
 DRY=0
@@ -71,8 +70,8 @@ PROD release per project: execute_sentry_tool find_releases (projectSlug fe-moni
    - description (Jira wiki markup, English, facts only, no speculation): Sentry link(s), project, culprit, level, events, users, first/last seen, environment, release, top in-app stack frames verbatim in {code} block, relevant tags, request URL/method.
    - description MUST end with section 'h3. Belongs in Sentry?' = yes/no + one-line reason. 'no' = noise to filter client-side: browser extension, bot/crawler, user offline or cancelled request, ChunkLoadError after deploy, third-party script, unsupported browser, expected 4xx, dev/localhost environment. Name the filter that should catch it (ignoreErrors / denyUrls / beforeSend) and whether an existing rule should already have matched.
    Repo + product by Sentry project:
-   - fe-monitoring -> repo cf-farm-frontend; product by route: /telematics 11714, /sensors or /irrigation 11712, /actions /parcels /catalogues /stores 11711, satellite/biomonitoring/prescription 11713, else 11710
-   - can-frontend -> repo can-frontend, product 11707
+   - fe-monitoring -> repo cf-farm-frontend; product by route: /telematics 11714, /sensors or /irrigation 11712, /actions /parcels /catalogues /stores 11711, satellite/biomonitoring/prescription 11713, else ${PRODUCT[cf-farm-frontend]}
+   - can-frontend -> repo can-frontend, product ${PRODUCT[can-frontend]}
 5. update_issue assignedTo 'user:3546621', reason 'Jira: https://cleverfarm.atlassian.net/browse/<KEY>'.
 6. Final answer: one line per Sentry issue: '<SHORTID> -> <KEY> (new|existing) [sentry: yes|no]', '<SHORTID> -> stale (last seen <date>, PROD <version>)' or '<SHORTID> -> error: <why>'. Last line, alone: 'TRIAGE_DONE' only if both search_issues calls succeeded, else 'TRIAGE_FAILED: <why>'."
 

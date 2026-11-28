@@ -1,5 +1,6 @@
 #!/bin/zsh
 set -uo pipefail
+source ${0:A:h:h}/lib/common.zsh
 
 REPOS=~/work/cleverfarm/repos
 LOG_DIR=~/.local/state/sw-factory
@@ -10,9 +11,7 @@ ME=712020:d8b09ea3-beb7-4afc-af06-6d7119474a4f
 BOARD=198
 EPIC=${DEPS_EPIC:-DEV-3865}
 AI_LINE='🤖 _AI triage (Claude, headless). Píšu za Michala. Jestli se vám to nelíbí, dejte mi prosím vědět._'
-typeset -A PRODUCT=(cf-farm-frontend 11710 can-frontend 11707)
 typeset -A SKIP=(cf-farm-frontend '^$' can-frontend '(^|[ /])firebase( |$)')
-MR_STATES_JQ='[.[] | select(.title | test("(^|[^A-Z0-9-])" + $k + "([^0-9]|$)")) | .state] | unique | join(",")'
 mkdir -p $HOLDOUT
 
 DRY=0

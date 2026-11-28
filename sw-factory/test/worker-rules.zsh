@@ -3,6 +3,7 @@ set -u
 W=${0:A:h:h}/bin/factory-worker
 source <(sed -n '/^DATA_RE=/,/^}/p' $W)
 source <(grep '^POSTED_RE=' $W)
+source ${0:A:h:h}/lib/common.zsh
 source <(grep -E '^(BLOCKERS_JQ|BE_MRS_JQ|ENV_PICK_JQ)=' $W)
 T=$(mktemp -d)
 trap 'rm -rf $T' EXIT
@@ -103,4 +104,13 @@ released DEV-1
 check "released: ai-done added" "$(jq -r '.update.labels[].add' $T/jira)" "ai-done"
 check "released: media gone" "$(setopt nonomatch; ls -d $LOG_DIR/DEV-1.*-media 2>/dev/null | wc -l)" "0"
 check "released: log + report + other ticket kept" "$(ls -d $LOG_DIR/DEV-1.log $LOG_DIR/DEV-1.verify.md $LOG_DIR/DEV-2.verify-media 2>/dev/null | wc -l)" "3"
+source <(grep -E '^(RFIX_JQ|REVIEW_JQ|VERIFY_JQ)=' $W; sed -n '/^aimr() {/p' $W)
+AIMR='{"issues":[{"key":"A-1","fields":{"labels":["ai-mr"]}},{"key":"A-2","fields":{"labels":["ai-mr","ai-verified"]}},{"key":"A-3","fields":{"labels":["ai-mr","ai-verified","ai-reviewed"]}},{"key":"A-4","fields":{"labels":["ai-mr","ai-review-retry"]}},{"key":"A-5","fields":{"labels":["ai-mr","ai-verify-failed"]}},{"key":"A-6","fields":{"labels":["ai-mr","ai-verified","ai-review-findings"]}}]}'
+keys() { jq -r '[.issues[].key] | join(",")' }
+check "aimr: all" "$(aimr | keys)" "A-1,A-2,A-3,A-4,A-5,A-6"
+check "aimr: rfix" "$(aimr "$RFIX_JQ" | keys)" "A-4"
+check "aimr: review" "$(aimr "$REVIEW_JQ" | keys)" "A-2"
+check "aimr: verify" "$(aimr "$VERIFY_JQ" | keys)" "A-1"
+AIMR=""
+check "aimr: failed search" "$(aimr | keys)" ""
 exit $fails

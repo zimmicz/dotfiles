@@ -10,14 +10,12 @@ MRS='[
  {"title":"fix: [DEV-38790] other","description":"","state":"opened"},
  {"title":"Draft: DEV-3879 retry","description":"","state":"closed"}
 ]'
+source ${0:A:h:h}/lib/common.zsh
 for F in deps-triage sentry-triage; do
-  source <(grep '^MR_STATES_JQ=' $D/$F)
   check "$F: key in title only" "$(jq -r --arg k DEV-3879 "$MR_STATES_JQ" <<<$MRS)" "closed,merged"
   check "$F: mention in description ignored" "$(jq -r --arg k DEV-3881 "$MR_STATES_JQ" <<<$MRS)" "opened"
   check "$F: no MR" "$(jq -r --arg k DEV-1 "$MR_STATES_JQ" <<<$MRS)" ""
-  unset MR_STATES_JQ
 done
-source <(grep '^PIPELINE_LABELS=' $D/sentry-triage)
 [[ ", $PIPELINE_LABELS," == *", needs-answer,"* ]] && R=yes || R=no
 check "sentry-triage: gate counts needs-answer" $R yes
 exit $fails
